@@ -91,20 +91,6 @@
               <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
             </router-link>
           </template>
-
-          <a
-            v-if="documentationNavItem"
-            :href="documentationNavItem.href"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="sidebar-link mb-1"
-            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
-            :title="sidebarCollapsed ? documentationNavItem.label : undefined"
-            @click="handleDocumentationClick"
-          >
-            <Icon name="brain" class="h-5 w-5 flex-shrink-0" />
-            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ documentationNavItem.label }}</span>
-          </a>
         </div>
 
         <!-- Personal Section for Admin (hidden in simple mode) -->
@@ -129,6 +115,20 @@
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
           </router-link>
+
+          <a
+            v-if="documentationNavItem"
+            :href="documentationNavItem.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="sidebar-link mb-1"
+            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
+            :title="sidebarCollapsed ? documentationNavItem.label : undefined"
+            @click="handleDocumentationClick"
+          >
+            <Icon name="brain" class="h-5 w-5 flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ documentationNavItem.label }}</span>
+          </a>
         </div>
       </template>
 
