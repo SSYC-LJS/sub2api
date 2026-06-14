@@ -273,22 +273,21 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
 		v := int(partialImages.Int())
 		req.PartialImages = &v
 	}
-	if req.IsEdits() {
-		images := gjson.GetBytes(body, "images")
-		if images.Exists() {
-			if !images.IsArray() {
-				return fmt.Errorf("invalid images field type")
-			}
-			for _, item := range images.Array() {
-				if imageURL := strings.TrimSpace(item.Get("image_url").String()); imageURL != "" {
-					req.InputImageURLs = append(req.InputImageURLs, imageURL)
-					continue
-				}
-				if item.Get("file_id").Exists() {
-					return fmt.Errorf("images[].file_id is not supported (use images[].image_url instead)")
-				}
-			}
+	if imageResult := gjson.GetBytes(body, "image"); imageResult.Exists() {
+		imageURLs, err := parseOpenAIImagesImageField(imageResult)
+		if err != nil {
+			return err
 		}
+		req.InputImageURLs = append(req.InputImageURLs, imageURLs...)
+	}
+	if images := gjson.GetBytes(body, "images"); images.Exists() {
+		imageURLs, err := parseOpenAIImagesImagesField(images)
+		if err != nil {
+			return err
+		}
+		req.InputImageURLs = append(req.InputImageURLs, imageURLs...)
+	}
+	if req.IsEdits() {
 		if maskImageURL := strings.TrimSpace(gjson.GetBytes(body, "mask.image_url").String()); maskImageURL != "" {
 			req.MaskImageURL = maskImageURL
 			req.HasMask = true
@@ -297,13 +296,66 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
 			return fmt.Errorf("mask.file_id is not supported (use mask.image_url instead)")
 		}
 		if len(req.InputImageURLs) == 0 {
-			return fmt.Errorf("images[].image_url is required")
+			return fmt.Errorf("image is required for edits")
 		}
 	}
 	req.HasNativeOptions = hasOpenAINativeImageOptions(func(path string) bool {
 		return gjson.GetBytes(body, path).Exists()
 	})
 	return nil
+}
+
+func parseOpenAIImagesImageField(result gjson.Result) ([]string, error) {
+	switch {
+	case result.IsArray():
+		items := result.Array()
+		imageURLs := make([]string, 0, len(items))
+		for _, item := range items {
+			if item.IsObject() {
+				if item.Get("file_id").Exists() {
+					return nil, fmt.Errorf("image[].file_id is not supported (use image[].image_url instead)")
+				}
+				if imageURL := strings.TrimSpace(item.Get("image_url").String()); imageURL != "" {
+					imageURLs = append(imageURLs, imageURL)
+				}
+				continue
+			}
+			if imageURL := strings.TrimSpace(item.String()); imageURL != "" {
+				imageURLs = append(imageURLs, imageURL)
+			}
+		}
+		return imageURLs, nil
+	case result.IsObject():
+		if result.Get("file_id").Exists() {
+			return nil, fmt.Errorf("image.file_id is not supported (use image.image_url instead)")
+		}
+		if imageURL := strings.TrimSpace(result.Get("image_url").String()); imageURL != "" {
+			return []string{imageURL}, nil
+		}
+		return nil, nil
+	default:
+		if imageURL := strings.TrimSpace(result.String()); imageURL != "" {
+			return []string{imageURL}, nil
+		}
+		return nil, nil
+	}
+}
+
+func parseOpenAIImagesImagesField(result gjson.Result) ([]string, error) {
+	if !result.IsArray() {
+		return nil, fmt.Errorf("invalid images field type")
+	}
+	imageURLs := make([]string, 0, len(result.Array()))
+	for _, item := range result.Array() {
+		if imageURL := strings.TrimSpace(item.Get("image_url").String()); imageURL != "" {
+			imageURLs = append(imageURLs, imageURL)
+			continue
+		}
+		if item.Get("file_id").Exists() {
+			return nil, fmt.Errorf("images[].file_id is not supported (use images[].image_url instead)")
+		}
+	}
+	return imageURLs, nil
 }
 
 func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *OpenAIImagesRequest) error {
@@ -353,7 +405,7 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 				}
 				req.MaskUpload = &maskUpload
 			}
-			if name == "image" || strings.HasPrefix(name, "image[") {
+			if name == "image" || name == "image[]" || name == "reference_images" || strings.HasPrefix(name, "image[") || strings.HasPrefix(name, "reference_images[") {
 				width, height := parseOpenAIImageDimensions(part.Header)
 				req.Uploads = append(req.Uploads, OpenAIImagesUpload{
 					FieldName:   name,
@@ -810,6 +862,7 @@ func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model st
 
 		formName := strings.TrimSpace(part.FormName())
 		partHeader := cloneMultipartHeader(part.Header)
+		normalizeOpenAIImagesMultipartPartHeader(partHeader, formName)
 		target, err := writer.CreatePart(partHeader)
 		if err != nil {
 			_ = part.Close()
@@ -851,6 +904,29 @@ func cloneMultipartHeader(src textproto.MIMEHeader) textproto.MIMEHeader {
 		dst[key] = copied
 	}
 	return dst
+}
+
+func normalizeOpenAIImagesMultipartPartHeader(header textproto.MIMEHeader, formName string) {
+	normalizedName := ""
+	switch {
+	case formName == "image[]", strings.HasPrefix(formName, "image["):
+		normalizedName = "image"
+	case formName == "reference_images", strings.HasPrefix(formName, "reference_images["):
+		normalizedName = "image"
+	}
+	if normalizedName == "" {
+		return
+	}
+	contentDisposition := header.Get("Content-Disposition")
+	if contentDisposition == "" {
+		return
+	}
+	mediaType, params, err := mime.ParseMediaType(contentDisposition)
+	if err != nil {
+		return
+	}
+	params["name"] = normalizedName
+	header.Set("Content-Disposition", mime.FormatMediaType(mediaType, params))
 }
 
 func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(resp *http.Response, c *gin.Context) (OpenAIUsage, int, []string, error) {
