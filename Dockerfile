@@ -37,6 +37,9 @@ RUN pnpm run build
 # -----------------------------------------------------------------------------
 FROM ${GOLANG_IMAGE} AS backend-builder
 
+# Use China-friendly Alpine package mirrors for server builds.
+RUN sed -i 's|https://dl-cdn.alpinelinux.org/alpine|https://mirrors.aliyun.com/alpine|g' /etc/apk/repositories
+
 # Build arguments for version info (set by CI)
 ARG VERSION=
 ARG COMMIT=docker
@@ -83,6 +86,9 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 # Stage 4: Final Runtime Image
 # -----------------------------------------------------------------------------
 FROM ${ALPINE_IMAGE}
+
+# Use China-friendly Alpine package mirrors for server builds.
+RUN sed -i 's|https://dl-cdn.alpinelinux.org/alpine|https://mirrors.aliyun.com/alpine|g' /etc/apk/repositories
 
 # Labels
 LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
