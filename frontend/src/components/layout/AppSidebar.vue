@@ -91,6 +91,20 @@
               <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
             </router-link>
           </template>
+
+          <a
+            v-if="documentationNavItem"
+            :href="documentationNavItem.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="sidebar-link mb-1"
+            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
+            :title="sidebarCollapsed ? documentationNavItem.label : undefined"
+            @click="handleDocumentationClick"
+          >
+            <Icon name="brain" class="h-5 w-5 flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ documentationNavItem.label }}</span>
+          </a>
         </div>
 
         <!-- Personal Section for Admin (hidden in simple mode) -->
@@ -135,6 +149,20 @@
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
           </router-link>
+
+          <a
+            v-if="documentationNavItem"
+            :href="documentationNavItem.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="sidebar-link mb-1"
+            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
+            :title="sidebarCollapsed ? documentationNavItem.label : undefined"
+            @click="handleDocumentationClick"
+          >
+            <Icon name="brain" class="h-5 w-5 flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ documentationNavItem.label }}</span>
+          </a>
         </div>
       </template>
     </nav>
@@ -185,7 +213,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
+import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 
 interface NavItem {
@@ -713,6 +743,15 @@ const customMenuItemsForAdmin = computed(() => {
     .sort((a, b) => a.sort_order - b.sort_order)
 })
 
+const documentationNavItem = computed(() => {
+  const href = sanitizeUrl(appStore.docUrl)
+  if (!href) return null
+  return {
+    href,
+    label: '配置文档'
+  }
+})
+
 // Admin navigation items
 const adminNavItems = computed((): NavItem[] => {
   const baseItems: NavItem[] = [
@@ -818,6 +857,14 @@ function handleMenuItemClick(itemPath: string) {
   const selector = pathToSelector[itemPath]
   if (selector && onboardingStore.isCurrentStep(selector)) {
     onboardingStore.nextStep(500)
+  }
+}
+
+function handleDocumentationClick() {
+  if (mobileOpen.value) {
+    setTimeout(() => {
+      appStore.setMobileOpen(false)
+    }, 150)
   }
 }
 
