@@ -257,7 +257,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
-import contactQrCode from '@/assets/contact-qrcode.svg'
+import defaultContactQrCode from '@/assets/contact-qrcode.svg'
 
 interface NavItem {
   path: string
@@ -318,6 +318,7 @@ const siteName = computed(() => appStore.siteName)
 const siteLogo = computed(() => appStore.siteLogo)
 const siteVersion = computed(() => appStore.siteVersion)
 const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
+const contactQrCode = computed(() => appStore.contactQrCodeUrl || appStore.cachedPublicSettings?.contact_qrcode_url || defaultContactQrCode)
 
 // SVG Icon Components
 const DashboardIcon = {

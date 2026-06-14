@@ -206,7 +206,9 @@ export interface PublicSettings {
   site_subtitle: string
   api_base_url: string
   contact_info: string
+  contact_qrcode_url: string
   doc_url: string
+  activation_code_purchase_url: string
   home_content: string
   hide_ccs_import_button: boolean
   payment_enabled: boolean

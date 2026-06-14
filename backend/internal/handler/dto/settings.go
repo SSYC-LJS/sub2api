@@ -132,7 +132,9 @@ type SystemSettings struct {
 	SiteSubtitle                string           `json:"site_subtitle"`
 	APIBaseURL                  string           `json:"api_base_url"`
 	ContactInfo                 string           `json:"contact_info"`
+	ContactQRCodeURL            string           `json:"contact_qrcode_url"`
 	DocURL                      string           `json:"doc_url"`
+	ActivationCodePurchaseURL   string           `json:"activation_code_purchase_url"`
 	HomeContent                 string           `json:"home_content"`
 	HideCcsImportButton         bool             `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled bool             `json:"purchase_subscription_enabled"`
@@ -283,7 +285,9 @@ type PublicSettings struct {
 	SiteSubtitle                     string                   `json:"site_subtitle"`
 	APIBaseURL                       string                   `json:"api_base_url"`
 	ContactInfo                      string                   `json:"contact_info"`
+	ContactQRCodeURL                 string                   `json:"contact_qrcode_url"`
 	DocURL                           string                   `json:"doc_url"`
+	ActivationCodePurchaseURL        string                   `json:"activation_code_purchase_url"`
 	HomeContent                      string                   `json:"home_content"`
 	HideCcsImportButton              bool                     `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled      bool                     `json:"purchase_subscription_enabled"`
