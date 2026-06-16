@@ -6781,6 +6781,7 @@ export default {
   // Version Badge
   version: {
     currentVersion: '当前版本',
+    manualUpdateOnly: '自动更新已禁用，请同步 SSYC-LJS/sub2api 仓库并手动重新部署',
     latestVersion: '最新版本',
     upToDate: '已是最新版本',
     updateAvailable: '有新版本可用！',
