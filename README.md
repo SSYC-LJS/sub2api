@@ -171,7 +171,7 @@ One-click installation script that downloads pre-built binaries from GitHub Rele
 #### Installation Steps
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/SSYC-LJS/sub2api/main/deploy/install.sh | sudo bash
 ```
 
 The script will:
@@ -203,10 +203,10 @@ The Setup Wizard will guide you through:
 
 You can upgrade directly from the **Admin Dashboard** by clicking the **Check for Updates** button in the top-left corner.
 
-The web interface will:
-- Check for new versions automatically
-- Download and apply updates with one click
-- Support rollback if needed
+This customized fork disables the built-in web auto-update workflow.
+- Install from the SSYC-LJS fork script shown above
+- Apply future updates by syncing this GitHub fork and redeploying manually
+- Use systemd or your deployment pipeline for controlled restarts and rollbacks
 
 #### Useful Commands
 
@@ -221,7 +221,7 @@ sudo journalctl -u sub2api -f
 sudo systemctl restart sub2api
 
 # Uninstall
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash -s -- uninstall -y
+curl -sSL https://raw.githubusercontent.com/SSYC-LJS/sub2api/main/deploy/install.sh | sudo bash -s -- uninstall -y
 ```
 
 ---
@@ -244,7 +244,7 @@ Use the automated deployment script for easy setup:
 mkdir -p sub2api-deploy && cd sub2api-deploy
 
 # Download and run deployment preparation script
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh | bash
+curl -sSL https://raw.githubusercontent.com/SSYC-LJS/sub2api/main/deploy/docker-deploy.sh | bash
 
 # Start services
 docker compose up -d
