@@ -133,6 +133,8 @@ type SystemSettings struct {
 	APIBaseURL                  string
 	ContactInfo                 string
 	ContactQRCodeURL            string
+	ContactWebmasterQRCodeURL   string
+	ContactGroupQRCodeURL       string
 	DocURL                      string
 	ActivationCodePurchaseURL   string
 	HomeContent                 string
@@ -260,6 +262,8 @@ type PublicSettings struct {
 	APIBaseURL                       string
 	ContactInfo                      string
 	ContactQRCodeURL                 string
+	ContactWebmasterQRCodeURL        string
+	ContactGroupQRCodeURL            string
 	DocURL                           string
 	ActivationCodePurchaseURL        string
 	HomeContent                      string

@@ -26,6 +26,8 @@ export const useAppStore = defineStore('app', () => {
   const siteVersion = ref<string>('')
   const contactInfo = ref<string>('')
   const contactQrCodeUrl = ref<string>('')
+  const contactWebmasterQrCodeUrl = ref<string>('')
+  const contactGroupQrCodeUrl = ref<string>('')
   const apiBaseUrl = ref<string>('')
   const docUrl = ref<string>('')
   const activationCodePurchaseUrl = ref<string>('')
@@ -278,6 +280,8 @@ export const useAppStore = defineStore('app', () => {
     siteVersion.value = config.version || ''
     contactInfo.value = config.contact_info || ''
     contactQrCodeUrl.value = config.contact_qrcode_url || ''
+    contactWebmasterQrCodeUrl.value = config.contact_webmaster_qrcode_url || config.contact_qrcode_url || ''
+    contactGroupQrCodeUrl.value = config.contact_group_qrcode_url || ''
     apiBaseUrl.value = config.api_base_url || ''
     docUrl.value = config.doc_url || ''
     activationCodePurchaseUrl.value = config.activation_code_purchase_url || ''
@@ -316,6 +320,8 @@ export const useAppStore = defineStore('app', () => {
         api_base_url: apiBaseUrl.value,
         contact_info: contactInfo.value,
         contact_qrcode_url: contactQrCodeUrl.value,
+        contact_webmaster_qrcode_url: contactWebmasterQrCodeUrl.value || contactQrCodeUrl.value,
+        contact_group_qrcode_url: contactGroupQrCodeUrl.value,
         doc_url: docUrl.value,
         activation_code_purchase_url: activationCodePurchaseUrl.value,
         home_content: '',
@@ -404,6 +410,8 @@ export const useAppStore = defineStore('app', () => {
     siteVersion,
     contactInfo,
     contactQrCodeUrl,
+    contactWebmasterQrCodeUrl,
+    contactGroupQrCodeUrl,
     apiBaseUrl,
     docUrl,
     activationCodePurchaseUrl,

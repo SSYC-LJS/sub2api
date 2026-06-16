@@ -217,6 +217,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		APIBaseURL:                             settings.APIBaseURL,
 		ContactInfo:                            settings.ContactInfo,
 		ContactQRCodeURL:                       settings.ContactQRCodeURL,
+		ContactWebmasterQRCodeURL:              settings.ContactWebmasterQRCodeURL,
+		ContactGroupQRCodeURL:                  settings.ContactGroupQRCodeURL,
 		DocURL:                                 settings.DocURL,
 		ActivationCodePurchaseURL:              settings.ActivationCodePurchaseURL,
 		HomeContent:                            settings.HomeContent,
@@ -503,6 +505,8 @@ type UpdateSettingsRequest struct {
 	APIBaseURL                  string                `json:"api_base_url"`
 	ContactInfo                 string                `json:"contact_info"`
 	ContactQRCodeURL            string                `json:"contact_qrcode_url"`
+	ContactWebmasterQRCodeURL   string                `json:"contact_webmaster_qrcode_url"`
+	ContactGroupQRCodeURL       string                `json:"contact_group_qrcode_url"`
 	DocURL                      string                `json:"doc_url"`
 	ActivationCodePurchaseURL   string                `json:"activation_code_purchase_url"`
 	HomeContent                 string                `json:"home_content"`
@@ -1578,6 +1582,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		APIBaseURL:                             req.APIBaseURL,
 		ContactInfo:                            req.ContactInfo,
 		ContactQRCodeURL:                       req.ContactQRCodeURL,
+		ContactWebmasterQRCodeURL:              req.ContactWebmasterQRCodeURL,
+		ContactGroupQRCodeURL:                  req.ContactGroupQRCodeURL,
 		DocURL:                                 req.DocURL,
 		ActivationCodePurchaseURL:              req.ActivationCodePurchaseURL,
 		HomeContent:                            req.HomeContent,
@@ -2041,6 +2047,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		APIBaseURL:                             updatedSettings.APIBaseURL,
 		ContactInfo:                            updatedSettings.ContactInfo,
 		ContactQRCodeURL:                       updatedSettings.ContactQRCodeURL,
+		ContactWebmasterQRCodeURL:              updatedSettings.ContactWebmasterQRCodeURL,
+		ContactGroupQRCodeURL:                  updatedSettings.ContactGroupQRCodeURL,
 		DocURL:                                 updatedSettings.DocURL,
 		ActivationCodePurchaseURL:              updatedSettings.ActivationCodePurchaseURL,
 		HomeContent:                            updatedSettings.HomeContent,

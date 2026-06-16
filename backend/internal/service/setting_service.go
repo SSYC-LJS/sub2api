@@ -719,6 +719,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyAPIBaseURL,
 		SettingKeyContactInfo,
 		SettingKeyContactQRCodeURL,
+		SettingKeyContactWebmasterQRCodeURL,
+		SettingKeyContactGroupQRCodeURL,
 		SettingKeyDocURL,
 		SettingKeyActivationCodePurchaseURL,
 		SettingKeyHomeContent,
@@ -846,6 +848,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		APIBaseURL:                       settings[SettingKeyAPIBaseURL],
 		ContactInfo:                      settings[SettingKeyContactInfo],
 		ContactQRCodeURL:                 strings.TrimSpace(settings[SettingKeyContactQRCodeURL]),
+		ContactWebmasterQRCodeURL:        firstNonEmpty(settings[SettingKeyContactWebmasterQRCodeURL], settings[SettingKeyContactQRCodeURL]),
+		ContactGroupQRCodeURL:            strings.TrimSpace(settings[SettingKeyContactGroupQRCodeURL]),
 		DocURL:                           settings[SettingKeyDocURL],
 		ActivationCodePurchaseURL:        strings.TrimSpace(settings[SettingKeyActivationCodePurchaseURL]),
 		HomeContent:                      settings[SettingKeyHomeContent],
@@ -1162,6 +1166,8 @@ type PublicSettingsInjectionPayload struct {
 	APIBaseURL                       string                   `json:"api_base_url"`
 	ContactInfo                      string                   `json:"contact_info"`
 	ContactQRCodeURL                 string                   `json:"contact_qrcode_url"`
+	ContactWebmasterQRCodeURL        string                   `json:"contact_webmaster_qrcode_url"`
+	ContactGroupQRCodeURL            string                   `json:"contact_group_qrcode_url"`
 	DocURL                           string                   `json:"doc_url"`
 	ActivationCodePurchaseURL        string                   `json:"activation_code_purchase_url"`
 	HomeContent                      string                   `json:"home_content"`
@@ -1230,6 +1236,8 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		APIBaseURL:                       settings.APIBaseURL,
 		ContactInfo:                      settings.ContactInfo,
 		ContactQRCodeURL:                 settings.ContactQRCodeURL,
+		ContactWebmasterQRCodeURL:        firstNonEmpty(settings.ContactWebmasterQRCodeURL, settings.ContactQRCodeURL),
+		ContactGroupQRCodeURL:            settings.ContactGroupQRCodeURL,
 		DocURL:                           settings.DocURL,
 		ActivationCodePurchaseURL:        settings.ActivationCodePurchaseURL,
 		HomeContent:                      settings.HomeContent,
@@ -1825,6 +1833,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyAPIBaseURL] = settings.APIBaseURL
 	updates[SettingKeyContactInfo] = settings.ContactInfo
 	updates[SettingKeyContactQRCodeURL] = strings.TrimSpace(settings.ContactQRCodeURL)
+	updates[SettingKeyContactWebmasterQRCodeURL] = strings.TrimSpace(firstNonEmpty(settings.ContactWebmasterQRCodeURL, settings.ContactQRCodeURL))
+	updates[SettingKeyContactGroupQRCodeURL] = strings.TrimSpace(settings.ContactGroupQRCodeURL)
 	updates[SettingKeyDocURL] = settings.DocURL
 	updates[SettingKeyActivationCodePurchaseURL] = strings.TrimSpace(settings.ActivationCodePurchaseURL)
 	updates[SettingKeyHomeContent] = settings.HomeContent

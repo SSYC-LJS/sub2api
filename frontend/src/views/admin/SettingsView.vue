@@ -4943,22 +4943,38 @@
                 </p>
               </div>
 
-              <!-- Doc URL -->
-              <div>
-                <label
-                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  {{ t("admin.settings.site.contactQrCodeUrl") }}
-                </label>
-                <input
-                  v-model="form.contact_qrcode_url"
-                  type="text"
-                  class="input font-mono text-sm"
-                  :placeholder="t('admin.settings.site.contactQrCodeUrlPlaceholder')"
-                />
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{ t("admin.settings.site.contactQrCodeUrlHint") }}
-                </p>
+              <!-- Contact QR Codes -->
+              <div class="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.site.contactWebmasterQrCode") }}
+                  </label>
+                  <ImageUpload
+                    v-model="form.contact_webmaster_qrcode_url"
+                    mode="image"
+                    :upload-label="t('admin.settings.site.uploadImage')"
+                    :remove-label="t('admin.settings.site.remove')"
+                    :hint="t('admin.settings.site.contactWebmasterQrCodeHint')"
+                    :max-size="500 * 1024"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.site.contactGroupQrCode") }}
+                  </label>
+                  <ImageUpload
+                    v-model="form.contact_group_qrcode_url"
+                    mode="image"
+                    :upload-label="t('admin.settings.site.uploadImage')"
+                    :remove-label="t('admin.settings.site.remove')"
+                    :hint="t('admin.settings.site.contactGroupQrCodeHint')"
+                    :max-size="500 * 1024"
+                  />
+                </div>
               </div>
 
               <div>
@@ -7677,6 +7693,8 @@ const form = reactive<SettingsForm>({
   api_base_url: "",
   contact_info: "",
   contact_qrcode_url: "",
+  contact_webmaster_qrcode_url: "",
+  contact_group_qrcode_url: "",
   doc_url: "",
   activation_code_purchase_url: "",
   home_content: "",
@@ -8843,7 +8861,9 @@ async function saveSettings() {
       site_subtitle: form.site_subtitle,
       api_base_url: form.api_base_url,
       contact_info: form.contact_info,
-      contact_qrcode_url: form.contact_qrcode_url,
+      contact_qrcode_url: form.contact_webmaster_qrcode_url || form.contact_qrcode_url,
+      contact_webmaster_qrcode_url: form.contact_webmaster_qrcode_url || form.contact_qrcode_url,
+      contact_group_qrcode_url: form.contact_group_qrcode_url,
       doc_url: form.doc_url,
       activation_code_purchase_url: form.activation_code_purchase_url,
       home_content: form.home_content,

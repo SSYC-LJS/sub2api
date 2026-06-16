@@ -431,6 +431,8 @@ export interface SystemSettings {
   api_base_url: string;
   contact_info: string;
   contact_qrcode_url: string;
+  contact_webmaster_qrcode_url: string;
+  contact_group_qrcode_url: string;
   doc_url: string;
   activation_code_purchase_url: string;
   home_content: string;
@@ -694,6 +696,8 @@ export interface UpdateSettingsRequest {
   api_base_url?: string;
   contact_info?: string;
   contact_qrcode_url?: string;
+  contact_webmaster_qrcode_url?: string;
+  contact_group_qrcode_url?: string;
   doc_url?: string;
   activation_code_purchase_url?: string;
   home_content?: string;

@@ -222,17 +222,23 @@
   <BaseDialog
     :show="showContactDialog"
     title="联系我们"
-    width="narrow"
+    width="wide"
     :close-on-click-outside="true"
     @close="showContactDialog = false"
   >
-    <div class="flex flex-col items-center gap-4 py-2 text-center">
-      <div class="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-600 dark:bg-dark-800">
-        <img :src="contactQrCode" alt="联系我们二维码" class="h-64 w-64 rounded-2xl object-contain" />
+    <div class="grid gap-4 py-2 text-center sm:grid-cols-2">
+      <div class="flex flex-col items-center gap-3">
+        <div class="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-600 dark:bg-dark-800">
+          <img :src="contactWebmasterQrCode" alt="联系站长二维码" class="h-56 w-56 rounded-2xl object-contain" />
+        </div>
+        <p class="text-sm font-medium text-gray-700 dark:text-gray-300">联系站长</p>
       </div>
-      <p class="text-sm text-gray-600 dark:text-gray-400">
-        扫描二维码联系我们
-      </p>
+      <div class="flex flex-col items-center gap-3">
+        <div class="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-600 dark:bg-dark-800">
+          <img :src="contactGroupQrCode" alt="加入群聊二维码" class="h-56 w-56 rounded-2xl object-contain" />
+        </div>
+        <p class="text-sm font-medium text-gray-700 dark:text-gray-300">加入群聊</p>
+      </div>
     </div>
   </BaseDialog>
 
@@ -318,7 +324,18 @@ const siteName = computed(() => appStore.siteName)
 const siteLogo = computed(() => appStore.siteLogo)
 const siteVersion = computed(() => appStore.siteVersion)
 const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
-const contactQrCode = computed(() => appStore.contactQrCodeUrl || appStore.cachedPublicSettings?.contact_qrcode_url || defaultContactQrCode)
+const contactWebmasterQrCode = computed(() =>
+  appStore.contactWebmasterQrCodeUrl ||
+  appStore.cachedPublicSettings?.contact_webmaster_qrcode_url ||
+  appStore.contactQrCodeUrl ||
+  appStore.cachedPublicSettings?.contact_qrcode_url ||
+  defaultContactQrCode
+)
+const contactGroupQrCode = computed(() =>
+  appStore.contactGroupQrCodeUrl ||
+  appStore.cachedPublicSettings?.contact_group_qrcode_url ||
+  defaultContactQrCode
+)
 
 // SVG Icon Components
 const DashboardIcon = {
