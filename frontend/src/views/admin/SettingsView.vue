@@ -4948,6 +4948,23 @@
                 <label
                   class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
+                  {{ t("admin.settings.site.contactQrCodeUrl") }}
+                </label>
+                <input
+                  v-model="form.contact_qrcode_url"
+                  type="text"
+                  class="input font-mono text-sm"
+                  :placeholder="t('admin.settings.site.contactQrCodeUrlPlaceholder')"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.site.contactQrCodeUrlHint") }}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
                   {{ t("admin.settings.site.docUrl") }}
                 </label>
                 <input
@@ -4958,6 +4975,23 @@
                 />
                 <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ t("admin.settings.site.docUrlHint") }}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.site.activationCodePurchaseUrl") }}
+                </label>
+                <input
+                  v-model="form.activation_code_purchase_url"
+                  type="url"
+                  class="input font-mono text-sm"
+                  :placeholder="t('admin.settings.site.activationCodePurchaseUrlPlaceholder')"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.site.activationCodePurchaseUrlHint") }}
                 </p>
               </div>
 
@@ -7642,7 +7676,9 @@ const form = reactive<SettingsForm>({
   site_subtitle: "Subscription to API Conversion Platform",
   api_base_url: "",
   contact_info: "",
+  contact_qrcode_url: "",
   doc_url: "",
+  activation_code_purchase_url: "",
   home_content: "",
   backend_mode_enabled: false,
   hide_ccs_import_button: false,
@@ -8760,6 +8796,7 @@ async function saveSettings() {
     // Optional URL fields: auto-clear invalid values so they don't cause backend 400 errors
     if (!isValidHttpUrl(form.frontend_url)) form.frontend_url = "";
     if (!isValidHttpUrl(form.doc_url)) form.doc_url = "";
+    if (!isValidHttpUrl(form.activation_code_purchase_url)) form.activation_code_purchase_url = "";
     syncWeChatConnectMode();
     const wechatStoredMode = deriveWeChatConnectStoredMode(
       form.wechat_connect_open_enabled,
@@ -8806,7 +8843,9 @@ async function saveSettings() {
       site_subtitle: form.site_subtitle,
       api_base_url: form.api_base_url,
       contact_info: form.contact_info,
+      contact_qrcode_url: form.contact_qrcode_url,
       doc_url: form.doc_url,
+      activation_code_purchase_url: form.activation_code_purchase_url,
       home_content: form.home_content,
       backend_mode_enabled: form.backend_mode_enabled,
       hide_ccs_import_button: form.hide_ccs_import_button,

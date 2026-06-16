@@ -115,6 +115,31 @@
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
           </router-link>
+
+          <button
+            type="button"
+            class="sidebar-link mb-1 w-full"
+            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
+            :title="sidebarCollapsed ? contactNavItem.label : undefined"
+            @click="handleContactClick"
+          >
+            <component :is="contactNavItem.icon" class="h-5 w-5 flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ contactNavItem.label }}</span>
+          </button>
+
+          <a
+            v-if="documentationNavItem"
+            :href="documentationNavItem.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="sidebar-link mb-1"
+            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
+            :title="sidebarCollapsed ? documentationNavItem.label : undefined"
+            @click="handleDocumentationClick"
+          >
+            <Icon name="brain" class="h-5 w-5 flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ documentationNavItem.label }}</span>
+          </a>
         </div>
       </template>
 
@@ -135,6 +160,31 @@
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
           </router-link>
+
+          <button
+            type="button"
+            class="sidebar-link mb-1 w-full"
+            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
+            :title="sidebarCollapsed ? contactNavItem.label : undefined"
+            @click="handleContactClick"
+          >
+            <component :is="contactNavItem.icon" class="h-5 w-5 flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ contactNavItem.label }}</span>
+          </button>
+
+          <a
+            v-if="documentationNavItem"
+            :href="documentationNavItem.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="sidebar-link mb-1"
+            :class="{ 'sidebar-link-collapsed': sidebarCollapsed }"
+            :title="sidebarCollapsed ? documentationNavItem.label : undefined"
+            @click="handleDocumentationClick"
+          >
+            <Icon name="brain" class="h-5 w-5 flex-shrink-0" />
+            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ documentationNavItem.label }}</span>
+          </a>
         </div>
       </template>
     </nav>
@@ -169,6 +219,23 @@
     </div>
   </aside>
 
+  <BaseDialog
+    :show="showContactDialog"
+    title="联系我们"
+    width="narrow"
+    :close-on-click-outside="true"
+    @close="showContactDialog = false"
+  >
+    <div class="flex flex-col items-center gap-4 py-2 text-center">
+      <div class="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-600 dark:bg-dark-800">
+        <img :src="contactQrCode" alt="联系我们二维码" class="h-64 w-64 rounded-2xl object-contain" />
+      </div>
+      <p class="text-sm text-gray-600 dark:text-gray-400">
+        扫描二维码联系我们
+      </p>
+    </div>
+  </BaseDialog>
+
   <!-- Mobile Overlay -->
   <transition name="fade">
     <div
@@ -185,8 +252,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
+import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
+import defaultContactQrCode from '@/assets/contact-qrcode.svg'
 
 interface NavItem {
   path: string
@@ -237,6 +308,7 @@ const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
 const isAdmin = computed(() => authStore.isAdmin)
 const isDark = ref(document.documentElement.classList.contains('dark'))
+const showContactDialog = ref(false)
 
 // Track which parent nav groups are expanded
 const expandedGroups = ref<Set<string>>(new Set())
@@ -246,6 +318,7 @@ const siteName = computed(() => appStore.siteName)
 const siteLogo = computed(() => appStore.siteLogo)
 const siteVersion = computed(() => appStore.siteVersion)
 const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
+const contactQrCode = computed(() => appStore.contactQrCodeUrl || appStore.cachedPublicSettings?.contact_qrcode_url || defaultContactQrCode)
 
 // SVG Icon Components
 const DashboardIcon = {
@@ -643,6 +716,22 @@ const ChevronDownIcon = {
     )
 }
 
+
+const ContactIcon = {
+  render: () =>
+    h(
+      'svg',
+      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
+      [
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z'
+        })
+      ]
+    )
+}
+
 // Public-settings flags go through the registry in utils/featureFlags.ts,
 // which handles the opt-in vs opt-out fallback when settings haven't loaded
 // yet. Admin-only flags (not in public settings) stay inline below.
@@ -712,6 +801,20 @@ const customMenuItemsForAdmin = computed(() => {
     .filter((item) => item.visibility === 'admin')
     .sort((a, b) => a.sort_order - b.sort_order)
 })
+
+const documentationNavItem = computed(() => {
+  const href = sanitizeUrl(appStore.docUrl)
+  if (!href) return null
+  return {
+    href,
+    label: '配置文档'
+  }
+})
+
+const contactNavItem = {
+  label: '联系我们',
+  icon: ContactIcon
+}
 
 // Admin navigation items
 const adminNavItems = computed((): NavItem[] => {
@@ -818,6 +921,23 @@ function handleMenuItemClick(itemPath: string) {
   const selector = pathToSelector[itemPath]
   if (selector && onboardingStore.isCurrentStep(selector)) {
     onboardingStore.nextStep(500)
+  }
+}
+
+function handleDocumentationClick() {
+  if (mobileOpen.value) {
+    setTimeout(() => {
+      appStore.setMobileOpen(false)
+    }, 150)
+  }
+}
+
+function handleContactClick() {
+  showContactDialog.value = true
+  if (mobileOpen.value) {
+    setTimeout(() => {
+      appStore.setMobileOpen(false)
+    }, 150)
   }
 }
 
@@ -1020,3 +1140,4 @@ onMounted(() => {
   height: 1.25rem;
 }
 </style>
+

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -366,6 +367,142 @@ func TestOpenAIGatewayServiceParseOpenAIImagesRequest_JSONEditURLs(t *testing.T)
 	require.Equal(t, 2, *parsed.PartialImages)
 	require.True(t, parsed.HasMask)
 	require.Equal(t, OpenAIImagesCapabilityNative, parsed.RequiredCapability)
+}
+
+func TestOpenAIGatewayServiceParseOpenAIImagesRequest_MirrorSiteImageFieldOnGenerations(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{
+		"model":"gpt-image-2",
+		"prompt":"Generate a new scene inspired by these references",
+		"image":["https://example.com/ref1.png","data:image/png;base64,QUJD","UkFX"],
+		"quality":"medium"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	svc := &OpenAIGatewayService{}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	require.Equal(t, openAIImagesGenerationsEndpoint, parsed.Endpoint)
+	require.Equal(t, []string{"https://example.com/ref1.png", "data:image/png;base64,QUJD", "UkFX"}, parsed.InputImageURLs)
+	require.Equal(t, "medium", parsed.Quality)
+	require.Equal(t, OpenAIImagesCapabilityNative, parsed.RequiredCapability)
+}
+
+func TestOpenAIGatewayServiceParseOpenAIImagesRequest_MirrorSiteImageFieldOnEdits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{
+		"model":"gpt-image-2",
+		"prompt":"Replace the background with a calm starry night sky",
+		"image":"https://example.com/base.png",
+		"size":"1024x1024",
+		"response_format":"url"
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	svc := &OpenAIGatewayService{}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	require.Equal(t, openAIImagesEditsEndpoint, parsed.Endpoint)
+	require.Equal(t, []string{"https://example.com/base.png"}, parsed.InputImageURLs)
+	require.Equal(t, "url", parsed.ResponseFormat)
+}
+
+func TestOpenAIGatewayServiceParseOpenAIImagesRequest_MirrorSiteEditsRequiresImage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"Replace the background"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	svc := &OpenAIGatewayService{}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.Nil(t, parsed)
+	require.ErrorContains(t, err, "image is required for edits")
+}
+
+func TestOpenAIGatewayServiceParseOpenAIImagesRequest_MultipartMirrorSiteImageAliases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "gpt-image-2"))
+	require.NoError(t, writer.WriteField("prompt", "Combine the references into one cinematic scene"))
+	for _, fieldName := range []string{"image[]", "reference_images"} {
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, fieldName, fieldName+".png"))
+		header.Set("Content-Type", "image/png")
+		part, err := writer.CreatePart(header)
+		require.NoError(t, err)
+		_, err = part.Write([]byte(fieldName + "-bytes"))
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", bytes.NewReader(body.Bytes()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	svc := &OpenAIGatewayService{}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body.Bytes())
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	require.Len(t, parsed.Uploads, 2)
+	require.Equal(t, "image[]", parsed.Uploads[0].FieldName)
+	require.Equal(t, "reference_images", parsed.Uploads[1].FieldName)
+}
+
+func TestRewriteOpenAIImagesMultipartModelNormalizesMirrorSiteImageAliases(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "gpt-image-2"))
+	for _, fieldName := range []string{"image[]", "reference_images"} {
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, fieldName, fieldName+".png"))
+		header.Set("Content-Type", "image/png")
+		part, err := writer.CreatePart(header)
+		require.NoError(t, err)
+		_, err = part.Write([]byte(fieldName + "-bytes"))
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
+
+	rewrittenBody, rewrittenContentType, err := rewriteOpenAIImagesMultipartModel(body.Bytes(), writer.FormDataContentType(), "gpt-image-2")
+	require.NoError(t, err)
+
+	_, params, err := mime.ParseMediaType(rewrittenContentType)
+	require.NoError(t, err)
+	reader := multipart.NewReader(bytes.NewReader(rewrittenBody), params["boundary"])
+	var imagePartCount int
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		if part.FileName() != "" {
+			require.Equal(t, "image", part.FormName())
+			imagePartCount++
+		}
+		_ = part.Close()
+	}
+	require.Equal(t, 2, imagePartCount)
 }
 
 func TestCollectOpenAIImagePointers_RecognizesDirectAssets(t *testing.T) {

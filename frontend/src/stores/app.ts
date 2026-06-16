@@ -29,8 +29,10 @@ export const useAppStore = defineStore('app', () => {
   const siteLogo = ref<string>('')
   const siteVersion = ref<string>('')
   const contactInfo = ref<string>('')
+  const contactQrCodeUrl = ref<string>('')
   const apiBaseUrl = ref<string>('')
   const docUrl = ref<string>('')
+  const activationCodePurchaseUrl = ref<string>('')
   const cachedPublicSettings = ref<PublicSettings | null>(null)
 
   // Version cache state
@@ -296,8 +298,10 @@ export const useAppStore = defineStore('app', () => {
     siteLogo.value = config.site_logo || ''
     siteVersion.value = config.version || ''
     contactInfo.value = config.contact_info || ''
+    contactQrCodeUrl.value = config.contact_qrcode_url || ''
     apiBaseUrl.value = config.api_base_url || ''
     docUrl.value = config.doc_url || ''
+    activationCodePurchaseUrl.value = config.activation_code_purchase_url || ''
     publicSettingsLoaded.value = true
   }
 
@@ -332,7 +336,9 @@ export const useAppStore = defineStore('app', () => {
         site_subtitle: '',
         api_base_url: apiBaseUrl.value,
         contact_info: contactInfo.value,
+        contact_qrcode_url: contactQrCodeUrl.value,
         doc_url: docUrl.value,
+        activation_code_purchase_url: activationCodePurchaseUrl.value,
         home_content: '',
         hide_ccs_import_button: false,
         payment_enabled: false,
@@ -418,8 +424,10 @@ export const useAppStore = defineStore('app', () => {
     siteLogo,
     siteVersion,
     contactInfo,
+    contactQrCodeUrl,
     apiBaseUrl,
     docUrl,
+    activationCodePurchaseUrl,
     cachedPublicSettings,
 
     // Version state

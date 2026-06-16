@@ -216,7 +216,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		SiteSubtitle:                           settings.SiteSubtitle,
 		APIBaseURL:                             settings.APIBaseURL,
 		ContactInfo:                            settings.ContactInfo,
+		ContactQRCodeURL:                       settings.ContactQRCodeURL,
 		DocURL:                                 settings.DocURL,
+		ActivationCodePurchaseURL:              settings.ActivationCodePurchaseURL,
 		HomeContent:                            settings.HomeContent,
 		HideCcsImportButton:                    settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:            settings.PurchaseSubscriptionEnabled,
@@ -500,7 +502,9 @@ type UpdateSettingsRequest struct {
 	SiteSubtitle                string                `json:"site_subtitle"`
 	APIBaseURL                  string                `json:"api_base_url"`
 	ContactInfo                 string                `json:"contact_info"`
+	ContactQRCodeURL            string                `json:"contact_qrcode_url"`
 	DocURL                      string                `json:"doc_url"`
+	ActivationCodePurchaseURL   string                `json:"activation_code_purchase_url"`
 	HomeContent                 string                `json:"home_content"`
 	HideCcsImportButton         bool                  `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled *bool                 `json:"purchase_subscription_enabled"`
@@ -1573,7 +1577,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SiteSubtitle:                           req.SiteSubtitle,
 		APIBaseURL:                             req.APIBaseURL,
 		ContactInfo:                            req.ContactInfo,
+		ContactQRCodeURL:                       req.ContactQRCodeURL,
 		DocURL:                                 req.DocURL,
+		ActivationCodePurchaseURL:              req.ActivationCodePurchaseURL,
 		HomeContent:                            req.HomeContent,
 		HideCcsImportButton:                    req.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:            purchaseEnabled,
@@ -2034,7 +2040,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		SiteSubtitle:                           updatedSettings.SiteSubtitle,
 		APIBaseURL:                             updatedSettings.APIBaseURL,
 		ContactInfo:                            updatedSettings.ContactInfo,
+		ContactQRCodeURL:                       updatedSettings.ContactQRCodeURL,
 		DocURL:                                 updatedSettings.DocURL,
+		ActivationCodePurchaseURL:              updatedSettings.ActivationCodePurchaseURL,
 		HomeContent:                            updatedSettings.HomeContent,
 		HideCcsImportButton:                    updatedSettings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:            updatedSettings.PurchaseSubscriptionEnabled,

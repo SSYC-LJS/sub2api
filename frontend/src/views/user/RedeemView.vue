@@ -46,6 +46,17 @@
               </p>
             </div>
 
+            <a
+              v-if="activationCodePurchaseUrl"
+              :href="activationCodePurchaseUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-secondary w-full py-3"
+            >
+              <Icon name="externalLink" size="md" class="mr-2" />
+              {{ t('redeem.buyActivationCode') }}
+            </a>
+
             <button
               type="submit"
               :disabled="!redeemCode || submitting"
@@ -351,6 +362,7 @@ import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatDateTime } from '@/utils/format'
+import { sanitizeUrl } from '@/utils/url'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -376,6 +388,9 @@ const errorMessage = ref('')
 const history = ref<RedeemHistoryItem[]>([])
 const loadingHistory = ref(false)
 const contactInfo = ref('')
+const activationCodePurchaseUrl = computed(() =>
+  sanitizeUrl(appStore.activationCodePurchaseUrl || appStore.cachedPublicSettings?.activation_code_purchase_url || ''),
+)
 
 // Helper functions for history display
 const isBalanceType = (type: string) => {
