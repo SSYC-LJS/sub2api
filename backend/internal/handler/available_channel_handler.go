@@ -111,26 +111,11 @@ type userAvailableChannel struct {
 	Platforms   []userChannelPlatformSection `json:"platforms"`
 }
 
-// List 列出当前用户可见的「可用渠道」。
-// GET /api/v1/channels/available
-func (h *AvailableChannelHandler) List(c *gin.Context) {
-	subject, ok := middleware.GetAuthSubjectFromContext(c)
-	if !ok {
-		response.Unauthorized(c, "User not authenticated")
-		return
-	}
-
-	// Feature 未启用时返回空数组（不暴露渠道信息）。检查放在认证之后，
-	// 保持与未开关前的 401 行为一致：未登录先 401，登录后再按开关决定。
-	if !h.featureEnabled(c) {
-		response.Success(c, []userAvailableChannel{})
-		return
-	}
-
+// listVisibleChannels 列出当前用户可见的渠道数据，并只返回白名单字段。
+func (h *AvailableChannelHandler) listVisibleChannels(c *gin.Context, subject middleware.AuthSubject) ([]userAvailableChannel, error) {
 	userGroups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), subject.UserID)
 	if err != nil {
-		response.ErrorFrom(c, err)
-		return
+		return nil, err
 	}
 	allowedGroupIDs := make(map[int64]struct{}, len(userGroups))
 	for i := range userGroups {
@@ -139,8 +124,7 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 
 	channels, err := h.channelService.ListAvailable(c.Request.Context())
 	if err != nil {
-		response.ErrorFrom(c, err)
-		return
+		return nil, err
 	}
 
 	out := make([]userAvailableChannel, 0, len(channels))
@@ -161,6 +145,52 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 			Description: ch.Description,
 			Platforms:   sections,
 		})
+	}
+
+	return out, nil
+}
+
+// ListModelMarket 列出模型广场数据。
+// GET /api/v1/model-market
+//
+// 模型广场是所有登录用户可见的页面，不受“可用渠道”菜单开关影响；
+// 但数据权限仍复用可用渠道的严格过滤逻辑，只返回当前用户可访问分组下的模型。
+func (h *AvailableChannelHandler) ListModelMarket(c *gin.Context) {
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	out, err := h.listVisibleChannels(c, subject)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, out)
+}
+
+// List 列出当前用户可见的「可用渠道」。
+// GET /api/v1/channels/available
+func (h *AvailableChannelHandler) List(c *gin.Context) {
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	// Feature 未启用时返回空数组（不暴露渠道信息）。检查放在认证之后，
+	// 保持与未开关前的 401 行为一致：未登录先 401，登录后再按开关决定。
+	if !h.featureEnabled(c) {
+		response.Success(c, []userAvailableChannel{})
+		return
+	}
+
+	out, err := h.listVisibleChannels(c, subject)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
 	}
 
 	response.Success(c, out)

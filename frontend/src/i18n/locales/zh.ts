@@ -388,6 +388,7 @@ export default {
     users: '用户管理',
     groups: '分组管理',
     channels: '渠道管理',
+    modelMarket: '模型广场',
     availableChannels: '可用渠道',
     subscriptions: '订阅管理',
     accounts: '账号管理',
@@ -1069,6 +1070,44 @@ export default {
     empty: {
       title: '暂无可显示的渠道',
       description: '管理员尚未配置可监控的渠道。'
+    }
+  },
+
+  // Model Market (user-facing)
+  modelMarket: {
+    title: '模型广场',
+    description: '根据您当前可访问的分组自动汇总可用模型，同名模型会合并展示，并展示官方价格与各分组价格。',
+    badge: '按当前权限自动生成',
+    searchPlaceholder: '搜索模型、分组或供应商...',
+    allProviders: '全部供应商',
+    officialPrice: '官方价格',
+    currentGroupPrices: '当前分组价格',
+    multiplierHint: '按倍率换算',
+    noPricing: '未配置定价',
+    emptyTitle: '暂无可用模型',
+    emptyDescription: '当前没有匹配的模型，或管理员尚未为您的可用分组配置模型。',
+    exclusive: '专属分组',
+    public: '公开分组',
+    groupCount: '{count} 个分组',
+    stats: {
+      models: '可用模型',
+      providers: '供应商',
+      groups: '可用分组'
+    },
+    pricing: {
+      billingModeToken: '按 Token',
+      billingModePerRequest: '按次',
+      billingModeImage: '按图片',
+      inputPrice: '输入',
+      outputPrice: '输出',
+      cacheWritePrice: '缓存写入',
+      cacheReadPrice: '缓存命中',
+      imageOutputPrice: '图片输出',
+      perRequestPrice: '单次价格',
+      intervals: '阶梯定价',
+      unitPerMillion: '/ 1M token',
+      unitPerRequest: '/ 次',
+      unitPerImage: '/ 张'
     }
   },
 

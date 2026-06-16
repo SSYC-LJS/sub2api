@@ -72,6 +72,9 @@ func RegisterUserRoutes(
 			groups.GET("/rates", h.APIKey.GetUserGroupRates)
 		}
 
+		// 用户模型广场（非管理员接口，所有登录用户可见）
+		authenticated.GET("/model-market", h.AvailableChannel.ListModelMarket)
+
 		// 用户可用渠道（非管理员接口）
 		channels := authenticated.Group("/channels")
 		{

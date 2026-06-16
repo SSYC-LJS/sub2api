@@ -388,6 +388,7 @@ export default {
     users: 'Users',
     groups: 'Groups',
     channels: 'Channels',
+    modelMarket: 'Model Market',
     availableChannels: 'Available Channels',
     subscriptions: 'Subscriptions',
     accounts: 'Accounts',
@@ -1065,6 +1066,44 @@ export default {
     empty: {
       title: 'No channels available',
       description: 'No monitored channels have been configured yet.'
+    }
+  },
+
+  // Model Market (user-facing)
+  modelMarket: {
+    title: 'Model Market',
+    description: 'Automatically summarizes models from the groups you can access, merges duplicate model names, and shows official pricing alongside each group price.',
+    badge: 'Generated from your current access',
+    searchPlaceholder: 'Search models, groups, or providers...',
+    allProviders: 'All Providers',
+    officialPrice: 'Official Price',
+    currentGroupPrices: 'Current Group Prices',
+    multiplierHint: 'Converted by multiplier',
+    noPricing: 'Pricing not configured',
+    emptyTitle: 'No available models',
+    emptyDescription: 'No matching models were found, or no models are configured for your accessible groups yet.',
+    exclusive: 'Exclusive Group',
+    public: 'Public Group',
+    groupCount: '{count} groups',
+    stats: {
+      models: 'Models',
+      providers: 'Providers',
+      groups: 'Groups'
+    },
+    pricing: {
+      billingModeToken: 'Per Token',
+      billingModePerRequest: 'Per Request',
+      billingModeImage: 'Per Image',
+      inputPrice: 'Input',
+      outputPrice: 'Output',
+      cacheWritePrice: 'Cache Write',
+      cacheReadPrice: 'Cache Hit',
+      imageOutputPrice: 'Image Output',
+      perRequestPrice: 'Single Request',
+      intervals: 'Tiered Pricing',
+      unitPerMillion: '/ 1M tokens',
+      unitPerRequest: '/ request',
+      unitPerImage: '/ image'
     }
   },
 
