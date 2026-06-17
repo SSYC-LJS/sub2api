@@ -22,14 +22,13 @@ import (
 )
 
 var (
-	ErrNoUpdateAvailable  = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
-	ErrAutoUpdateDisabled = infraerrors.Forbidden("AUTO_UPDATE_DISABLED", "automatic update is disabled in this customized build; sync the SSYC-LJS fork and redeploy manually")
+	ErrNoUpdateAvailable = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
 )
 
 const (
 	updateCacheKey = "update_check_cache"
 	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	githubRepo     = "SSYC-LJS/sub2api"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
@@ -113,30 +112,171 @@ type GitHubAsset struct {
 	Size               int64  `json:"size"`
 }
 
-// CheckUpdate returns local version information without contacting GitHub.
-//
-// This customized fork intentionally disables the built-in web auto-update
-// checker. Updates should be applied by syncing the SSYC-LJS fork and
-// redeploying through the installation/deployment pipeline.
+// CheckUpdate checks for available updates
 func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInfo, error) {
-	return &UpdateInfo{
-		CurrentVersion: s.currentVersion,
-		LatestVersion:  s.currentVersion,
-		HasUpdate:      false,
-		Cached:         false,
-		Warning:        "Automatic update is disabled in this customized build; sync the SSYC-LJS fork and redeploy manually.",
-		BuildType:      s.buildType,
-	}, nil
+	// Try cache first
+	if !force {
+		if cached, err := s.getFromCache(ctx); err == nil && cached != nil {
+			return cached, nil
+		}
+	}
+
+	// Fetch from GitHub
+	info, err := s.fetchLatestRelease(ctx)
+	if err != nil {
+		// Return cached on error
+		if cached, cacheErr := s.getFromCache(ctx); cacheErr == nil && cached != nil {
+			cached.Warning = "Using cached data: " + err.Error()
+			return cached, nil
+		}
+		return &UpdateInfo{
+			CurrentVersion: s.currentVersion,
+			LatestVersion:  s.currentVersion,
+			HasUpdate:      false,
+			Warning:        err.Error(),
+			BuildType:      s.buildType,
+		}, nil
+	}
+
+	// Cache result
+	s.saveToCache(ctx, info)
+	return info, nil
 }
 
-// PerformUpdate is disabled in this customized fork.
+// PerformUpdate downloads and applies the update
+// Uses atomic file replacement pattern for safe in-place updates
 func (s *UpdateService) PerformUpdate(ctx context.Context) error {
-	return ErrAutoUpdateDisabled
+	info, err := s.CheckUpdate(ctx, true)
+	if err != nil {
+		return err
+	}
+
+	if !info.HasUpdate {
+		return ErrNoUpdateAvailable
+	}
+
+	// Find matching archive and checksum for current platform
+	archiveName := s.getArchiveName()
+	var downloadURL string
+	var checksumURL string
+
+	for _, asset := range info.ReleaseInfo.Assets {
+		if strings.Contains(asset.Name, archiveName) && !strings.HasSuffix(asset.Name, ".txt") {
+			downloadURL = asset.DownloadURL
+		}
+		if asset.Name == "checksums.txt" {
+			checksumURL = asset.DownloadURL
+		}
+	}
+
+	if downloadURL == "" {
+		return fmt.Errorf("no compatible release found for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+
+	// SECURITY: Validate download URL is from trusted domain
+	if err := validateDownloadURL(downloadURL); err != nil {
+		return fmt.Errorf("invalid download URL: %w", err)
+	}
+	if checksumURL != "" {
+		if err := validateDownloadURL(checksumURL); err != nil {
+			return fmt.Errorf("invalid checksum URL: %w", err)
+		}
+	}
+
+	// Get current executable path
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve symlinks: %w", err)
+	}
+
+	exeDir := filepath.Dir(exePath)
+
+	// Create temp directory in the SAME directory as executable
+	// This ensures os.Rename is atomic (same filesystem)
+	tempDir, err := os.MkdirTemp(exeDir, ".sub2api-update-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	// Download archive
+	archivePath := filepath.Join(tempDir, filepath.Base(downloadURL))
+	if err := s.downloadFile(ctx, downloadURL, archivePath); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+
+	// Verify checksum if available
+	if checksumURL != "" {
+		if err := s.verifyChecksum(ctx, archivePath, checksumURL); err != nil {
+			return fmt.Errorf("checksum verification failed: %w", err)
+		}
+	}
+
+	// Extract binary from archive
+	newBinaryPath := filepath.Join(tempDir, "sub2api")
+	if err := s.extractBinary(archivePath, newBinaryPath); err != nil {
+		return fmt.Errorf("extraction failed: %w", err)
+	}
+
+	// Set executable permission before replacement
+	if err := os.Chmod(newBinaryPath, 0755); err != nil {
+		return fmt.Errorf("chmod failed: %w", err)
+	}
+
+	// Atomic replacement using rename pattern:
+	// 1. Rename current -> backup (atomic on Unix)
+	// 2. Rename new -> current (atomic on Unix, same filesystem)
+	// If step 2 fails, restore backup
+	backupPath := exePath + ".backup"
+
+	// Remove old backup if exists
+	_ = os.Remove(backupPath)
+
+	// Step 1: Move current binary to backup
+	if err := os.Rename(exePath, backupPath); err != nil {
+		return fmt.Errorf("backup failed: %w", err)
+	}
+
+	// Step 2: Move new binary to target location (atomic, same filesystem)
+	if err := os.Rename(newBinaryPath, exePath); err != nil {
+		// Restore backup on failure
+		if restoreErr := os.Rename(backupPath, exePath); restoreErr != nil {
+			return fmt.Errorf("replace failed and restore failed: %w (restore error: %v)", err, restoreErr)
+		}
+		return fmt.Errorf("replace failed (restored backup): %w", err)
+	}
+
+	// Success - backup file is kept for rollback capability
+	// It will be cleaned up on next successful update
+	return nil
 }
 
-// Rollback is disabled together with the built-in auto-update workflow.
+// Rollback restores the previous version
 func (s *UpdateService) Rollback() error {
-	return ErrAutoUpdateDisabled
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve symlinks: %w", err)
+	}
+
+	backupFile := exePath + ".backup"
+	if _, err := os.Stat(backupFile); os.IsNotExist(err) {
+		return fmt.Errorf("no backup found")
+	}
+
+	// Replace current with backup
+	if err := os.Rename(backupFile, exePath); err != nil {
+		return fmt.Errorf("rollback failed: %w", err)
+	}
+
+	return nil
 }
 
 func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, error) {
