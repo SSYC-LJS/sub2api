@@ -156,8 +156,8 @@
                 <span>{{ t('modelMarket.currentGroupPrices') }}</span>
                 <span>{{ t('modelMarket.multiplierHint') }}</span>
               </div>
-              <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white dark:border-dark-700 dark:bg-dark-850">
-                <table class="w-full table-fixed text-xs">
+              <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white text-gray-700 dark:border-dark-700 dark:bg-dark-850 dark:text-gray-200">
+                <table class="w-full table-fixed bg-transparent text-xs">
                   <thead class="sticky top-0 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-dark-800 dark:text-gray-400">
                     <tr>
                       <th class="w-[34%] px-2 py-2 text-left font-semibold">{{ t('modelMarket.priceTable.group') }}</th>
@@ -168,11 +168,11 @@
                       <th v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheRead') }}</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                  <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-850">
                     <tr
                       v-for="group in model.groups"
                       :key="`${model.name}-${group.id}`"
-                      class="hover:bg-gray-50/70 dark:hover:bg-dark-800/70"
+                      class="bg-white hover:bg-gray-50/70 dark:bg-dark-850 dark:hover:bg-dark-800/70"
                     >
                       <td class="px-2 py-2 align-middle">
                         <div class="min-w-0">
@@ -185,19 +185,19 @@
                           </div>
                         </div>
                       </td>
-                      <td class="px-2 py-2 text-right align-middle font-semibold text-gray-700 dark:text-gray-200">
+                      <td class="px-2 py-2 text-right align-middle font-semibold text-gray-700 dark:text-gray-100">
                         ×{{ rateLabel(group) }}
                       </td>
-                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'input') }}
                       </td>
-                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'output') }}
                       </td>
-                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheWrite') }}
                       </td>
-                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheRead') }}
                       </td>
                     </tr>
