@@ -9089,6 +9089,18 @@ async function saveSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.contact_qrcode_url =
+      updated.contact_qrcode_url ?? payload.contact_qrcode_url ?? "";
+    form.contact_webmaster_qrcode_url =
+      updated.contact_webmaster_qrcode_url ??
+      payload.contact_webmaster_qrcode_url ??
+      form.contact_qrcode_url;
+    form.contact_group_qrcode_url =
+      updated.contact_group_qrcode_url ?? payload.contact_group_qrcode_url ?? "";
+    form.activation_code_purchase_url =
+      updated.activation_code_purchase_url ??
+      payload.activation_code_purchase_url ??
+      "";
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
     registrationEmailSuffixWhitelistTags.value =
