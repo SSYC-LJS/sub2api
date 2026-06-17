@@ -156,37 +156,53 @@
                 <span>{{ t('modelMarket.currentGroupPrices') }}</span>
                 <span>{{ t('modelMarket.multiplierHint') }}</span>
               </div>
-              <div class="max-h-56 space-y-2 overflow-y-auto pr-1">
-                <div
-                  v-for="group in model.groups"
-                  :key="`${model.name}-${group.id}`"
-                  class="rounded-2xl border border-gray-100 bg-white p-3 dark:border-dark-700 dark:bg-dark-850"
-                >
-                  <div class="mb-2 flex items-start justify-between gap-2">
-                    <div class="min-w-0">
-                      <div class="truncate text-sm font-medium text-gray-900 dark:text-white" :title="group.name">
-                        {{ group.name }}
-                      </div>
-                      <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                        <span class="inline-flex items-center gap-1">
-                          <PlatformIcon :platform="group.platform as GroupPlatform" size="xs" />
-                          {{ platformLabel(group.platform) }}
-                        </span>
-                        <span>·</span>
-                        <span>{{ group.is_exclusive ? t('modelMarket.exclusive') : t('modelMarket.public') }}</span>
-                      </div>
-                    </div>
-                    <span class="flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold" :class="platformBadgeLightClass(group.platform)">
-                      ×{{ effectiveRate(group).toFixed(2).replace(/\.00$/, '') }}
-                    </span>
-                  </div>
-                  <PriceSummary
-                    :pricing="scalePricing(model.pricing, effectiveRate(group))"
-                    :empty-label="t('modelMarket.noPricing')"
-                    :pricing-key-prefix="'modelMarket.pricing'"
-                    compact
-                  />
-                </div>
+              <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white dark:border-dark-700 dark:bg-dark-850">
+                <table class="w-full table-fixed text-xs">
+                  <thead class="sticky top-0 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-dark-800 dark:text-gray-400">
+                    <tr>
+                      <th class="w-[34%] px-2 py-2 text-left font-semibold">{{ t('modelMarket.priceTable.group') }}</th>
+                      <th class="w-[13%] px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.rate') }}</th>
+                      <th class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.input') }}</th>
+                      <th class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.output') }}</th>
+                      <th v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheWrite') }}</th>
+                      <th v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheRead') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                    <tr
+                      v-for="group in model.groups"
+                      :key="`${model.name}-${group.id}`"
+                      class="hover:bg-gray-50/70 dark:hover:bg-dark-800/70"
+                    >
+                      <td class="px-2 py-2 align-middle">
+                        <div class="min-w-0">
+                          <div class="truncate font-medium text-gray-900 dark:text-white" :title="group.name">
+                            {{ group.name }}
+                          </div>
+                          <div class="mt-0.5 flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
+                            <PlatformIcon :platform="group.platform as GroupPlatform" size="xs" />
+                            <span class="truncate">{{ group.is_exclusive ? t('modelMarket.exclusive') : t('modelMarket.public') }}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="px-2 py-2 text-right align-middle font-semibold text-gray-700 dark:text-gray-200">
+                        ×{{ rateLabel(group) }}
+                      </td>
+                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'input') }}
+                      </td>
+                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'output') }}
+                      </td>
+                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheWrite') }}
+                      </td>
+                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-200">
+                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheRead') }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -205,7 +221,6 @@ import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import userChannelsAPI, {
   type UserAvailableChannel,
   type UserAvailableGroup,
-  type UserPricingInterval,
   type UserSupportedModelPricing,
 } from '@/api/channels'
 import userGroupsAPI from '@/api/groups'
@@ -325,29 +340,35 @@ function scaleNumber(value: number | null, multiplier: number): number | null {
   return value == null ? null : value * multiplier
 }
 
-function scaleIntervals(intervals: UserPricingInterval[] | undefined, multiplier: number): UserPricingInterval[] {
-  return (intervals || []).map((iv) => ({
-    ...iv,
-    input_price: scaleNumber(iv.input_price, multiplier),
-    output_price: scaleNumber(iv.output_price, multiplier),
-    cache_write_price: scaleNumber(iv.cache_write_price, multiplier),
-    cache_read_price: scaleNumber(iv.cache_read_price, multiplier),
-    per_request_price: scaleNumber(iv.per_request_price, multiplier),
-  }))
+function rateLabel(group: UserAvailableGroup): string {
+  return effectiveRate(group).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
 }
 
-function scalePricing(pricing: UserSupportedModelPricing | null, multiplier: number): UserSupportedModelPricing | null {
-  if (!pricing) return null
-  return {
-    ...pricing,
-    input_price: scaleNumber(pricing.input_price, multiplier),
-    output_price: scaleNumber(pricing.output_price, multiplier),
-    cache_write_price: scaleNumber(pricing.cache_write_price, multiplier),
-    cache_read_price: scaleNumber(pricing.cache_read_price, multiplier),
-    image_output_price: scaleNumber(pricing.image_output_price, multiplier),
-    per_request_price: scaleNumber(pricing.per_request_price, multiplier),
-    intervals: scaleIntervals(pricing.intervals, multiplier),
+type PriceCellKind = 'input' | 'output' | 'cacheWrite' | 'cacheRead'
+
+function showCacheColumns(pricing: UserSupportedModelPricing | null): boolean {
+  return pricing?.billing_mode === BILLING_MODE_TOKEN
+}
+
+function groupPriceCell(
+  pricing: UserSupportedModelPricing | null,
+  multiplier: number,
+  kind: PriceCellKind,
+): string {
+  if (!pricing) return '-'
+  if (pricing.billing_mode === BILLING_MODE_PER_REQUEST) {
+    return kind === 'input' ? formatScaled(scaleNumber(pricing.per_request_price, multiplier), 1) : '-'
   }
+  if (pricing.billing_mode === BILLING_MODE_IMAGE) {
+    return kind === 'input' ? formatScaled(scaleNumber(pricing.image_output_price, multiplier), 1) : '-'
+  }
+  const source = {
+    input: pricing.input_price,
+    output: pricing.output_price,
+    cacheWrite: pricing.cache_write_price,
+    cacheRead: pricing.cache_read_price,
+  }[kind]
+  return formatScaled(scaleNumber(source, multiplier), perMillionScale)
 }
 
 function providerButtonClass(provider: string): string[] {

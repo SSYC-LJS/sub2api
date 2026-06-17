@@ -1094,6 +1094,14 @@ export default {
       providers: '供应商',
       groups: '可用分组'
     },
+    priceTable: {
+      group: '分组',
+      rate: '倍率',
+      input: '输入',
+      output: '输出',
+      cacheWrite: '缓存写',
+      cacheRead: '缓存读'
+    },
     pricing: {
       billingModeToken: '按 Token',
       billingModePerRequest: '按次',
@@ -6824,7 +6832,6 @@ export default {
   // Version Badge
   version: {
     currentVersion: '当前版本',
-    manualUpdateOnly: '自动更新已禁用，请同步 SSYC-LJS/sub2api 仓库并手动重新部署',
     latestVersion: '最新版本',
     upToDate: '已是最新版本',
     updateAvailable: '有新版本可用！',

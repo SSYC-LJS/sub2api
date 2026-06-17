@@ -1090,6 +1090,14 @@ export default {
       providers: 'Providers',
       groups: 'Groups'
     },
+    priceTable: {
+      group: 'Group',
+      rate: 'Rate',
+      input: 'Input',
+      output: 'Output',
+      cacheWrite: 'Cache W',
+      cacheRead: 'Cache R'
+    },
     pricing: {
       billingModeToken: 'Per Token',
       billingModePerRequest: 'Per Request',
@@ -6669,7 +6677,6 @@ export default {
   // Version Badge
   version: {
     currentVersion: 'Current Version',
-    manualUpdateOnly: 'Automatic update is disabled. Sync SSYC-LJS/sub2api and redeploy manually',
     latestVersion: 'Latest Version',
     upToDate: "You're running the latest version.",
     updateAvailable: 'A new version is available!',
