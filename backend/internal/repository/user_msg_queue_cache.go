@@ -35,8 +35,10 @@ return 1
 // Lua 脚本：原子释放锁 + 记录完成时间（使用 Redis TIME 避免时钟偏差）
 var releaseLockScript = redis.NewScript(`
 -- Redis 3.2-4.x compat: opt into effects replication so redis.call('TIME')
--- replicates correctly. No-op on Redis 5.0+ (effects replication is default).
-redis.replicate_commands()
+-- replicates correctly. Redis 3.0 Windows builds may not expose this helper.
+if redis.replicate_commands then
+    redis.replicate_commands()
+end
 local cur = redis.call('GET', KEYS[1])
 if cur == ARGV[1] then
     redis.call('DEL', KEYS[1])
