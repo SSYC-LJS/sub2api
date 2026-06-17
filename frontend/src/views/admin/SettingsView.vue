@@ -7910,6 +7910,24 @@ const form = reactive<SettingsForm>({
   allow_user_view_error_requests: false,
 });
 
+function normalizeSiteLinkField(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function syncSiteLinkFields(): void {
+  const legacyContactQrCode = normalizeSiteLinkField(form.contact_qrcode_url);
+  const webmasterQrCode = normalizeSiteLinkField(form.contact_webmaster_qrcode_url);
+  const groupQrCode = normalizeSiteLinkField(form.contact_group_qrcode_url);
+
+  form.contact_qrcode_url = webmasterQrCode || legacyContactQrCode;
+  form.contact_webmaster_qrcode_url = webmasterQrCode || legacyContactQrCode;
+  form.contact_group_qrcode_url = groupQrCode;
+  form.doc_url = normalizeSiteLinkField(form.doc_url);
+  form.activation_code_purchase_url = normalizeSiteLinkField(
+    form.activation_code_purchase_url,
+  );
+}
+
 const authSourceDefaults = reactive<AuthSourceDefaultsState>(
   buildAuthSourceDefaultsState({}),
 );
@@ -8510,6 +8528,7 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    syncSiteLinkFields();
     if (!form.claude_oauth_system_prompt_blocks?.trim()) {
       form.claude_oauth_system_prompt_blocks =
         defaultClaudeOAuthSystemPromptBlocks;
@@ -8842,6 +8861,7 @@ async function saveSettings() {
     if (!isValidHttpUrl(form.frontend_url)) form.frontend_url = "";
     if (!isValidHttpUrl(form.doc_url)) form.doc_url = "";
     if (!isValidHttpUrl(form.activation_code_purchase_url)) form.activation_code_purchase_url = "";
+    syncSiteLinkFields();
     syncWeChatConnectMode();
     const wechatStoredMode = deriveWeChatConnectStoredMode(
       form.wechat_connect_open_enabled,
