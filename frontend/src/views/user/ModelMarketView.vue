@@ -104,7 +104,7 @@
         <article
           v-for="model in filteredModels"
           :key="model.name"
-          class="group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:bg-dark-900"
+          class="group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-dark-700 dark:bg-dark-900"
           :class="platformBorderClass(model.primaryPlatform)"
         >
           <div class="h-1.5" :class="platformAccentBarClass(model.primaryPlatform)"></div>
@@ -156,7 +156,7 @@
                 <span>{{ t('modelMarket.currentGroupPrices') }}</span>
                 <span>{{ t('modelMarket.multiplierHint') }}</span>
               </div>
-              <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white text-gray-700 dark:border-dark-700 dark:bg-dark-850 dark:text-gray-200">
+              <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50/80 text-gray-700 dark:border-dark-700 dark:bg-dark-900/70 dark:text-gray-200">
                 <table class="w-full table-fixed bg-transparent text-xs">
                   <thead class="sticky top-0 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-dark-800 dark:text-gray-400">
                     <tr>
@@ -168,11 +168,11 @@
                       <th v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheRead') }}</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 bg-white dark:divide-dark-700 dark:bg-dark-850">
+                  <tbody class="divide-y divide-gray-100 bg-transparent dark:divide-dark-700">
                     <tr
                       v-for="group in model.groups"
                       :key="`${model.name}-${group.id}`"
-                      class="bg-white hover:bg-gray-50/70 dark:bg-dark-850 dark:hover:bg-dark-800/70"
+                      class="bg-transparent hover:bg-gray-50/70 dark:hover:bg-dark-800/70"
                     >
                       <td class="px-2 py-2 align-middle">
                         <div class="min-w-0">
@@ -472,7 +472,7 @@ const PriceSummary = defineComponent({
         )
       }
 
-      return h('div', { class: 'space-y-1.5' }, rows)
+      return h('div', { class: 'space-y-1.5 rounded-2xl bg-gray-50/70 p-3 dark:border dark:border-dark-700 dark:bg-dark-900/60' }, rows)
     }
   },
 })
