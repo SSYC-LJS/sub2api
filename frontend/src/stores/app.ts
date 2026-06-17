@@ -7,7 +7,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Toast, ToastType, PublicSettings } from '@/types'
 import { i18n } from '@/i18n'
-import type { VersionInfo, ReleaseInfo } from '@/api/admin/system'
+import {
+  checkUpdates as checkUpdatesAPI,
+  type VersionInfo,
+  type ReleaseInfo
+} from '@/api/admin/system'
 import { getPublicSettings as fetchPublicSettingsAPI } from '@/api/auth'
 
 export const useAppStore = defineStore('app', () => {
@@ -238,22 +242,39 @@ export const useAppStore = defineStore('app', () => {
    * Fetch version info (uses cache unless force=true)
    * @param force - Force refresh from API
    */
-  async function fetchVersion(_force = false): Promise<VersionInfo | null> {
-    const version = siteVersion.value || currentVersion.value
-    currentVersion.value = version
-    latestVersion.value = version
-    hasUpdate.value = false
-    buildType.value = 'source'
-    releaseInfo.value = null
-    versionLoaded.value = true
+  async function fetchVersion(force = false): Promise<VersionInfo | null> {
+    // Return cached data if available and not forcing refresh
+    if (versionLoaded.value && !force) {
+      return {
+        current_version: currentVersion.value,
+        latest_version: latestVersion.value,
+        has_update: hasUpdate.value,
+        build_type: buildType.value,
+        release_info: releaseInfo.value || undefined,
+        cached: true
+      }
+    }
 
-    return {
-      current_version: version,
-      latest_version: version,
-      has_update: false,
-      build_type: 'source',
-      cached: true,
-      warning: 'Automatic update is disabled in this customized build; sync the SSYC-LJS fork and redeploy manually.'
+    // Prevent duplicate requests
+    if (versionLoading.value) {
+      return null
+    }
+
+    versionLoading.value = true
+    try {
+      const data = await checkUpdatesAPI(force)
+      currentVersion.value = data.current_version
+      latestVersion.value = data.latest_version
+      hasUpdate.value = data.has_update
+      buildType.value = data.build_type || 'source'
+      releaseInfo.value = data.release_info || null
+      versionLoaded.value = true
+      return data
+    } catch (error) {
+      console.error('Failed to fetch version:', error)
+      return null
+    } finally {
+      versionLoading.value = false
     }
   }
 
