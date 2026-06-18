@@ -662,6 +662,12 @@ export default {
     platformBreakdownEmpty: '暂无平台用量',
     platformCount: '{count} 个平台',
     platformOther: '其他',
+    tokenRankingTitle: 'Token 用量排行榜',
+    tokenRankingSubtitle: '按今日、本周、本月统计用户 Token 用量 Top 10',
+    tokenRankingEmpty: '暂无排行榜数据',
+    rankingToday: '今日',
+    rankingWeek: '本周',
+    rankingMonth: '本月',
     platformQuota: {
       title: '配额用量',
       daily: '日',

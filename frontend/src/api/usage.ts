@@ -72,6 +72,30 @@ export interface ModelStatsResponse {
   end_date: string
 }
 
+export interface UserTokenRankingItem {
+  user_id: number
+  email: string
+  username: string
+  actual_cost: number
+  requests: number
+  tokens: number
+}
+
+export interface UserTokenRankingPeriod {
+  ranking: UserTokenRankingItem[]
+  total_actual_cost: number
+  total_requests: number
+  total_tokens: number
+  start_date: string
+  end_date: string
+}
+
+export interface UserTokenRankingResponse {
+  today: UserTokenRankingPeriod
+  week: UserTokenRankingPeriod
+  month: UserTokenRankingPeriod
+}
+
 export interface ApiKeyDailyUsagePoint {
   date: string
   requests: number
@@ -257,6 +281,17 @@ export async function getDashboardModels(params?: {
 }
 
 /**
+ * Get token usage ranking for today/week/month.
+ * @returns Token ranking data for current dashboard
+ */
+export async function getDashboardRanking(params?: {
+  timezone?: string
+}): Promise<UserTokenRankingResponse> {
+  const { data } = await apiClient.get<UserTokenRankingResponse>('/usage/dashboard/ranking', { params })
+  return data
+}
+
+/**
  * Get daily usage details for one API key owned by the current user.
  * @param apiKeyId - API key ID
  * @param days - Number of days to include (1-90)
@@ -334,6 +369,7 @@ export const usageAPI = {
   getDashboardStats,
   getDashboardTrend,
   getDashboardModels,
+  getDashboardRanking,
   getMyApiKeyDailyUsage,
   getDashboardApiKeysUsage,
   // Error requests

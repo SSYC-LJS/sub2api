@@ -663,6 +663,12 @@ export default {
     platformBreakdownEmpty: 'No platform usage yet',
     platformCount: '{count} platforms',
     platformOther: 'Other',
+    tokenRankingTitle: 'Token Usage Ranking',
+    tokenRankingSubtitle: 'Top 10 users by token usage for today, this week, and this month',
+    tokenRankingEmpty: 'No ranking data yet',
+    rankingToday: 'Today',
+    rankingWeek: 'This Week',
+    rankingMonth: 'This Month',
     platformQuota: {
       title: 'Quota Usage',
       daily: 'Daily',
