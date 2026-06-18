@@ -442,6 +442,64 @@ func apiKeyDailyUsageRange(days int, userTZ string) (time.Time, time.Time) {
 	return startTime, endTime
 }
 
+const dashboardRankingLimit = 10
+
+func userTokenRankingRanges(userTZ string) map[string][2]time.Time {
+	now := timezone.NowInUserLocation(userTZ)
+	todayStart := timezone.StartOfDayInUserLocation(now, userTZ)
+	end := timezone.StartOfDayInUserLocation(now.AddDate(0, 0, 1), userTZ)
+
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	weekStart := timezone.StartOfDayInUserLocation(now.AddDate(0, 0, -(weekday-1)), userTZ)
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	return map[string][2]time.Time{
+		"today": {todayStart, end},
+		"week":  {weekStart, end},
+		"month": {monthStart, end},
+	}
+}
+
+func rankingPeriodPayload(startTime, endTime time.Time, ranking *usagestats.UserSpendingRankingResponse) gin.H {
+	if ranking == nil {
+		ranking = &usagestats.UserSpendingRankingResponse{}
+	}
+	return gin.H{
+		"ranking":           ranking.Ranking,
+		"total_actual_cost": ranking.TotalActualCost,
+		"total_requests":    ranking.TotalRequests,
+		"total_tokens":      ranking.TotalTokens,
+		"start_date":        startTime.Format("2006-01-02"),
+		"end_date":          endTime.Add(-24 * time.Hour).Format("2006-01-02"),
+	}
+}
+
+// DashboardRanking handles getting global user token ranking for today/week/month.
+// GET /api/v1/usage/dashboard/ranking
+func (h *UsageHandler) DashboardRanking(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	ranges := userTokenRankingRanges(c.Query("timezone"))
+	payload := gin.H{}
+	for _, period := range []string{"today", "week", "month"} {
+		r := ranges[period]
+		ranking, err := h.usageService.GetUserTokenRanking(c.Request.Context(), r[0], r[1], dashboardRankingLimit)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		payload[period] = rankingPeriodPayload(r[0], r[1], ranking)
+	}
+
+	response.Success(c, payload)
+}
+
 // DashboardStats handles getting user dashboard statistics
 // GET /api/v1/usage/dashboard/stats
 func (h *UsageHandler) DashboardStats(c *gin.Context) {

@@ -358,6 +358,24 @@ func (s *UsageService) GetAPIKeyDailyUsage(ctx context.Context, userID, apiKeyID
 	return points, nil
 }
 
+// GetUserSpendingRanking returns global user token/spending ranking in a time range.
+func (s *UsageService) GetUserSpendingRanking(ctx context.Context, startTime, endTime time.Time, limit int) (*usagestats.UserSpendingRankingResponse, error) {
+	ranking, err := s.usageRepo.GetUserSpendingRanking(ctx, startTime, endTime, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get user spending ranking: %w", err)
+	}
+	return ranking, nil
+}
+
+// GetUserTokenRanking returns global user token ranking in a time range.
+func (s *UsageService) GetUserTokenRanking(ctx context.Context, startTime, endTime time.Time, limit int) (*usagestats.UserSpendingRankingResponse, error) {
+	ranking, err := s.usageRepo.GetUserTokenRanking(ctx, startTime, endTime, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get user token ranking: %w", err)
+	}
+	return ranking, nil
+}
+
 // GetBatchAPIKeyUsageStats returns today/total actual_cost for given api keys.
 func (s *UsageService) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*usagestats.BatchAPIKeyUsageStats, error) {
 	stats, err := s.usageRepo.GetBatchAPIKeyUsageStats(ctx, apiKeyIDs, startTime, endTime)
