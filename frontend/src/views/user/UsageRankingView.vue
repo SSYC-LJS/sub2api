@@ -1,12 +1,12 @@
 <template>
   <AppLayout>
     <div class="relative -m-4 min-h-[calc(100vh-5rem)] overflow-hidden bg-gray-50 px-4 py-6 transition-colors duration-300 sm:-m-6 sm:px-6 lg:px-8 dark:bg-dark-900">
-      <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.10),transparent_36%)]" />
-      <div class="pointer-events-none absolute left-1/2 top-8 h-72 w-72 -translate-x-1/2 rounded-full bg-blue-100/40 blur-3xl dark:bg-blue-500/5" />
+      <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,184,166,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top,rgba(20,184,166,0.10),transparent_36%)]" />
+      <div class="pointer-events-none absolute left-1/2 top-8 h-72 w-72 -translate-x-1/2 rounded-full bg-primary-100/35 blur-3xl dark:bg-primary-500/10" />
       <div class="relative mx-auto max-w-6xl space-y-6">
         <div class="flex animate-page-title flex-col gap-3 text-gray-900 sm:flex-row sm:items-center sm:justify-between dark:text-white">
           <div>
-            <p class="text-xs font-bold uppercase tracking-[0.35em] text-blue-600 dark:text-blue-400">Leaderboard</p>
+            <p class="text-xs font-bold uppercase tracking-[0.35em] text-primary-600 dark:text-primary-400">Leaderboard</p>
             <h1 class="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{{ t('usageRanking.title') }}</h1>
             <p class="mt-2 max-w-2xl text-sm text-gray-500 dark:text-gray-400">{{ t('usageRanking.description') }}</p>
           </div>

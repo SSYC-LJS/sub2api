@@ -1,13 +1,13 @@
 <template>
   <section class="ranking-stage relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-colors duration-300 dark:border-dark-600 dark:bg-dark-800">
-    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.08),transparent_42%),linear-gradient(180deg,rgba(249,250,251,0.72),transparent_34%)] dark:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.14),transparent_42%),linear-gradient(180deg,rgba(31,41,55,0.28),transparent_36%)]" />
-    <div class="pointer-events-none absolute -left-20 top-10 h-44 w-44 animate-blob rounded-full bg-blue-400/10 blur-3xl dark:bg-blue-500/10" />
+    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,184,166,0.10),transparent_42%),linear-gradient(180deg,rgba(249,250,251,0.72),transparent_34%)] dark:bg-[radial-gradient(circle_at_top,rgba(20,184,166,0.16),transparent_42%),linear-gradient(180deg,rgba(31,41,55,0.28),transparent_36%)]" />
+    <div class="pointer-events-none absolute -left-20 top-10 h-44 w-44 animate-blob rounded-full bg-primary-500/10 blur-3xl dark:bg-primary-500/10" />
     <div class="pointer-events-none absolute -right-16 top-40 h-52 w-52 animate-blob-delayed rounded-full bg-gray-300/20 blur-3xl dark:bg-dark-600/30" />
-    <div class="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/35 to-transparent dark:via-blue-400/25" />
+    <div class="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary-400/35 to-transparent dark:via-primary-400/25" />
 
     <div class="relative mb-6 flex animate-fade-up flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
-        <div class="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.32em] text-blue-600 shadow-sm dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300">
+        <div class="inline-flex items-center gap-2 rounded-full border border-primary-100 bg-primary-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.32em] text-primary-600 shadow-sm dark:border-primary-500/20 dark:bg-primary-500/10 dark:text-primary-300">
           {{ t('dashboard.tokenRankingTitle') }}
         </div>
         <h3 class="mt-3 text-2xl font-black tracking-tight text-gray-900 sm:text-3xl dark:text-white">{{ t('dashboard.tokenRankingSubtitle') }}</h3>
@@ -20,7 +20,7 @@
           :class="[
             'rounded-md px-4 py-2 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5',
             activePeriod === tab.key
-              ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+              ? 'bg-primary-600 text-white shadow-sm hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600'
               : 'text-gray-500 hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-dark-600 dark:hover:text-white'
           ]"
           @click="activePeriod = tab.key"
@@ -43,15 +43,21 @@
           :class="[
             'podium-card relative overflow-hidden rounded-2xl border px-5 pb-5 pt-4 text-center backdrop-blur-xl transition-all duration-500 hover:-translate-y-2 hover:scale-[1.015]',
             podiumCardClass(slot.rank),
-            slot.rank === 1 ? 'lg:-translate-y-6 lg:scale-[1.05]' : 'lg:translate-y-7',
+            slot.rank === 1 ? 'z-10 ring-2 ring-primary-300/70 lg:-translate-y-8 lg:scale-[1.1] dark:ring-primary-400/30' : 'lg:translate-y-7',
             slot.placeholder ? 'border-dashed opacity-80' : ''
           ]"
         >
+          <div v-if="slot.rank === 1" class="absolute right-4 top-4 z-10 rounded-full border border-primary-200 bg-white/85 px-3 py-1 text-[11px] font-black tracking-[0.22em] text-primary-700 shadow-sm dark:border-primary-500/30 dark:bg-dark-800/85 dark:text-primary-300">
+            NO.1
+          </div>
           <div class="pointer-events-none absolute inset-0 opacity-90" :class="podiumGlowClass(slot.rank)" />
-          <div class="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-blue-300/60 to-transparent opacity-70 dark:via-blue-300/30" />
+          <div class="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary-300/70 to-transparent opacity-70 dark:via-primary-300/30" />
           <div class="relative mx-auto flex h-20 w-20 items-center justify-center">
             <div class="absolute inset-0 animate-pulse-slow rounded-full blur-xl" :class="medalGlowClass(slot.rank)" />
-            <div class="relative flex h-20 w-20 animate-float items-center justify-center rounded-full border border-gray-200 bg-white text-3xl shadow-inner dark:border-dark-500 dark:bg-dark-700">
+            <div :class="[
+              'relative flex animate-float items-center justify-center rounded-full border bg-white shadow-inner dark:bg-dark-700',
+              slot.rank === 1 ? 'h-24 w-24 border-primary-200 text-4xl shadow-glow dark:border-primary-500/35' : 'h-20 w-20 border-gray-200 text-3xl dark:border-dark-500'
+            ]">
               {{ rankMedal(slot.rank) }}
             </div>
           </div>
@@ -62,7 +68,7 @@
           </div>
           <h4 class="relative mt-3 truncate text-xl font-black text-gray-900 dark:text-white" :title="displayName(slot)">{{ displayName(slot) }}</h4>
           <p class="relative mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{{ rankDescription(slot.rank) }}</p>
-          <p class="relative mt-4 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl dark:text-white">
+          <p class="relative mt-4 font-black tracking-tight text-gray-900 dark:text-white" :class="slot.rank === 1 ? 'text-5xl sm:text-6xl' : 'text-4xl sm:text-5xl'">
             {{ slot.placeholder ? '—' : formatTokens(slot.item.tokens) }}
           </p>
           <div class="relative mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -78,10 +84,10 @@
           v-for="(slot, index) in restSlots"
           :key="slot.key"
           :style="{ animationDelay: `${420 + index * 70}ms` }"
-          class="rank-row group relative overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-md dark:border-dark-600 dark:bg-dark-800 dark:text-white dark:hover:border-blue-500/30 dark:hover:bg-dark-700"
+          class="rank-row group relative overflow-hidden rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-900 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary-200 hover:bg-primary-50/40 hover:shadow-md dark:border-dark-600 dark:bg-dark-800 dark:text-white dark:hover:border-primary-500/30 dark:hover:bg-dark-700"
         >
-          <div class="pointer-events-none absolute inset-y-0 left-0 w-1 bg-blue-500 opacity-80 dark:bg-blue-400" />
-          <div class="pointer-events-none absolute inset-y-0 left-8 w-28 bg-gradient-to-r from-blue-500/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:from-blue-400/10" />
+          <div class="pointer-events-none absolute inset-y-0 left-0 w-1 bg-primary-500 opacity-80 dark:bg-primary-400" />
+          <div class="pointer-events-none absolute inset-y-0 left-8 w-28 bg-gradient-to-r from-primary-500/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:from-primary-400/10" />
           <div class="flex items-center gap-4 pl-2">
             <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-lg font-black text-gray-700 shadow-inner dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200">
               {{ slot.rank }}
@@ -205,18 +211,18 @@ const formatTokens = (value: number) => {
 const formatCost = (value: number) => (value || 0).toFixed(4)
 
 const podiumCardClass = (rank: number) => {
-  if (rank === 1) return 'border-blue-200 bg-blue-50/80 shadow-md dark:border-blue-500/30 dark:bg-blue-500/10 dark:shadow-[0_0_26px_rgba(59,130,246,0.10)]'
+  if (rank === 1) return 'border-primary-200 bg-primary-50/90 shadow-md dark:border-primary-500/30 dark:bg-primary-500/10 dark:shadow-[0_0_26px_rgba(20,184,166,0.10)]'
   if (rank === 2) return 'border-gray-200 bg-gray-50/90 shadow-sm dark:border-dark-600 dark:bg-dark-700/80'
   return 'border-gray-200 bg-gray-50/90 shadow-sm dark:border-dark-600 dark:bg-dark-700/80'
 }
 
 const podiumGlowClass = (rank: number) => {
-  if (rank === 1) return 'bg-[radial-gradient(circle,rgba(37,99,235,0.12),transparent_62%)] dark:bg-[radial-gradient(circle,rgba(59,130,246,0.16),transparent_60%)]'
+  if (rank === 1) return 'bg-[radial-gradient(circle,rgba(20,184,166,0.12),transparent_62%)] dark:bg-[radial-gradient(circle,rgba(20,184,166,0.18),transparent_60%)]'
   return 'bg-[radial-gradient(circle,rgba(148,163,184,0.12),transparent_62%)] dark:bg-[radial-gradient(circle,rgba(75,85,99,0.20),transparent_60%)]'
 }
 
 const medalGlowClass = (rank: number) => {
-  if (rank === 1) return 'bg-blue-300/25 dark:bg-blue-400/20'
+  if (rank === 1) return 'bg-primary-300/25 dark:bg-primary-400/20'
   return 'bg-gray-300/25 dark:bg-gray-500/20'
 }
 </script>
