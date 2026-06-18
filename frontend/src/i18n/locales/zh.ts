@@ -1118,7 +1118,9 @@ export default {
       input: '输入',
       output: '输出',
       cacheWrite: '缓存写',
-      cacheRead: '缓存读'
+      cacheRead: '缓存读',
+      perRequest: '单次价格',
+      image: '图片输出'
     },
     pricing: {
       billingModeToken: '按 Token',

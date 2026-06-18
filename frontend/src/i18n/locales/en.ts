@@ -1114,7 +1114,9 @@ export default {
       input: 'Input',
       output: 'Output',
       cacheWrite: 'Cache W',
-      cacheRead: 'Cache R'
+      cacheRead: 'Cache R',
+      perRequest: 'Per Request',
+      image: 'Image Output'
     },
     pricing: {
       billingModeToken: 'Per Token',

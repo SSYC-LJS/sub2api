@@ -172,10 +172,13 @@
                     <tr>
                       <th class="min-w-[80px] px-2 py-2 text-left font-semibold">{{ t('modelMarket.priceTable.group') }}</th>
                       <th class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.rate') }}</th>
-                      <th class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.input') }}</th>
-                      <th class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.output') }}</th>
-                      <th v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheWrite') }}</th>
-                      <th v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheRead') }}</th>
+                      <th
+                        v-for="column in priceColumns(model.pricing)"
+                        :key="column.kind"
+                        class="whitespace-nowrap px-2 py-2 text-right font-semibold"
+                      >
+                        {{ column.label }}
+                      </th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
@@ -200,17 +203,12 @@
                       <td class="whitespace-nowrap px-2 py-2 text-right align-middle font-semibold text-gray-700 dark:text-gray-100">
                         ×{{ rateLabel(group) }}
                       </td>
-                      <td class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
-                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'input') }}
-                      </td>
-                      <td class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
-                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'output') }}
-                      </td>
-                      <td v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
-                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheWrite') }}
-                      </td>
-                      <td v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
-                        {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheRead') }}
+                      <td
+                        v-for="column in priceColumns(model.pricing)"
+                        :key="column.kind"
+                        class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100"
+                      >
+                        {{ groupPriceCell(model.pricing, effectiveRate(group), column.kind) }}
                       </td>
                     </tr>
                   </tbody>
@@ -383,10 +381,27 @@ function rateLabel(group: UserAvailableGroup): string {
   return effectiveRate(group).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
 }
 
-type PriceCellKind = 'input' | 'output' | 'cacheWrite' | 'cacheRead'
+type PriceCellKind = 'input' | 'output' | 'cacheWrite' | 'cacheRead' | 'perRequest' | 'image'
 
-function showCacheColumns(pricing: UserSupportedModelPricing | null): boolean {
-  return pricing?.billing_mode === BILLING_MODE_TOKEN
+function priceColumns(pricing: UserSupportedModelPricing | null): Array<{ kind: PriceCellKind; label: string }> {
+  if (pricing?.billing_mode === BILLING_MODE_PER_REQUEST) {
+    return [{ kind: 'perRequest', label: t('modelMarket.priceTable.perRequest') }]
+  }
+  if (pricing?.billing_mode === BILLING_MODE_IMAGE) {
+    return [{ kind: 'image', label: t('modelMarket.priceTable.image') }]
+  }
+
+  const columns: Array<{ kind: PriceCellKind; label: string }> = [
+    { kind: 'input', label: t('modelMarket.priceTable.input') },
+    { kind: 'output', label: t('modelMarket.priceTable.output') },
+  ]
+  if (pricing?.billing_mode === BILLING_MODE_TOKEN) {
+    columns.push(
+      { kind: 'cacheWrite', label: t('modelMarket.priceTable.cacheWrite') },
+      { kind: 'cacheRead', label: t('modelMarket.priceTable.cacheRead') },
+    )
+  }
+  return columns
 }
 
 function groupPriceCell(
@@ -395,11 +410,11 @@ function groupPriceCell(
   kind: PriceCellKind,
 ): string {
   if (!pricing) return '-'
-  if (pricing.billing_mode === BILLING_MODE_PER_REQUEST) {
-    return kind === 'input' ? formatScaled(scaleNumber(pricing.per_request_price, multiplier), 1) : '-'
+  if (kind === 'perRequest') {
+    return formatScaled(scaleNumber(pricing.per_request_price, multiplier), 1)
   }
-  if (pricing.billing_mode === BILLING_MODE_IMAGE) {
-    return kind === 'input' ? formatScaled(scaleNumber(pricing.image_output_price, multiplier), 1) : '-'
+  if (kind === 'image') {
+    return formatScaled(scaleNumber(pricing.image_output_price, multiplier), 1)
   }
   const source = {
     input: pricing.input_price,
