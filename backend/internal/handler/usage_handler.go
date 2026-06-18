@@ -495,7 +495,7 @@ func (h *UsageHandler) DashboardRanking(c *gin.Context) {
 
 	ranges := userTokenRankingRanges(c.Query("timezone"))
 	payload := gin.H{}
-	for _, period := range []string{"today", "week", "month"} {
+	for _, period := range []string{"all", "today", "week", "month"} {
 		r := ranges[period]
 		ranking, err := h.usageService.GetUserTokenRanking(c.Request.Context(), r[0], r[1], dashboardRankingLimit)
 		if err != nil {
