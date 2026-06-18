@@ -2454,7 +2454,15 @@ func (r *usageLogRepository) GetUserTokenRanking(ctx context.Context, startTime,
 		limit = 10
 	}
 
-	query := `
+	whereClause := "u.created_at < $1"
+	args := []any{endTime}
+	if !startTime.IsZero() {
+		whereClause = "u.created_at >= $1 AND u.created_at < $2"
+		args = []any{startTime, endTime}
+	}
+	args = append(args, limit)
+
+	query := fmt.Sprintf(`
 		WITH user_tokens AS (
 			SELECT
 				u.user_id,
@@ -2465,7 +2473,7 @@ func (r *usageLogRepository) GetUserTokenRanking(ctx context.Context, startTime,
 				COALESCE(SUM(u.input_tokens + u.output_tokens + u.cache_creation_tokens + u.cache_read_tokens), 0) as tokens
 			FROM usage_logs u
 			LEFT JOIN users us ON u.user_id = us.id
-			WHERE u.created_at >= $1 AND u.created_at < $2
+			WHERE %s
 			GROUP BY u.user_id, us.email, us.username
 		),
 		ranked AS (
@@ -2481,7 +2489,7 @@ func (r *usageLogRepository) GetUserTokenRanking(ctx context.Context, startTime,
 				COALESCE(SUM(tokens) OVER (), 0) as total_tokens
 			FROM user_tokens
 			ORDER BY tokens DESC, actual_cost DESC, user_id ASC
-			LIMIT $3
+			LIMIT $%d
 		)
 		SELECT
 			user_id,
@@ -2495,9 +2503,9 @@ func (r *usageLogRepository) GetUserTokenRanking(ctx context.Context, startTime,
 			total_tokens
 		FROM ranked
 		ORDER BY tokens DESC, actual_cost DESC, user_id ASC
-	`
+	`, whereClause, len(args))
 
-	rows, err := r.sql.QueryContext(ctx, query, startTime, endTime, limit)
+	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

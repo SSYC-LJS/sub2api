@@ -91,6 +91,7 @@ export interface UserTokenRankingPeriod {
 }
 
 export interface UserTokenRankingResponse {
+  all: UserTokenRankingPeriod
   today: UserTokenRankingPeriod
   week: UserTokenRankingPeriod
   month: UserTokenRankingPeriod

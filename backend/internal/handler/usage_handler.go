@@ -457,6 +457,7 @@ func userTokenRankingRanges(userTZ string) map[string][2]time.Time {
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
 	return map[string][2]time.Time{
+		"all":   {time.Time{}, end},
 		"today": {todayStart, end},
 		"week":  {weekStart, end},
 		"month": {monthStart, end},
@@ -472,12 +473,19 @@ func rankingPeriodPayload(startTime, endTime time.Time, ranking *usagestats.User
 		"total_actual_cost": ranking.TotalActualCost,
 		"total_requests":    ranking.TotalRequests,
 		"total_tokens":      ranking.TotalTokens,
-		"start_date":        startTime.Format("2006-01-02"),
-		"end_date":          endTime.Add(-24 * time.Hour).Format("2006-01-02"),
+		"start_date":        formatRankingDate(startTime),
+		"end_date":          formatRankingDate(endTime.Add(-24 * time.Hour)),
 	}
 }
 
-// DashboardRanking handles getting global user token ranking for today/week/month.
+func formatRankingDate(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}
+
+// DashboardRanking handles getting global user token ranking for all/today/week/month.
 // GET /api/v1/usage/dashboard/ranking
 func (h *UsageHandler) DashboardRanking(c *gin.Context) {
 	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
