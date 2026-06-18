@@ -378,7 +378,7 @@ export default {
     announcements: '公告',
     apiKeys: 'API 密钥',
     usage: '使用记录',
-    usageRanking: '用量排行榜',
+    ranking: '排行榜',
     redeem: '兑换',
     affiliate: '邀请返利',
     affiliateManagement: '邀请返利',
@@ -663,9 +663,13 @@ export default {
     platformBreakdownEmpty: '暂无平台用量',
     platformCount: '{count} 个平台',
     platformOther: '其他',
-    tokenRankingTitle: 'Token 用量排行榜',
+    tokenRankingTitle: '排行榜',
     tokenRankingSubtitle: '按今日、本周、本月统计用户 Token 用量 Top 10',
     tokenRankingEmpty: '暂无排行榜数据',
+    rankingPlaceholder: '虚席以待',
+    rankingFirstDescription: '显卡杀手',
+    rankingSecondDescription: '风扇狂转',
+    rankingThirdDescription: 'CPU 报警',
     rankingToday: '今日',
     rankingWeek: '本周',
     rankingMonth: '本月',
@@ -880,7 +884,7 @@ export default {
 
   // Usage Ranking
   usageRanking: {
-    title: '用量排行榜',
+    title: '排行榜',
     description: '查看今日、本周、本月用户 Token 用量 Top 10',
   },
 

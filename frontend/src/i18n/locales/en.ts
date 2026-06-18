@@ -378,7 +378,7 @@ export default {
     announcements: 'Announcements',
     apiKeys: 'API Keys',
     usage: 'Usage',
-    usageRanking: 'Usage Ranking',
+    ranking: 'Ranking',
     redeem: 'Redeem',
     affiliate: 'Affiliate Rebates',
     affiliateManagement: 'Affiliate Rebates',
@@ -664,9 +664,13 @@ export default {
     platformBreakdownEmpty: 'No platform usage yet',
     platformCount: '{count} platforms',
     platformOther: 'Other',
-    tokenRankingTitle: 'Token Usage Ranking',
+    tokenRankingTitle: 'Ranking',
     tokenRankingSubtitle: 'Top 10 users by token usage for today, this week, and this month',
     tokenRankingEmpty: 'No ranking data yet',
+    rankingPlaceholder: 'Waiting for a challenger',
+    rankingFirstDescription: 'GPU Slayer',
+    rankingSecondDescription: 'Fan Overdrive',
+    rankingThirdDescription: 'CPU Alarm',
     rankingToday: 'Today',
     rankingWeek: 'This Week',
     rankingMonth: 'This Month',
@@ -876,7 +880,7 @@ export default {
 
   // Usage Ranking
   usageRanking: {
-    title: 'Usage Ranking',
+    title: 'Ranking',
     description: 'View the top 10 users by token usage for today, this week, and this month',
   },
 
