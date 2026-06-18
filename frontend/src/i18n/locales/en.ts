@@ -378,6 +378,7 @@ export default {
     announcements: 'Announcements',
     apiKeys: 'API Keys',
     usage: 'Usage',
+    usageRanking: 'Usage Ranking',
     redeem: 'Redeem',
     affiliate: 'Affiliate Rebates',
     affiliateManagement: 'Affiliate Rebates',
@@ -871,6 +872,12 @@ export default {
       quota_exhausted: 'Quota Exhausted',
       expired: 'Expired',
     },
+  },
+
+  // Usage Ranking
+  usageRanking: {
+    title: 'Usage Ranking',
+    description: 'View the top 10 users by token usage for today, this week, and this month',
   },
 
   // Usage

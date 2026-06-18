@@ -378,6 +378,7 @@ export default {
     announcements: '公告',
     apiKeys: 'API 密钥',
     usage: '使用记录',
+    usageRanking: '用量排行榜',
     redeem: '兑换',
     affiliate: '邀请返利',
     affiliateManagement: '邀请返利',
@@ -875,6 +876,12 @@ export default {
       quota_exhausted: '额度耗尽',
       expired: '已过期'
     }
+  },
+
+  // Usage Ranking
+  usageRanking: {
+    title: '用量排行榜',
+    description: '查看今日、本周、本月用户 Token 用量 Top 10',
   },
 
   // Usage
