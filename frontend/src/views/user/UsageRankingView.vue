@@ -1,16 +1,16 @@
 <template>
   <AppLayout>
-    <div class="relative -m-4 min-h-[calc(100vh-5rem)] overflow-hidden bg-gradient-to-br from-slate-50 via-violet-50 to-amber-50 px-4 py-6 transition-colors duration-300 sm:-m-6 sm:px-6 lg:px-8 dark:bg-[#050511] dark:bg-none">
-      <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(124,58,237,0.10),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(245,158,11,0.14),transparent_32%)] dark:bg-[linear-gradient(135deg,rgba(124,58,237,0.12),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(245,158,11,0.12),transparent_32%)]" />
-      <div class="pointer-events-none absolute left-1/2 top-8 h-72 w-72 -translate-x-1/2 rounded-full bg-white/55 blur-3xl dark:bg-violet-500/10" />
+    <div class="relative -m-4 min-h-[calc(100vh-5rem)] overflow-hidden bg-gray-50 px-4 py-6 transition-colors duration-300 sm:-m-6 sm:px-6 lg:px-8 dark:bg-dark-900">
+      <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.10),transparent_36%)]" />
+      <div class="pointer-events-none absolute left-1/2 top-8 h-72 w-72 -translate-x-1/2 rounded-full bg-blue-100/40 blur-3xl dark:bg-blue-500/5" />
       <div class="relative mx-auto max-w-6xl space-y-6">
-        <div class="flex animate-page-title flex-col gap-3 text-slate-950 sm:flex-row sm:items-center sm:justify-between dark:text-white">
+        <div class="flex animate-page-title flex-col gap-3 text-gray-900 sm:flex-row sm:items-center sm:justify-between dark:text-white">
           <div>
-            <p class="text-xs font-bold uppercase tracking-[0.35em] text-violet-600 dark:text-violet-300">Leaderboard</p>
+            <p class="text-xs font-bold uppercase tracking-[0.35em] text-blue-600 dark:text-blue-400">Leaderboard</p>
             <h1 class="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{{ t('usageRanking.title') }}</h1>
-            <p class="mt-2 max-w-2xl text-sm text-slate-500 dark:text-white/55">{{ t('usageRanking.description') }}</p>
+            <p class="mt-2 max-w-2xl text-sm text-gray-500 dark:text-gray-400">{{ t('usageRanking.description') }}</p>
           </div>
-          <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white/75 px-4 py-2 text-sm font-semibold text-slate-700 shadow-lg backdrop-blur transition hover:-translate-y-0.5 hover:bg-white disabled:opacity-60 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15" :disabled="loading" @click="loadRanking">
+          <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-gray-50 disabled:opacity-60 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700" :disabled="loading" @click="loadRanking">
             <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
             {{ t('common.refresh') }}
           </button>
