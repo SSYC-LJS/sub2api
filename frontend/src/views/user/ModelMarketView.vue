@@ -117,10 +117,20 @@
                 >
                   <PlatformIcon :platform="model.primaryPlatform as GroupPlatform" size="lg" />
                 </div>
-                <div class="min-w-0">
-                  <h2 class="truncate text-base font-semibold text-gray-900 dark:text-white" :title="model.name">
-                    {{ model.name }}
-                  </h2>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <h2 class="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-white" :title="model.name">
+                      {{ model.name }}
+                    </h2>
+                    <button
+                      type="button"
+                      class="flex-shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-primary-500 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                      :title="copiedModelName === model.name ? t('common.copied', 'Copied') : t('common.copy', 'Copy')"
+                      @click="copyModelName(model.name)"
+                    >
+                      <Icon :name="copiedModelName === model.name ? 'check' : 'copy'" size="xs" />
+                    </button>
+                  </div>
                   <div class="mt-1 flex flex-wrap items-center gap-1.5">
                     <span
                       v-for="provider in model.platforms"
@@ -156,48 +166,50 @@
                 <span>{{ t('modelMarket.currentGroupPrices') }}</span>
                 <span>{{ t('modelMarket.multiplierHint') }}</span>
               </div>
-              <div class="max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-gray-50/80 text-gray-700 dark:border-dark-700 dark:bg-dark-900/70 dark:text-gray-200">
-                <table class="w-full table-fixed bg-transparent text-xs">
-                  <thead class="sticky top-0 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-dark-800 dark:text-gray-400">
+              <div class="max-h-64 overflow-auto rounded-2xl border border-gray-100 bg-gray-50/80 text-gray-700 dark:border-dark-700 dark:bg-dark-900/70 dark:text-gray-200">
+                <table class="w-full text-xs">
+                  <thead class="sticky top-0 z-10 bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-dark-800 dark:text-gray-400">
                     <tr>
-                      <th class="w-[34%] px-2 py-2 text-left font-semibold">{{ t('modelMarket.priceTable.group') }}</th>
-                      <th class="w-[13%] px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.rate') }}</th>
-                      <th class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.input') }}</th>
-                      <th class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.output') }}</th>
-                      <th v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheWrite') }}</th>
-                      <th v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheRead') }}</th>
+                      <th class="min-w-[80px] px-2 py-2 text-left font-semibold">{{ t('modelMarket.priceTable.group') }}</th>
+                      <th class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.rate') }}</th>
+                      <th class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.input') }}</th>
+                      <th class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.output') }}</th>
+                      <th v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheWrite') }}</th>
+                      <th v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right font-semibold">{{ t('modelMarket.priceTable.cacheRead') }}</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 bg-transparent dark:divide-dark-700">
+                  <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
                     <tr
                       v-for="group in model.groups"
                       :key="`${model.name}-${group.id}`"
-                      class="bg-transparent hover:bg-gray-50/70 dark:hover:bg-dark-800/70"
+                      class="hover:bg-gray-50/70 dark:hover:bg-dark-800/70"
                     >
                       <td class="px-2 py-2 align-middle">
-                        <div class="min-w-0">
-                          <div class="truncate font-medium text-gray-900 dark:text-white" :title="group.name">
+                        <div class="flex items-center gap-1.5">
+                          <span class="min-w-0 truncate font-medium text-gray-900 dark:text-white" :title="group.name">
                             {{ group.name }}
-                          </div>
-                          <div class="mt-0.5 flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
-                            <PlatformIcon :platform="group.platform as GroupPlatform" size="xs" />
-                            <span class="truncate">{{ group.is_exclusive ? t('modelMarket.exclusive') : t('modelMarket.public') }}</span>
-                          </div>
+                          </span>
+                          <span
+                            class="flex-shrink-0 rounded px-1 py-0.5 text-[9px] font-medium leading-none"
+                            :class="group.is_exclusive ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400'"
+                          >
+                            {{ group.is_exclusive ? t('modelMarket.exclusive') : t('modelMarket.public') }}
+                          </span>
                         </div>
                       </td>
-                      <td class="px-2 py-2 text-right align-middle font-semibold text-gray-700 dark:text-gray-100">
+                      <td class="whitespace-nowrap px-2 py-2 text-right align-middle font-semibold text-gray-700 dark:text-gray-100">
                         ×{{ rateLabel(group) }}
                       </td>
-                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
+                      <td class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'input') }}
                       </td>
-                      <td class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
+                      <td class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'output') }}
                       </td>
-                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
+                      <td v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheWrite') }}
                       </td>
-                      <td v-if="showCacheColumns(model.pricing)" class="px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
+                      <td v-if="showCacheColumns(model.pricing)" class="whitespace-nowrap px-2 py-2 text-right align-middle tabular-nums text-gray-700 dark:text-gray-100">
                         {{ groupPriceCell(model.pricing, effectiveRate(group), 'cacheRead') }}
                       </td>
                     </tr>
@@ -261,8 +273,35 @@ const userGroupRates = ref<Record<number, number>>({})
 const loading = ref(false)
 const searchQuery = ref('')
 const selectedProvider = ref('')
+const copiedModelName = ref('')
 
 const perMillionScale = 1_000_000
+
+async function copyModelName(name: string) {
+  try {
+    await navigator.clipboard.writeText(name)
+  } catch {
+    // Fallback for environments without clipboard API
+    const textarea = document.createElement('textarea')
+    textarea.value = name
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      document.execCommand('copy')
+    } catch {
+      /* noop */
+    }
+    document.body.removeChild(textarea)
+  }
+  copiedModelName.value = name
+  setTimeout(() => {
+    if (copiedModelName.value === name) {
+      copiedModelName.value = ''
+    }
+  }, 2000)
+}
 
 const marketModels = computed<MarketModel[]>(() => buildMarketModels(channels.value))
 const providerOptions = computed(() => {
