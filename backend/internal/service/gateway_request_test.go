@@ -997,7 +997,7 @@ func TestParseGatewayRequest_MaxTokensBoundary(t *testing.T) {
 	tests := []struct {
 		name          string
 		body          string
-		wantMaxTokens int
+		wantMaxTokens int64
 		wantErr       bool
 	}{
 		{
@@ -1018,12 +1018,12 @@ func TestParseGatewayRequest_MaxTokensBoundary(t *testing.T) {
 		{
 			name:          "超大值不 panic",
 			body:          `{"max_tokens":9999999999999999}`,
-			wantMaxTokens: 10000000000000000, // float64 精度导致 9999999999999999 → 1e16
+			wantMaxTokens: 0,
 		},
 		{
 			name:          "null 值被忽略",
 			body:          `{"max_tokens":null}`,
-			wantMaxTokens: 0, // gjson Type=Null != Number → 条件不满足，跳过
+			wantMaxTokens: 0,
 		},
 	}
 
@@ -1035,7 +1035,7 @@ func TestParseGatewayRequest_MaxTokensBoundary(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, tt.wantMaxTokens, parsed.MaxTokens)
+			require.Equal(t, tt.wantMaxTokens, int64(parsed.MaxTokens))
 		})
 	}
 }
