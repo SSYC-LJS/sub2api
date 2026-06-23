@@ -790,6 +790,8 @@ type GatewayConfig struct {
 
 	// UsageRecord: 使用量记录异步队列配置（有界队列 + 固定 worker）
 	UsageRecord GatewayUsageRecordConfig `mapstructure:"usage_record"`
+	// RequestResponseCapture: 请求/响应正文采集配置（默认关闭，开启后仅保存限长快照）
+	RequestResponseCapture GatewayRequestResponseCaptureConfig `mapstructure:"request_response_capture"`
 
 	// UserGroupRateCacheTTLSeconds: 用户分组倍率热路径缓存 TTL（秒）
 	UserGroupRateCacheTTLSeconds int `mapstructure:"user_group_rate_cache_ttl_seconds"`
@@ -814,6 +816,14 @@ type GatewayOpenAIHTTP2Config struct {
 	FallbackWindowSeconds int `mapstructure:"fallback_window_seconds"`
 	// FallbackTTLSeconds: 触发后回退 HTTP/1.1 的持续时间（秒）
 	FallbackTTLSeconds int `mapstructure:"fallback_ttl_seconds"`
+}
+
+// GatewayRequestResponseCaptureConfig 请求/响应正文采集配置。
+type GatewayRequestResponseCaptureConfig struct {
+	// Enabled: 是否启用请求/响应正文采集。默认关闭，开启前请确认合规和存储成本。
+	Enabled bool `mapstructure:"enabled"`
+	// MaxBodyBytes: request_body/response_body 各自最多保存多少字节，超出只保存前缀并标记 truncated。
+	MaxBodyBytes int `mapstructure:"max_body_bytes"`
 }
 
 // UserMessageQueueConfig 用户消息串行队列配置
@@ -1934,6 +1944,8 @@ func setDefaults() {
 	viper.SetDefault("gateway.usage_record.queue_size", 16384)
 	viper.SetDefault("gateway.usage_record.task_timeout_seconds", 5)
 	viper.SetDefault("gateway.usage_record.overflow_policy", UsageRecordOverflowPolicySample)
+	viper.SetDefault("gateway.request_response_capture.enabled", false)
+	viper.SetDefault("gateway.request_response_capture.max_body_bytes", 64*1024)
 	viper.SetDefault("gateway.usage_record.overflow_sample_percent", 10)
 	viper.SetDefault("gateway.usage_record.auto_scale_enabled", true)
 	viper.SetDefault("gateway.usage_record.auto_scale_min_workers", 128)

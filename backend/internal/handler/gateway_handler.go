@@ -38,22 +38,23 @@ var gatewayCompatibilityMetricsLogCounter atomic.Uint64
 
 // GatewayHandler handles API gateway requests
 type GatewayHandler struct {
-	gatewayService            *service.GatewayService
-	geminiCompatService       *service.GeminiMessagesCompatService
-	antigravityGatewayService *service.AntigravityGatewayService
-	userService               *service.UserService
-	billingCacheService       *service.BillingCacheService
-	usageService              *service.UsageService
-	apiKeyService             *service.APIKeyService
-	usageRecordWorkerPool     *service.UsageRecordWorkerPool
-	errorPassthroughService   *service.ErrorPassthroughService
-	contentModerationService  *service.ContentModerationService
-	concurrencyHelper         *ConcurrencyHelper
-	userMsgQueueHelper        *UserMsgQueueHelper
-	maxAccountSwitches        int
-	maxAccountSwitchesGemini  int
-	cfg                       *config.Config
-	settingService            *service.SettingService
+	gatewayService                *service.GatewayService
+	geminiCompatService           *service.GeminiMessagesCompatService
+	antigravityGatewayService     *service.AntigravityGatewayService
+	userService                   *service.UserService
+	billingCacheService           *service.BillingCacheService
+	usageService                  *service.UsageService
+	apiKeyService                 *service.APIKeyService
+	usageRecordWorkerPool         *service.UsageRecordWorkerPool
+	requestResponseCaptureService *service.RequestResponseCaptureService
+	errorPassthroughService       *service.ErrorPassthroughService
+	contentModerationService      *service.ContentModerationService
+	concurrencyHelper             *ConcurrencyHelper
+	userMsgQueueHelper            *UserMsgQueueHelper
+	maxAccountSwitches            int
+	maxAccountSwitchesGemini      int
+	cfg                           *config.Config
+	settingService                *service.SettingService
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -67,6 +68,7 @@ func NewGatewayHandler(
 	usageService *service.UsageService,
 	apiKeyService *service.APIKeyService,
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
+	requestResponseCaptureService *service.RequestResponseCaptureService,
 	errorPassthroughService *service.ErrorPassthroughService,
 	contentModerationService *service.ContentModerationService,
 	userMsgQueueService *service.UserMessageQueueService,
@@ -93,22 +95,23 @@ func NewGatewayHandler(
 	}
 
 	return &GatewayHandler{
-		gatewayService:            gatewayService,
-		geminiCompatService:       geminiCompatService,
-		antigravityGatewayService: antigravityGatewayService,
-		userService:               userService,
-		billingCacheService:       billingCacheService,
-		usageService:              usageService,
-		apiKeyService:             apiKeyService,
-		usageRecordWorkerPool:     usageRecordWorkerPool,
-		errorPassthroughService:   errorPassthroughService,
-		contentModerationService:  contentModerationService,
-		concurrencyHelper:         NewConcurrencyHelper(concurrencyService, SSEPingFormatClaude, pingInterval),
-		userMsgQueueHelper:        umqHelper,
-		maxAccountSwitches:        maxAccountSwitches,
-		maxAccountSwitchesGemini:  maxAccountSwitchesGemini,
-		cfg:                       cfg,
-		settingService:            settingService,
+		gatewayService:                gatewayService,
+		geminiCompatService:           geminiCompatService,
+		antigravityGatewayService:     antigravityGatewayService,
+		userService:                   userService,
+		billingCacheService:           billingCacheService,
+		usageService:                  usageService,
+		apiKeyService:                 apiKeyService,
+		usageRecordWorkerPool:         usageRecordWorkerPool,
+		requestResponseCaptureService: requestResponseCaptureService,
+		errorPassthroughService:       errorPassthroughService,
+		contentModerationService:      contentModerationService,
+		concurrencyHelper:             NewConcurrencyHelper(concurrencyService, SSEPingFormatClaude, pingInterval),
+		userMsgQueueHelper:            umqHelper,
+		maxAccountSwitches:            maxAccountSwitches,
+		maxAccountSwitchesGemini:      maxAccountSwitchesGemini,
+		cfg:                           cfg,
+		settingService:                settingService,
 	}
 }
 
