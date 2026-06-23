@@ -393,6 +393,7 @@ export default {
     availableChannels: 'Available Channels',
     subscriptions: 'Subscriptions',
     accounts: 'Accounts',
+    requestResponseLogs: 'Request Capture',
     proxies: 'Proxies',
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
@@ -1496,6 +1497,10 @@ export default {
 
   // Admin
   admin: {
+    requestResponseLogs: {
+      title: 'Request/Response Capture',
+      description: 'View user request input and upstream response snapshots',
+    },
     // Dashboard
     dashboard: {
       title: 'Admin Dashboard',

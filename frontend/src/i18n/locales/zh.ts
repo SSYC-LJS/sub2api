@@ -393,6 +393,7 @@ export default {
     availableChannels: '可用渠道',
     subscriptions: '订阅管理',
     accounts: '账号管理',
+    requestResponseLogs: '请求采集',
     proxies: 'IP管理',
     redeemCodes: '兑换码',
     ops: '运维监控',
@@ -1500,7 +1501,10 @@ export default {
 
   // Admin
   admin: {
-    // Dashboard
+    requestResponseLogs: {
+      title: '请求/返回采集',
+      description: '查看用户请求入参和上游返回数据快照',
+    },
     dashboard: {
       title: '管理控制台',
       description: '系统概览与统计数据',
