@@ -145,6 +145,15 @@ type cachedOpenAIQuotaAutoPauseSettings struct {
 	expiresAt int64
 }
 
+type cachedRequestResponseCaptureSettings struct {
+	settings  RequestResponseCaptureSettings
+	expiresAt int64
+}
+
+const requestResponseCaptureSettingsCacheTTL = 60 * time.Second
+const requestResponseCaptureSettingsErrorTTL = 5 * time.Second
+const requestResponseCaptureSettingsDBTimeout = 5 * time.Second
+
 const openAICodexUserAgentCacheTTL = 60 * time.Second
 const openAICodexUserAgentErrorTTL = 5 * time.Second
 const openAICodexUserAgentDBTimeout = 5 * time.Second
@@ -214,6 +223,9 @@ type SettingService struct {
 	// instance owns its own cache, no shared package-level state.
 	openAIQuotaAutoPauseSettingsCache atomic.Value // *cachedOpenAIQuotaAutoPauseSettings
 	openAIQuotaAutoPauseSettingsSF    singleflight.Group
+
+	requestResponseCaptureCache atomic.Value // *cachedRequestResponseCaptureSettings
+	requestResponseCaptureSF    singleflight.Group
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）
@@ -1044,6 +1056,65 @@ func (s *SettingService) IsUserErrorViewAllowed(ctx context.Context) bool {
 		return false
 	}
 	return vals[SettingKeyAllowUserViewErrorRequests] == "true"
+}
+
+// GetRequestResponseCaptureSettings reads the gateway request/response capture runtime settings.
+// DB settings override config defaults; failures fall back to config and short cache TTL.
+func (s *SettingService) GetRequestResponseCaptureSettings(ctx context.Context) RequestResponseCaptureSettings {
+	fallback := requestResponseCaptureSettingsFromConfig(s.cfg)
+	fallback = normalizeRequestResponseCaptureSettings(fallback)
+	if cached, ok := s.requestResponseCaptureCache.Load().(*cachedRequestResponseCaptureSettings); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.settings
+		}
+	}
+	result, _, _ := s.requestResponseCaptureSF.Do("request_response_capture_settings", func() (any, error) {
+		if cached, ok := s.requestResponseCaptureCache.Load().(*cachedRequestResponseCaptureSettings); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached.settings, nil
+			}
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), requestResponseCaptureSettingsDBTimeout)
+		defer cancel()
+		vals, err := s.settingRepo.GetMultiple(dbCtx, []string{SettingKeyRequestResponseCaptureEnabled, SettingKeyRequestResponseCaptureMaxBodyBytes})
+		if err != nil {
+			slog.Warn("failed to get request_response_capture settings, using config fallback", "error", err)
+			s.requestResponseCaptureCache.Store(&cachedRequestResponseCaptureSettings{settings: fallback, expiresAt: time.Now().Add(requestResponseCaptureSettingsErrorTTL).UnixNano()})
+			return fallback, nil
+		}
+		settings := fallback
+		if raw, ok := vals[SettingKeyRequestResponseCaptureEnabled]; ok && strings.TrimSpace(raw) != "" {
+			settings.Enabled = parseBoolSetting(raw, fallback.Enabled)
+		}
+		if raw, ok := vals[SettingKeyRequestResponseCaptureMaxBodyBytes]; ok && strings.TrimSpace(raw) != "" {
+			if parsed, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
+				settings.MaxBodyBytes = parsed
+			}
+		}
+		settings = normalizeRequestResponseCaptureSettings(settings)
+		s.requestResponseCaptureCache.Store(&cachedRequestResponseCaptureSettings{settings: settings, expiresAt: time.Now().Add(requestResponseCaptureSettingsCacheTTL).UnixNano()})
+		return settings, nil
+	})
+	if settings, ok := result.(RequestResponseCaptureSettings); ok {
+		return settings
+	}
+	return fallback
+}
+
+func (s *SettingService) UpdateRequestResponseCaptureSettings(ctx context.Context, settings RequestResponseCaptureSettings) (RequestResponseCaptureSettings, error) {
+	settings = normalizeRequestResponseCaptureSettings(settings)
+	updates := map[string]string{
+		SettingKeyRequestResponseCaptureEnabled:      strconv.FormatBool(settings.Enabled),
+		SettingKeyRequestResponseCaptureMaxBodyBytes: strconv.Itoa(settings.MaxBodyBytes),
+	}
+	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
+		return RequestResponseCaptureSettings{}, err
+	}
+	s.requestResponseCaptureCache.Store(&cachedRequestResponseCaptureSettings{settings: settings, expiresAt: time.Now().Add(requestResponseCaptureSettingsCacheTTL).UnixNano()})
+	return settings, nil
 }
 
 // GetAntigravityUserAgentVersion 返回 Antigravity 上游请求使用的版本号。
