@@ -1,0 +1,52 @@
+{
+    "name" : "Sub2API",
+    "appid" : "__UNI__SUB2API",
+    "description" : "Sub2API mobile WebView shell",
+    "versionName" : "0.1.0",
+    "versionCode" : 1,
+    "transformPx" : false,
+    "app-plus" : {
+        "usingComponents" : true,
+        "nvueStyleCompiler" : "uni-app",
+        "compilerVersion" : 3,
+        "splashscreen" : {
+            "alwaysShowBeforeRender" : true,
+            "waiting" : true,
+            "autoclose" : true,
+            "delay" : 0
+        },
+        "modules" : {},
+        "distribute" : {
+            "android" : {
+                "permissions" : [
+                    "android.permission.INTERNET",
+                    "android.permission.ACCESS_NETWORK_STATE"
+                ]
+            },
+            "ios" : {
+                "capabilities" : {},
+                "privacyDescription" : {}
+            }
+        }
+    },
+    "app-harmony" : {
+        "usingComponents" : true,
+        "distribute" : {
+            "bundleName" : "uni.app.UNISUB2API",
+            "signingConfigs" : {
+                "default" : {
+                    "certpath" : "c:\\Users\\liujiasen\\AppData\\Roaming\\HBuilder X\\extensions\\launcher\\agc-certs\\1782093042964.cer",
+                    "keyAlias" : "debugKey",
+                    "keyPassword" : "0000001B3694D6C633B2F5A5D497F210CD2F805E4DF5AD42841994C97A6D3986C14877EB8B701943B3A298",
+                    "profile" : "c:\\Users\\liujiasen\\AppData\\Roaming\\HBuilder X\\extensions\\launcher\\agc-certs\\1782093042964.p7b",
+                    "signAlg" : "SHA256withECDSA",
+                    "storeFile" : "c:\\Users\\liujiasen\\AppData\\Roaming\\HBuilder X\\extensions\\launcher\\agc-certs\\1782093042964.p12",
+                    "storePassword" : "0000001B3694D6C633B2F5A5D497F210CD2F805E4DF5AD42841994C97A6D3986C14877EB8B701943B3A298"
+                }
+            }
+        }
+    },
+    "quickapp" : {},
+    "mp-weixin" : {},
+    "vueVersion" : "3"
+}

@@ -157,6 +157,21 @@ type UserMonitorDetail struct {
 	Models    []ModelDetail
 }
 
+// RealUsageGroupMonitorStat 是基于真实用户请求日志聚合出来的分组健康状态。
+type RealUsageGroupMonitorStat struct {
+	GroupID        int64
+	PrimaryStatus  string
+	PrimaryModel   string
+	LatencyMs      *int
+	Availability7d float64
+	Timeline       []UserMonitorTimelinePoint
+}
+
+// RealUsageGroupMonitorDetail 是某个分组按模型聚合的真实请求健康详情。
+type RealUsageGroupMonitorDetail struct {
+	Models []ModelDetail
+}
+
 // ModelDetail 单个模型的可用率/延迟统计。
 type ModelDetail struct {
 	Model           string

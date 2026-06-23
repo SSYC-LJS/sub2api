@@ -119,6 +119,8 @@ tests
 CLAUDE.md
 .claude
 scripts
+!mobile-shell/scripts/
+!mobile-shell/scripts/**
 .code-review-state
 #openspec/
 code-reviews/

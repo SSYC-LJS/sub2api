@@ -545,6 +545,203 @@ func (r *channelMonitorRepository) ComputeAvailabilityForMonitors(ctx context.Co
 	return out, nil
 }
 
+// ListRealUsageGroupMonitorStats 基于真实 usage/error 日志生成用户侧分组监控概览。
+func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Context, groupIDs []int64) (map[int64]*service.RealUsageGroupMonitorStat, error) {
+	out := make(map[int64]*service.RealUsageGroupMonitorStat, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	const q = `
+		WITH events AS (
+		    SELECT
+		        group_id,
+		        COALESCE(NULLIF(requested_model, ''), NULLIF(model, ''), 'unknown') AS model,
+		        'operational'::text AS status,
+		        duration_ms::bigint AS latency_ms,
+		        created_at
+		    FROM usage_logs
+		    WHERE group_id = ANY($1)
+		      AND created_at >= NOW() - INTERVAL '7 days'
+		    UNION ALL
+		    SELECT
+		        group_id,
+		        COALESCE(NULLIF(requested_model, ''), NULLIF(model, ''), 'unknown') AS model,
+		        'failed'::text AS status,
+		        COALESCE(upstream_latency_ms, response_latency_ms, duration_ms)::bigint AS latency_ms,
+		        created_at
+		    FROM ops_error_logs
+		    WHERE group_id = ANY($1)
+		      AND created_at >= NOW() - INTERVAL '7 days'
+		      AND COALESCE(is_business_limited, false) = false
+		), ranked AS (
+		    SELECT *, ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY created_at DESC) AS rn
+		    FROM events
+		), agg AS (
+		    SELECT
+		        group_id,
+		        COUNT(*) AS total,
+		        COUNT(*) FILTER (WHERE status = 'operational') AS ok
+		    FROM events
+		    GROUP BY group_id
+		)
+		SELECT
+		    a.group_id,
+		    l.model,
+		    l.status,
+		    l.latency_ms,
+		    CASE WHEN a.total > 0 THEN (a.ok::float8 * 100.0 / a.total::float8) ELSE 0 END AS availability_7d
+		FROM agg a
+		JOIN ranked l ON l.group_id = a.group_id AND l.rn = 1
+	`
+	rows, err := r.db.QueryContext(ctx, q, pq.Array(groupIDs))
+	if err != nil {
+		return nil, fmt.Errorf("query real usage group stats: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		stat := &service.RealUsageGroupMonitorStat{}
+		var latency sql.NullInt64
+		if err := rows.Scan(&stat.GroupID, &stat.PrimaryModel, &stat.PrimaryStatus, &latency, &stat.Availability7d); err != nil {
+			return nil, fmt.Errorf("scan real usage group stat: %w", err)
+		}
+		assignNullInt(&stat.LatencyMs, latency)
+		out[stat.GroupID] = stat
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	timeline, err := r.listRealUsageGroupTimeline(ctx, groupIDs)
+	if err != nil {
+		return nil, err
+	}
+	for groupID, points := range timeline {
+		stat := out[groupID]
+		if stat == nil {
+			stat = &service.RealUsageGroupMonitorStat{GroupID: groupID}
+			out[groupID] = stat
+		}
+		stat.Timeline = points
+	}
+	return out, nil
+}
+
+func (r *channelMonitorRepository) listRealUsageGroupTimeline(ctx context.Context, groupIDs []int64) (map[int64][]service.UserMonitorTimelinePoint, error) {
+	out := make(map[int64][]service.UserMonitorTimelinePoint, len(groupIDs))
+	const q = `
+		WITH events AS (
+		    SELECT group_id, 'operational'::text AS status, duration_ms::bigint AS latency_ms, created_at
+		    FROM usage_logs
+		    WHERE group_id = ANY($1)
+		      AND created_at >= NOW() - INTERVAL '7 days'
+		    UNION ALL
+		    SELECT group_id, 'failed'::text AS status, COALESCE(upstream_latency_ms, response_latency_ms, duration_ms)::bigint AS latency_ms, created_at
+		    FROM ops_error_logs
+		    WHERE group_id = ANY($1)
+		      AND created_at >= NOW() - INTERVAL '7 days'
+		      AND COALESCE(is_business_limited, false) = false
+		), ranked AS (
+		    SELECT *, ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY created_at DESC) AS rn
+		    FROM events
+		)
+		SELECT group_id, status, latency_ms, created_at
+		FROM ranked
+		WHERE rn <= $2
+		ORDER BY group_id, created_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, q, pq.Array(groupIDs), timelineLimitMax)
+	if err != nil {
+		return nil, fmt.Errorf("query real usage group timeline: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var groupID int64
+		point := service.UserMonitorTimelinePoint{}
+		var latency sql.NullInt64
+		if err := rows.Scan(&groupID, &point.Status, &latency, &point.CheckedAt); err != nil {
+			return nil, fmt.Errorf("scan real usage group timeline: %w", err)
+		}
+		assignNullInt(&point.LatencyMs, latency)
+		out[groupID] = append(out[groupID], point)
+	}
+	return out, rows.Err()
+}
+
+// GetRealUsageGroupMonitorDetail 基于真实请求日志返回某个分组的模型维度健康详情。
+func (r *channelMonitorRepository) GetRealUsageGroupMonitorDetail(ctx context.Context, groupID int64) (*service.RealUsageGroupMonitorDetail, error) {
+	const q = `
+		WITH events AS (
+		    SELECT
+		        COALESCE(NULLIF(requested_model, ''), NULLIF(model, ''), 'unknown') AS model,
+		        'operational'::text AS status,
+		        duration_ms::bigint AS latency_ms,
+		        created_at
+		    FROM usage_logs
+		    WHERE group_id = $1
+		      AND created_at >= NOW() - INTERVAL '30 days'
+		    UNION ALL
+		    SELECT
+		        COALESCE(NULLIF(requested_model, ''), NULLIF(model, ''), 'unknown') AS model,
+		        'failed'::text AS status,
+		        COALESCE(upstream_latency_ms, response_latency_ms, duration_ms)::bigint AS latency_ms,
+		        created_at
+		    FROM ops_error_logs
+		    WHERE group_id = $1
+		      AND created_at >= NOW() - INTERVAL '30 days'
+		      AND COALESCE(is_business_limited, false) = false
+		), latest AS (
+		    SELECT DISTINCT ON (model) model, status, latency_ms
+		    FROM events
+		    ORDER BY model, created_at DESC
+		), agg AS (
+		    SELECT
+		        model,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS total_7d,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days' AND status = 'operational') AS ok_7d,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '15 days') AS total_15d,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '15 days' AND status = 'operational') AS ok_15d,
+		        COUNT(*) AS total_30d,
+		        COUNT(*) FILTER (WHERE status = 'operational') AS ok_30d,
+		        AVG(latency_ms) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days' AND latency_ms IS NOT NULL) AS avg_latency_7d
+		    FROM events
+		    GROUP BY model
+		)
+		SELECT
+		    a.model,
+		    l.status,
+		    l.latency_ms,
+		    CASE WHEN a.total_7d > 0 THEN a.ok_7d::float8 * 100.0 / a.total_7d::float8 ELSE 0 END AS availability_7d,
+		    CASE WHEN a.total_15d > 0 THEN a.ok_15d::float8 * 100.0 / a.total_15d::float8 ELSE 0 END AS availability_15d,
+		    CASE WHEN a.total_30d > 0 THEN a.ok_30d::float8 * 100.0 / a.total_30d::float8 ELSE 0 END AS availability_30d,
+		    a.avg_latency_7d
+		FROM agg a
+		JOIN latest l ON l.model = a.model
+		ORDER BY a.total_7d DESC, a.model ASC
+	`
+	rows, err := r.db.QueryContext(ctx, q, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("query real usage group detail: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	detail := &service.RealUsageGroupMonitorDetail{Models: []service.ModelDetail{}}
+	for rows.Next() {
+		model := service.ModelDetail{}
+		var latestLatency sql.NullInt64
+		var avgLatency sql.NullFloat64
+		if err := rows.Scan(&model.Model, &model.LatestStatus, &latestLatency, &model.Availability7d, &model.Availability15d, &model.Availability30d, &avgLatency); err != nil {
+			return nil, fmt.Errorf("scan real usage group detail: %w", err)
+		}
+		assignNullInt(&model.LatestLatencyMs, latestLatency)
+		if avgLatency.Valid {
+			v := int(avgLatency.Float64)
+			model.AvgLatency7dMs = &v
+		}
+		detail.Models = append(detail.Models, model)
+	}
+	return detail, rows.Err()
+}
+
 // ---------- 聚合维护 ----------
 
 // UpsertDailyRollupsFor 把 targetDate 当天（[targetDate, targetDate+1d)）的明细

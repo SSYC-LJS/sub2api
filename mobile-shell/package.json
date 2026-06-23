@@ -1,0 +1,15 @@
+{
+  "name": "sub2api-mobile-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal uni-app WebView shell for Sub2API mobile clients on HarmonyOS, Android and iOS.",
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit",
+    "lint:json": "node scripts/validate-json.mjs"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "latest",
+    "typescript": "~5.6.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

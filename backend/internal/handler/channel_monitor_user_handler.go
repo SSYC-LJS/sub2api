@@ -6,6 +6,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,7 @@ import (
 type ChannelMonitorUserHandler struct {
 	monitorService *service.ChannelMonitorService
 	settingService *service.SettingService
+	apiKeyService  *service.APIKeyService
 }
 
 // NewChannelMonitorUserHandler 创建 handler。
@@ -22,10 +24,12 @@ type ChannelMonitorUserHandler struct {
 func NewChannelMonitorUserHandler(
 	monitorService *service.ChannelMonitorService,
 	settingService *service.SettingService,
+	apiKeyService *service.APIKeyService,
 ) *ChannelMonitorUserHandler {
 	return &ChannelMonitorUserHandler{
 		monitorService: monitorService,
 		settingService: settingService,
+		apiKeyService:  apiKeyService,
 	}
 }
 
@@ -144,7 +148,11 @@ func (h *ChannelMonitorUserHandler) List(c *gin.Context) {
 		response.Success(c, gin.H{"items": []channelMonitorUserListItem{}})
 		return
 	}
-	views, err := h.monitorService.ListUserView(c.Request.Context())
+	groups, ok := h.availableGroupsForCurrentUser(c)
+	if !ok {
+		return
+	}
+	views, err := h.monitorService.ListUserRealUsageView(c.Request.Context(), groups)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -162,15 +170,47 @@ func (h *ChannelMonitorUserHandler) GetStatus(c *gin.Context) {
 		response.ErrorFrom(c, service.ErrChannelMonitorNotFound)
 		return
 	}
-	// 复用 admin.ParseChannelMonitorID 保持错误码与日志一致。
+	// 用户侧 :id 代表当前用户可见分组 ID，用于真实请求聚合状态。
 	id, ok := admin.ParseChannelMonitorID(c)
 	if !ok {
 		return
 	}
-	detail, err := h.monitorService.GetUserDetail(c.Request.Context(), id)
+	groups, ok := h.availableGroupsForCurrentUser(c)
+	if !ok {
+		return
+	}
+	group, ok := findVisibleGroup(groups, id)
+	if !ok {
+		response.ErrorFrom(c, service.ErrChannelMonitorNotFound)
+		return
+	}
+	detail, err := h.monitorService.GetUserRealUsageDetail(c.Request.Context(), group)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, userMonitorDetailToResponse(detail))
+}
+
+func (h *ChannelMonitorUserHandler) availableGroupsForCurrentUser(c *gin.Context) ([]service.Group, bool) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return nil, false
+	}
+	groups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return nil, false
+	}
+	return groups, true
+}
+
+func findVisibleGroup(groups []service.Group, id int64) (service.Group, bool) {
+	for i := range groups {
+		if groups[i].ID == id {
+			return groups[i], true
+		}
+	}
+	return service.Group{}, false
 }

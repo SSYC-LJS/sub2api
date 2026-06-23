@@ -416,7 +416,7 @@ export default {
     channelManagement: '渠道管理',
     channelPricing: '渠道定价',
     channelMonitor: '渠道监控',
-    channelStatus: '渠道状态',
+    channelStatus: '分组状态',
     riskControl: '风控中心',
   },
 
@@ -1054,13 +1054,13 @@ export default {
 
   // Channel Status (user-facing read-only view)
   channelStatus: {
-    title: '渠道状态',
-    description: '查看渠道可用性、延迟和近期状态',
-    searchPlaceholder: '搜索渠道...',
+    title: '分组实时状态',
+    description: '基于站内真实请求统计，查看您可访问分组的可用性、延迟和近期状态',
+    searchPlaceholder: '搜索分组...',
     allProviders: '全部供应商',
-    loadError: '加载渠道状态失败',
-    detailLoadError: '加载渠道详情失败',
-    detailTitle: '渠道详情',
+    loadError: '加载分组状态失败',
+    detailLoadError: '加载分组详情失败',
+    detailTitle: '分组详情',
     closeDetail: '关闭',
     windowTab: {
       '7d': '7 天',
@@ -1090,8 +1090,8 @@ export default {
       avgLatency7d: '7 天平均延迟 (ms)'
     },
     empty: {
-      title: '暂无可显示的渠道',
-      description: '管理员尚未配置可监控的渠道。'
+      title: '暂无可显示的分组',
+      description: '当前账号没有可访问分组，或这些分组最近暂无真实请求记录。'
     }
   },
 

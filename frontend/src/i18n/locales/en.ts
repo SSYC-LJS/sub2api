@@ -416,7 +416,7 @@ export default {
     channelManagement: 'Channels',
     channelPricing: 'Channel Pricing',
     channelMonitor: 'Channel Monitor',
-    channelStatus: 'Channel Status',
+    channelStatus: 'Group Status',
     riskControl: 'Risk Control',
   },
 
@@ -1050,13 +1050,13 @@ export default {
 
   // Channel Status (user-facing read-only view)
   channelStatus: {
-    title: 'Channel Status',
-    description: 'Inspect channel availability, latency and recent status',
-    searchPlaceholder: 'Search channels...',
+    title: 'Group Live Status',
+    description: 'Based on real site traffic, inspect availability, latency and recent status for groups you can access',
+    searchPlaceholder: 'Search groups...',
     allProviders: 'All Providers',
-    loadError: 'Failed to load channel status',
-    detailLoadError: 'Failed to load channel detail',
-    detailTitle: 'Channel Detail',
+    loadError: 'Failed to load group status',
+    detailLoadError: 'Failed to load group detail',
+    detailTitle: 'Group Detail',
     closeDetail: 'Close',
     windowTab: {
       '7d': '7 days',
@@ -1086,8 +1086,8 @@ export default {
       avgLatency7d: '7d Avg Latency (ms)'
     },
     empty: {
-      title: 'No channels available',
-      description: 'No monitored channels have been configured yet.'
+      title: 'No groups available',
+      description: 'Your account has no accessible groups, or those groups have no recent real traffic yet.'
     }
   },
 
