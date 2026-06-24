@@ -56,7 +56,12 @@ func (w *captureResponseWriter) captured() (string, bool, int) {
 
 func (h *GatewayHandler) RequestResponseCaptureMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if h == nil || h.requestResponseCaptureService == nil || h.cfg == nil || !h.cfg.Gateway.RequestResponseCapture.Enabled {
+		if h == nil || h.requestResponseCaptureService == nil || h.cfg == nil {
+			c.Next()
+			return
+		}
+		captureSettings := h.requestResponseCaptureService.Settings(c.Request.Context())
+		if !captureSettings.Enabled {
 			c.Next()
 			return
 		}
@@ -76,7 +81,7 @@ func (h *GatewayHandler) RequestResponseCaptureMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		maxBytes := h.cfg.Gateway.RequestResponseCapture.MaxBodyBytes
+		maxBytes := captureSettings.MaxBodyBytes
 		if maxBytes <= 0 {
 			maxBytes = defaultCaptureBodyMaxBytes
 		}
