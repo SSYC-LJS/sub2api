@@ -36,7 +36,8 @@ jobs:
       - name: Update VERSION file
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.tag }}
+            VERSION="${{ github.event.inputs.tag }}"
+            VERSION="${VERSION//[[:space:]]/}"
             VERSION=${VERSION#v}
           else
             VERSION=${GITHUB_REF#refs/tags/v}
@@ -149,7 +150,8 @@ jobs:
         id: tag_message
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG_NAME=${{ github.event.inputs.tag }}
+            TAG_NAME="${{ github.event.inputs.tag }}"
+            TAG_NAME="${TAG_NAME//[[:space:]]/}"
           else
             TAG_NAME=${GITHUB_REF#refs/tags/}
           fi
@@ -214,7 +216,8 @@ jobs:
           fi
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG_NAME=${{ github.event.inputs.tag }}
+            TAG_NAME="${{ github.event.inputs.tag }}"
+            TAG_NAME="${TAG_NAME//[[:space:]]/}"
           else
             TAG_NAME=${GITHUB_REF#refs/tags/}
           fi
@@ -285,7 +288,8 @@ jobs:
       - name: Sync VERSION file to released tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.tag }}
+            VERSION="${{ github.event.inputs.tag }}"
+            VERSION="${VERSION//[[:space:]]/}"
             VERSION=${VERSION#v}
           else
             VERSION=${GITHUB_REF#refs/tags/v}
