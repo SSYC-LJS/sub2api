@@ -62,9 +62,12 @@ func (r *requestResponseLogRepository) List(ctx context.Context, page, pageSize 
 		return nil, 0, fmt.Errorf("count request response logs: %w", err)
 	}
 	args = append(args, pageSize, (page-1)*pageSize)
+	// List query intentionally omits request_body and response_body columns
+	// to avoid transferring large payloads for table display.
+	// Use GetByID to fetch full body content for detail view.
 	query := `
 		SELECT id, request_id, user_id, api_key_id, group_id, method, path, endpoint, model, stream,
-			status_code, request_body, response_body, request_truncated, response_truncated,
+			status_code, '' AS request_body, '' AS response_body, request_truncated, response_truncated,
 			request_body_bytes, response_body_bytes, duration_ms, user_agent, ip_address, created_at
 		FROM request_response_logs` + where + `
 		ORDER BY created_at DESC, id DESC
@@ -104,6 +107,30 @@ func (r *requestResponseLogRepository) GetByID(ctx context.Context, id int64) (*
 		return nil, service.ErrSettingNotFound
 	}
 	return &items[0], nil
+}
+
+func (r *requestResponseLogRepository) ListForExport(ctx context.Context, filters service.RequestResponseLogFilters, limit int) ([]service.RequestResponseLog, error) {
+	if r == nil || r.db == nil {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 10000 {
+		limit = 10000
+	}
+	where, args := buildRequestResponseLogWhere(filters)
+	args = append(args, limit)
+	query := `
+		SELECT id, request_id, user_id, api_key_id, group_id, method, path, endpoint, model, stream,
+			status_code, request_body, response_body, request_truncated, response_truncated,
+			request_body_bytes, response_body_bytes, duration_ms, user_agent, ip_address, created_at
+		FROM request_response_logs` + where + `
+		ORDER BY created_at DESC, id DESC
+		LIMIT $` + fmt.Sprint(len(args))
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list request response logs for export: %w", err)
+	}
+	defer rows.Close()
+	return scanRequestResponseLogRows(rows)
 }
 
 func buildRequestResponseLogWhere(filters service.RequestResponseLogFilters) (string, []any) {

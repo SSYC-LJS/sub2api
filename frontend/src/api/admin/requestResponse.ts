@@ -71,6 +71,23 @@ export async function getRequestResponseLog(id: number): Promise<RequestResponse
   return data
 }
 
+export function exportRequestResponseLogsUrl(params: RequestResponseLogQueryParams): string {
+  const query = new URLSearchParams()
+  if (params.user_id) query.set('user_id', String(params.user_id))
+  if (params.api_key_id) query.set('api_key_id', String(params.api_key_id))
+  if (params.group_id) query.set('group_id', String(params.group_id))
+  if (params.endpoint) query.set('endpoint', params.endpoint)
+  if (params.model) query.set('model', params.model)
+  if (params.path) query.set('path', params.path)
+  if (params.search) query.set('search', params.search)
+  if (params.start_date) query.set('start_date', params.start_date)
+  if (params.end_date) query.set('end_date', params.end_date)
+  if (params.timezone) query.set('timezone', params.timezone)
+  query.set('limit', '5000')
+  const qs = query.toString()
+  return `/admin/usage/request-response/export${qs ? '?' + qs : ''}`
+}
+
 export const adminRequestResponseAPI = {
   getCaptureSettings,
   updateCaptureSettings,

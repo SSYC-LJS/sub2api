@@ -8,9 +8,14 @@
             查看网关请求的用户入参和返回给用户的上游响应快照。
           </p>
         </div>
-        <button class="btn btn-secondary" type="button" @click="loadAll" :disabled="loading">
-          刷新
-        </button>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary" type="button" @click="loadAll" :disabled="loading">
+            刷新
+          </button>
+          <button class="btn btn-secondary" type="button" @click="exportCSV" :disabled="exporting">
+            {{ exporting ? '导出中...' : '导出 CSV' }}
+          </button>
+        </div>
       </div>
 
       <section class="card p-4">
@@ -90,7 +95,7 @@
                   <div>出: {{ log.response_body_bytes }}B <span v-if="log.response_truncated" class="text-amber-500">截断</span></div>
                 </td>
                 <td class="px-4 py-3 text-right text-sm">
-                  <button class="btn btn-sm btn-secondary" type="button" @click="selectedLog = log">查看</button>
+                  <button class="btn btn-sm btn-secondary" type="button" @click="openDetail(log)">查看</button>
                 </td>
               </tr>
             </tbody>
@@ -113,11 +118,13 @@
           <div class="grid max-h-[78vh] grid-cols-1 gap-4 overflow-auto p-4 lg:grid-cols-2">
             <div>
               <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">请求入参 <span v-if="selectedLog.request_truncated" class="text-amber-500">（已截断）</span></h4>
-              <pre class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-800 dark:bg-dark-800 dark:text-gray-100">{{ prettyBody(selectedLog.request_body) }}</pre>
+              <pre v-if="detailLoading" class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-400 dark:bg-dark-800">加载中...</pre>
+              <pre v-else class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-800 dark:bg-dark-800 dark:text-gray-100">{{ prettyBody(selectedLog.request_body) }}</pre>
             </div>
             <div>
               <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">返回数据 <span v-if="selectedLog.response_truncated" class="text-amber-500">（已截断）</span></h4>
-              <pre class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-800 dark:bg-dark-800 dark:text-gray-100">{{ prettyBody(selectedLog.response_body) }}</pre>
+              <pre v-if="detailLoading" class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-400 dark:bg-dark-800">加载中...</pre>
+              <pre v-else class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-800 dark:bg-dark-800 dark:text-gray-100">{{ prettyBody(selectedLog.response_body) }}</pre>
             </div>
           </div>
         </div>
@@ -132,7 +139,9 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { useAppStore } from '@/stores/app'
 import {
+  exportRequestResponseLogsUrl,
   getCaptureSettings,
+  getRequestResponseLog,
   listRequestResponseLogs,
   updateCaptureSettings,
   type RequestResponseCaptureSettings,
@@ -144,7 +153,9 @@ const appStore = useAppStore()
 const logs = ref<RequestResponseLog[]>([])
 const loading = ref(false)
 const savingSettings = ref(false)
+const exporting = ref(false)
 const selectedLog = ref<RequestResponseLog | null>(null)
+const detailLoading = ref(false)
 const settings = reactive<RequestResponseCaptureSettings>({ enabled: false, max_body_bytes: 65536 })
 const filters = reactive<Record<string, string>>({
   user_id: '',
@@ -237,6 +248,47 @@ function changePageSize(pageSize: number) {
   pagination.page_size = pageSize
   pagination.page = 1
   loadLogs()
+}
+
+async function openDetail(log: RequestResponseLog) {
+  selectedLog.value = log
+  detailLoading.value = true
+  try {
+    const full = await getRequestResponseLog(log.id)
+    selectedLog.value = full
+  } catch {
+    appStore.showError('加载详情失败')
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+async function exportCSV() {
+  exporting.value = true
+  try {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    const url = baseUrl + exportRequestResponseLogsUrl(buildParams())
+    const token = localStorage.getItem('auth_token') || ''
+    const resp = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!resp.ok) {
+      throw new Error(`export failed: ${resp.status}`)
+    }
+    const blob = await resp.blob()
+    const downloadUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    a.download = `request_response_logs_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(downloadUrl)
+  } catch {
+    appStore.showError('导出失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
 function formatTime(value: string): string {

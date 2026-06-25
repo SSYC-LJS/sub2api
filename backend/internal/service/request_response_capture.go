@@ -63,6 +63,7 @@ type RequestResponseLogFilters struct {
 type RequestResponseLogRepository interface {
 	Create(ctx context.Context, log *RequestResponseLog) error
 	List(ctx context.Context, page, pageSize int, filters RequestResponseLogFilters) ([]RequestResponseLog, int64, error)
+	ListForExport(ctx context.Context, filters RequestResponseLogFilters, limit int) ([]RequestResponseLog, error)
 	GetByID(ctx context.Context, id int64) (*RequestResponseLog, error)
 }
 
@@ -113,6 +114,13 @@ func (s *RequestResponseCaptureService) GetByID(ctx context.Context, id int64) (
 		return nil, ErrSettingNotFound
 	}
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *RequestResponseCaptureService) ListForExport(ctx context.Context, filters RequestResponseLogFilters, limit int) ([]RequestResponseLog, error) {
+	if s == nil || s.repo == nil {
+		return nil, nil
+	}
+	return s.repo.ListForExport(ctx, filters, limit)
 }
 
 func requestResponseCaptureSettingsFromConfig(cfg *config.Config) RequestResponseCaptureSettings {

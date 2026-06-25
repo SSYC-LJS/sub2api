@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"encoding/csv"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -79,6 +81,66 @@ func (h *RequestResponseHandler) Get(c *gin.Context) {
 		return
 	}
 	response.Success(c, item)
+}
+
+func (h *RequestResponseHandler) Export(c *gin.Context) {
+	filters, ok := parseRequestResponseLogFilters(c)
+	if !ok {
+		return
+	}
+	limit := 5000
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 10000 {
+			limit = n
+		}
+	}
+	items, err := h.captureService.ListForExport(c.Request.Context(), filters, limit)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="request_response_logs_%s.csv"`, time.Now().Format("20060102_150405")))
+
+	w := csv.NewWriter(c.Writer)
+	header := []string{"ID", "RequestID", "Time", "UserID", "APIKeyID", "GroupID", "Method", "Path", "Endpoint", "Model", "Stream", "StatusCode", "DurationMs", "RequestBodyBytes", "ResponseBodyBytes", "RequestTruncated", "ResponseTruncated", "UserAgent", "IPAddress", "RequestBody", "ResponseBody"}
+	if err := w.Write(header); err != nil {
+		return
+	}
+	for _, item := range items {
+		groupID := ""
+		if item.GroupID != nil {
+			groupID = strconv.FormatInt(*item.GroupID, 10)
+		}
+		row := []string{
+			strconv.FormatInt(item.ID, 10),
+			item.RequestID,
+			item.CreatedAt.Format(time.RFC3339),
+			strconv.FormatInt(item.UserID, 10),
+			strconv.FormatInt(item.APIKeyID, 10),
+			groupID,
+			item.Method,
+			item.Path,
+			item.Endpoint,
+			item.Model,
+			strconv.FormatBool(item.Stream),
+			strconv.Itoa(item.StatusCode),
+			strconv.FormatInt(item.DurationMs, 10),
+			strconv.Itoa(item.RequestBodyBytes),
+			strconv.Itoa(item.ResponseBodyBytes),
+			strconv.FormatBool(item.RequestTruncated),
+			strconv.FormatBool(item.ResponseTruncated),
+			item.UserAgent,
+			item.IPAddress,
+			item.RequestBody,
+			item.ResponseBody,
+		}
+		if err := w.Write(row); err != nil {
+			return
+		}
+	}
+	w.Flush()
 }
 
 func parseRequestResponseLogFilters(c *gin.Context) (service.RequestResponseLogFilters, bool) {
