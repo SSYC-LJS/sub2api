@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net/http"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -499,6 +500,9 @@ func releaseOpsCaptureWriter(w *opsCaptureWriter) {
 }
 
 func (w *opsCaptureWriter) Write(b []byte) (int, error) {
+	if w == nil || w.ResponseWriter == nil {
+		return 0, nil
+	}
 	if w.Status() >= 400 && w.limit > 0 && w.buf.Len() < w.limit {
 		remaining := w.limit - w.buf.Len()
 		if len(b) > remaining {
@@ -511,6 +515,9 @@ func (w *opsCaptureWriter) Write(b []byte) (int, error) {
 }
 
 func (w *opsCaptureWriter) WriteString(s string) (int, error) {
+	if w == nil || w.ResponseWriter == nil {
+		return 0, nil
+	}
 	if w.Status() >= 400 && w.limit > 0 && w.buf.Len() < w.limit {
 		remaining := w.limit - w.buf.Len()
 		if len(s) > remaining {
@@ -520,6 +527,24 @@ func (w *opsCaptureWriter) WriteString(s string) (int, error) {
 		}
 	}
 	return w.ResponseWriter.WriteString(s)
+}
+
+// Status guards against nil ResponseWriter to prevent panics when the
+// wrapper has been released back to the pool but an outer middleware
+// still holds a reference to it.
+func (w *opsCaptureWriter) Status() int {
+	if w == nil || w.ResponseWriter == nil {
+		return http.StatusOK
+	}
+	return w.ResponseWriter.Status()
+}
+
+// Written guards against nil ResponseWriter for the same reason as Status.
+func (w *opsCaptureWriter) Written() bool {
+	if w == nil || w.ResponseWriter == nil {
+		return false
+	}
+	return w.ResponseWriter.Written()
 }
 
 // OpsErrorLoggerMiddleware records error responses (status >= 400) into ops_error_logs.
@@ -532,11 +557,14 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 		originalWriter := c.Writer
 		w := acquireOpsCaptureWriter(originalWriter)
 		defer func() {
-			// Restore the original writer before returning so outer middlewares
-			// don't observe a pooled wrapper that has been released.
-			if c.Writer == w {
-				c.Writer = originalWriter
-			}
+			// Unconditionally restore the original writer. By the time this
+			// defer runs, any inner middleware that further wrapped c.Writer
+			// (e.g. captureResponseWriter) has already completed its
+			// post-processing. Failing to restore here leaves c.Writer
+			// pointing at a pooled opsCaptureWriter whose ResponseWriter
+			// has been nilled, causing nil-pointer panics in outer
+			// middlewares (Logger, Recovery) that call c.Writer.Status().
+			c.Writer = originalWriter
 			releaseOpsCaptureWriter(w)
 		}()
 		c.Writer = w

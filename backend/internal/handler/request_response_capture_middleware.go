@@ -96,6 +96,10 @@ func (h *GatewayHandler) RequestResponseCaptureMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
+		// Restore c.Writer before post-processing so outer middlewares
+		// (opsErrorLogger, Logger, Recovery) never see our wrapper.
+		c.Writer = captureWriter.ResponseWriter
+
 		responseBody, responseTruncated, responseBytes := captureWriter.captured()
 		endpoint := GetInboundEndpoint(c)
 		if endpoint == "" {
