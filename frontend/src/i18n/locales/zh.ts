@@ -1068,6 +1068,19 @@ export default {
       '15d': '15 天',
       '30d': '30 天'
     },
+    requestWindows: {
+      title: '请求情况',
+      requests: '请求',
+      success: '成功',
+      errors: '失败',
+      errorRate: '错误率',
+      level: {
+        idle: '空闲',
+        normal: '正常',
+        busy: '繁忙',
+        congested: '拥挤'
+      }
+    },
     overall: {
       operational: 'OPERATIONAL',
       degraded: 'DEGRADED',

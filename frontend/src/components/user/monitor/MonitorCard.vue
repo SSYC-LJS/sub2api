@@ -54,29 +54,49 @@
       secondary-unit="ms"
     />
 
-    <!-- Window stats: 1h / 12h / 24h request counts with congestion indicator -->
-    <div class="mt-3 grid grid-cols-3 gap-2">
-      <div v-for="ws in windowStatsDisplay" :key="ws.label" class="rounded-lg px-2 py-1.5 text-center" :class="ws.bgClass">
-        <div class="text-[10px] font-medium text-gray-500 dark:text-gray-400">{{ ws.label }}</div>
-        <div class="mt-0.5 text-sm font-semibold" :class="ws.textClass">{{ ws.count }}</div>
-        <div class="text-[10px] text-gray-400 dark:text-gray-500">{{ ws.detail }}</div>
+    <!-- Request windows: replace the old "recent 60 records" timeline with real traffic windows. -->
+    <div class="mt-4 flex-1 border-t border-gray-100 pt-3 dark:border-dark-700/60">
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <span class="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+          {{ t('channelStatus.requestWindows.title') }}
+        </span>
+        <span class="text-[10px] text-gray-400 tabular-nums">
+          {{ t('monitorCommon.nextUpdateIn', { n: countdownSeconds }) }}
+        </span>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2">
+        <div
+          v-for="ws in windowStatsDisplay"
+          :key="ws.label"
+          class="rounded-xl border px-2 py-2"
+          :class="ws.cardClass"
+        >
+          <div class="flex items-center justify-between gap-1">
+            <span class="text-[11px] font-semibold text-gray-600 dark:text-gray-300">{{ ws.label }}</span>
+            <span class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold" :class="ws.badgeClass">
+              {{ ws.levelLabel }}
+            </span>
+          </div>
+          <div class="mt-1 text-lg font-bold tabular-nums" :class="ws.textClass">{{ ws.count }}</div>
+          <div class="text-[10px] text-gray-500 dark:text-gray-400">
+            {{ t('channelStatus.requestWindows.requests') }}
+          </div>
+          <div class="mt-1 space-y-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+            <div>{{ t('channelStatus.requestWindows.success') }} {{ ws.success }}</div>
+            <div>{{ t('channelStatus.requestWindows.errors') }} {{ ws.errors }}</div>
+            <div>{{ t('channelStatus.requestWindows.errorRate') }} {{ ws.errorRate }}</div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Divider -->
-    <div class="mt-4 border-t border-gray-100 dark:border-dark-700/60"></div>
-
     <!-- Availability row -->
     <MonitorAvailabilityRow
+      class="mt-3"
       :window-label="availabilityLabel"
       :value="availabilityValue"
       :samples-label="extraModelsCountLabel"
-    />
-
-    <!-- Timeline -->
-    <MonitorTimeline
-      :buckets="item.timeline"
-      :countdown-seconds="countdownSeconds"
     />
   </button>
 </template>
@@ -92,7 +112,6 @@ import {
 import ProviderIcon from './ProviderIcon.vue'
 import MonitorMetricPair from './MonitorMetricPair.vue'
 import MonitorAvailabilityRow from './MonitorAvailabilityRow.vue'
-import MonitorTimeline from './MonitorTimeline.vue'
 
 const PROVIDER_TINT: Record<string, string> = {
   openai: 'text-emerald-600 dark:text-emerald-300',
@@ -139,12 +158,18 @@ const extraModelsCountLabel = computed(() => {
 interface WindowStatDisplay {
   label: string
   count: number
-  detail: string
-  bgClass: string
+  success: number
+  errors: number
+  errorRate: string
+  levelLabel: string
+  cardClass: string
+  badgeClass: string
   textClass: string
 }
 
-function congestionLevel(requests: number, errors: number): 'idle' | 'normal' | 'busy' | 'congested' {
+type CongestionLevel = 'idle' | 'normal' | 'busy' | 'congested'
+
+function congestionLevel(requests: number, errors: number): CongestionLevel {
   if (requests === 0) return 'idle'
   const errorRate = errors / requests
   if (errorRate > 0.3) return 'congested'
@@ -153,11 +178,36 @@ function congestionLevel(requests: number, errors: number): 'idle' | 'normal' | 
   return 'normal'
 }
 
-const congestionStyles: Record<string, { bg: string; text: string }> = {
-  idle: { bg: 'bg-gray-50 dark:bg-dark-800/40', text: 'text-gray-500 dark:text-gray-400' },
-  normal: { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-600 dark:text-green-400' },
-  busy: { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-600 dark:text-amber-400' },
-  congested: { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-600 dark:text-red-400' },
+const congestionStyles: Record<CongestionLevel, { card: string; badge: string; text: string; labelKey: string }> = {
+  idle: {
+    card: 'border-gray-100 bg-gray-50/80 dark:border-dark-700 dark:bg-dark-900/40',
+    badge: 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400',
+    text: 'text-gray-500 dark:text-gray-400',
+    labelKey: 'idle',
+  },
+  normal: {
+    card: 'border-emerald-100 bg-emerald-50/70 dark:border-emerald-900/40 dark:bg-emerald-900/15',
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    text: 'text-emerald-600 dark:text-emerald-300',
+    labelKey: 'normal',
+  },
+  busy: {
+    card: 'border-amber-100 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-900/15',
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    text: 'text-amber-600 dark:text-amber-300',
+    labelKey: 'busy',
+  },
+  congested: {
+    card: 'border-red-100 bg-red-50/80 dark:border-red-900/40 dark:bg-red-900/15',
+    badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+    text: 'text-red-600 dark:text-red-300',
+    labelKey: 'congested',
+  },
+}
+
+function formatErrorRate(requests: number, errors: number): string {
+  if (requests <= 0) return '0%'
+  return `${((errors / requests) * 100).toFixed(1).replace(/\.0$/, '')}%`
 }
 
 const windowStatsDisplay = computed<WindowStatDisplay[]>(() => {
@@ -171,12 +221,15 @@ const windowStatsDisplay = computed<WindowStatDisplay[]>(() => {
   return windows.map(w => {
     const level = congestionLevel(w.req, w.err)
     const style = congestionStyles[level]
-    const detail = w.req > 0 ? `${w.ok}✓ ${w.err}✗` : '无请求'
     return {
       label: w.label,
       count: w.req,
-      detail,
-      bgClass: style.bg,
+      success: w.ok,
+      errors: w.err,
+      errorRate: formatErrorRate(w.req, w.err),
+      levelLabel: t(`channelStatus.requestWindows.level.${style.labelKey}`),
+      cardClass: style.card,
+      badgeClass: style.badge,
       textClass: style.text,
     }
   })

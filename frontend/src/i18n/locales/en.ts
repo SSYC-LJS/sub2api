@@ -1064,6 +1064,19 @@ export default {
       '15d': '15 days',
       '30d': '30 days'
     },
+    requestWindows: {
+      title: 'Request Windows',
+      requests: 'requests',
+      success: 'Success',
+      errors: 'Errors',
+      errorRate: 'Error rate',
+      level: {
+        idle: 'Idle',
+        normal: 'Normal',
+        busy: 'Busy',
+        congested: 'Congested'
+      }
+    },
     overall: {
       operational: 'OPERATIONAL',
       degraded: 'DEGRADED',
