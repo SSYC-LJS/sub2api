@@ -384,7 +384,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
-import { performUpdate, restartService } from '@/api/admin/system'
+import { getUpdateStatus, performUpdate, restartService } from '@/api/admin/system'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
@@ -416,6 +416,8 @@ const needRestart = ref(false)
 const updateError = ref('')
 const updateSuccess = ref(false)
 const restartCountdown = ref(0)
+const updateOperationId = ref('')
+let updatePollTimer: ReturnType<typeof setTimeout> | null = null
 
 // Only show update check for release builds (binary/docker deployment)
 const isReleaseBuild = computed(() => buildType.value === 'release')
@@ -448,15 +450,60 @@ async function handleUpdate() {
 
   try {
     const result = await performUpdate()
-    updateSuccess.value = true
-    needRestart.value = result.need_restart
-    // Clear version cache to reflect update completed
-    appStore.clearVersionCache()
+    if (result.operation_id) {
+      updateOperationId.value = result.operation_id
+      pollUpdateStatus(result.operation_id)
+      return
+    }
+    markUpdateCompleted(result.need_restart)
   } catch (error: unknown) {
     const err = error as { response?: { data?: { message?: string } }; message?: string }
     updateError.value = err.response?.data?.message || err.message || t('version.updateFailed')
-  } finally {
     updating.value = false
+  }
+}
+
+async function pollUpdateStatus(operationId: string) {
+  clearUpdatePollTimer()
+
+  try {
+    const status = await getUpdateStatus(operationId)
+    if (status.status === 'running') {
+      updatePollTimer = setTimeout(() => pollUpdateStatus(operationId), 3000)
+      return
+    }
+
+    if (status.status === 'failed') {
+      updateError.value = status.error || status.message || t('version.updateFailed')
+      updating.value = false
+      return
+    }
+
+    if (status.already_up_to_date) {
+      await refreshVersion(true)
+      updating.value = false
+      return
+    }
+
+    markUpdateCompleted(status.need_restart)
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    updateError.value = err.response?.data?.message || err.message || t('version.updateFailed')
+    updating.value = false
+  }
+}
+
+function markUpdateCompleted(restartRequired: boolean) {
+  updateSuccess.value = true
+  needRestart.value = restartRequired
+  appStore.clearVersionCache()
+  updating.value = false
+}
+
+function clearUpdatePollTimer() {
+  if (updatePollTimer) {
+    clearTimeout(updatePollTimer)
+    updatePollTimer = null
   }
 }
 
@@ -530,6 +577,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  clearUpdatePollTimer()
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -18,8 +19,27 @@ import (
 
 // SystemHandler handles system-related operations
 type SystemHandler struct {
-	updateSvc systemUpdateService
-	lockSvc   *service.SystemOperationLockService
+	updateSvc  systemUpdateService
+	lockSvc    *service.SystemOperationLockService
+	updateJobs *systemUpdateJobStore
+}
+
+type systemUpdateJobStore struct {
+	mu   sync.RWMutex
+	jobs map[string]*systemUpdateJob
+}
+
+type systemUpdateJob struct {
+	OperationID     string    `json:"operation_id"`
+	Status          string    `json:"status"`
+	Message         string    `json:"message"`
+	NeedRestart     bool      `json:"need_restart"`
+	AlreadyUpToDate bool      `json:"already_up_to_date"`
+	CurrentVersion  string    `json:"current_version,omitempty"`
+	LatestVersion   string    `json:"latest_version,omitempty"`
+	Error           string    `json:"error,omitempty"`
+	StartedAt       time.Time `json:"started_at"`
+	FinishedAt      time.Time `json:"finished_at,omitempty"`
 }
 
 type systemUpdateService interface {
@@ -31,8 +51,9 @@ type systemUpdateService interface {
 // NewSystemHandler creates a new SystemHandler
 func NewSystemHandler(updateSvc systemUpdateService, lockSvc *service.SystemOperationLockService) *SystemHandler {
 	return &SystemHandler{
-		updateSvc: updateSvc,
-		lockSvc:   lockSvc,
+		updateSvc:  updateSvc,
+		lockSvc:    lockSvc,
+		updateJobs: newSystemUpdateJobStore(),
 	}
 }
 
@@ -67,39 +88,61 @@ func (h *SystemHandler) PerformUpdate(c *gin.Context) {
 		if err != nil {
 			return nil, err
 		}
-		var releaseReason string
-		succeeded := false
-		defer func() {
-			release(releaseReason, succeeded)
-		}()
-
-		if err := h.updateSvc.PerformUpdate(ctx); err != nil {
-			if errors.Is(err, service.ErrNoUpdateAvailable) {
-				info, checkErr := h.updateSvc.CheckUpdate(ctx, false)
-				if checkErr != nil {
-					releaseReason = "SYSTEM_UPDATE_FAILED"
-					return nil, checkErr
-				}
-				succeeded = true
-				return gin.H{
-					"message":            "Already up to date",
-					"already_up_to_date": true,
-					"current_version":    info.CurrentVersion,
-					"latest_version":     info.LatestVersion,
-					"operation_id":       lock.OperationID(),
-				}, nil
-			}
-			releaseReason = "SYSTEM_UPDATE_FAILED"
-			return nil, err
-		}
-		succeeded = true
-
+		job := h.updateJobs.start(lock.OperationID())
+		go h.runUpdateJob(lock, release, job.OperationID)
 		return gin.H{
-			"message":      "Update completed. Please restart the service.",
-			"need_restart": true,
-			"operation_id": lock.OperationID(),
+			"message":      "Update started in background",
+			"status":       job.Status,
+			"operation_id": job.OperationID,
 		}, nil
 	})
+}
+
+// GetUpdateStatus returns background update job status
+// GET /api/v1/admin/system/update/status/:operation_id
+func (h *SystemHandler) GetUpdateStatus(c *gin.Context) {
+	operationID := strings.TrimSpace(c.Param("operation_id"))
+	if operationID == "" {
+		operationID = strings.TrimSpace(c.Query("operation_id"))
+	}
+	if operationID == "" {
+		response.Error(c, http.StatusBadRequest, "operation_id is required")
+		return
+	}
+	job, ok := h.updateJobs.get(operationID)
+	if !ok {
+		response.Error(c, http.StatusNotFound, "update operation not found")
+		return
+	}
+	response.Success(c, job)
+}
+
+func (h *SystemHandler) runUpdateJob(lock *service.SystemOperationLock, release func(string, bool), operationID string) {
+	ctx := context.Background()
+	releaseReason := ""
+	succeeded := false
+	defer func() {
+		release(releaseReason, succeeded)
+	}()
+
+	if err := h.updateSvc.PerformUpdate(ctx); err != nil {
+		if errors.Is(err, service.ErrNoUpdateAvailable) {
+			info, checkErr := h.updateSvc.CheckUpdate(ctx, false)
+			if checkErr != nil {
+				releaseReason = "SYSTEM_UPDATE_FAILED"
+				h.updateJobs.fail(operationID, checkErr)
+				return
+			}
+			succeeded = true
+			h.updateJobs.completeAlreadyUpToDate(operationID, info)
+			return
+		}
+		releaseReason = "SYSTEM_UPDATE_FAILED"
+		h.updateJobs.fail(operationID, err)
+		return
+	}
+	succeeded = true
+	h.updateJobs.completeNeedRestart(operationID)
 }
 
 // Rollback restores the previous version
@@ -160,6 +203,84 @@ func (h *SystemHandler) RestartService(c *gin.Context) {
 			"operation_id": lock.OperationID(),
 		}, nil
 	})
+}
+
+func newSystemUpdateJobStore() *systemUpdateJobStore {
+	return &systemUpdateJobStore{jobs: make(map[string]*systemUpdateJob)}
+}
+
+func (s *systemUpdateJobStore) start(operationID string) *systemUpdateJob {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := &systemUpdateJob{
+		OperationID: operationID,
+		Status:      "running",
+		Message:     "Update is running in background",
+		StartedAt:   time.Now(),
+	}
+	s.jobs[operationID] = job
+	return cloneSystemUpdateJob(job)
+}
+
+func (s *systemUpdateJobStore) get(operationID string) (*systemUpdateJob, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	job, ok := s.jobs[operationID]
+	if !ok {
+		return nil, false
+	}
+	return cloneSystemUpdateJob(job), true
+}
+
+func (s *systemUpdateJobStore) fail(operationID string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.ensure(operationID)
+	job.Status = "failed"
+	job.Message = "Update failed"
+	job.Error = err.Error()
+	job.FinishedAt = time.Now()
+}
+
+func (s *systemUpdateJobStore) completeNeedRestart(operationID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.ensure(operationID)
+	job.Status = "completed"
+	job.Message = "Update completed. Please restart the service."
+	job.NeedRestart = true
+	job.FinishedAt = time.Now()
+}
+
+func (s *systemUpdateJobStore) completeAlreadyUpToDate(operationID string, info *service.UpdateInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.ensure(operationID)
+	job.Status = "completed"
+	job.Message = "Already up to date"
+	job.AlreadyUpToDate = true
+	if info != nil {
+		job.CurrentVersion = info.CurrentVersion
+		job.LatestVersion = info.LatestVersion
+	}
+	job.FinishedAt = time.Now()
+}
+
+func (s *systemUpdateJobStore) ensure(operationID string) *systemUpdateJob {
+	job, ok := s.jobs[operationID]
+	if !ok {
+		job = &systemUpdateJob{OperationID: operationID, StartedAt: time.Now()}
+		s.jobs[operationID] = job
+	}
+	return job
+}
+
+func cloneSystemUpdateJob(job *systemUpdateJob) *systemUpdateJob {
+	if job == nil {
+		return nil
+	}
+	clone := *job
+	return &clone
 }
 
 func (h *SystemHandler) acquireSystemLock(

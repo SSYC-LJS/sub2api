@@ -43,6 +43,21 @@ export async function checkUpdates(force = false): Promise<VersionInfo> {
 export interface UpdateResult {
   message: string
   need_restart: boolean
+  operation_id?: string
+  status?: string
+}
+
+export interface UpdateStatus {
+  operation_id: string
+  status: 'running' | 'completed' | 'failed'
+  message: string
+  error?: string
+  need_restart: boolean
+  already_up_to_date: boolean
+  current_version?: string
+  latest_version?: string
+  started_at: string
+  finished_at?: string
 }
 
 /**
@@ -51,6 +66,11 @@ export interface UpdateResult {
  */
 export async function performUpdate(): Promise<UpdateResult> {
   const { data } = await apiClient.post<UpdateResult>('/admin/system/update')
+  return data
+}
+
+export async function getUpdateStatus(operationId: string): Promise<UpdateStatus> {
+  const { data } = await apiClient.get<UpdateStatus>(`/admin/system/update/status/${operationId}`)
   return data
 }
 
@@ -74,6 +94,7 @@ export const systemAPI = {
   getVersion,
   checkUpdates,
   performUpdate,
+  getUpdateStatus,
   rollback,
   restartService
 }

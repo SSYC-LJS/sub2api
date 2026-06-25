@@ -527,6 +527,8 @@ func registerSystemRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		system.GET("/version", h.Admin.System.GetVersion)
 		system.GET("/check-updates", h.Admin.System.CheckUpdates)
 		system.POST("/update", h.Admin.System.PerformUpdate)
+		system.GET("/update/status/:operation_id", h.Admin.System.GetUpdateStatus)
+		system.GET("/update/status", h.Admin.System.GetUpdateStatus)
 		system.POST("/rollback", h.Admin.System.Rollback)
 		system.POST("/restart", h.Admin.System.RestartService)
 	}
@@ -557,6 +559,7 @@ func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		usage.GET("", h.Admin.Usage.List)
 		usage.GET("/request-response", h.Admin.RequestResponse.List)
+		usage.GET("/request-response/export", h.Admin.RequestResponse.Export)
 		usage.GET("/request-response/:id", h.Admin.RequestResponse.Get)
 		usage.GET("/stats", h.Admin.Usage.Stats)
 		usage.GET("/search-users", h.Admin.Usage.SearchUsers)
