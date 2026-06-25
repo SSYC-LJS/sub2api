@@ -1121,7 +1121,8 @@ export default {
       cacheWrite: 'Cache W',
       cacheRead: 'Cache R',
       perRequest: 'Per Request',
-      image: 'Image Output'
+      image: 'Image Output',
+      perImage: 'Per Image'
     },
     pricing: {
       billingModeToken: 'Per Token',
@@ -1132,6 +1133,7 @@ export default {
       cacheWritePrice: 'Cache Write',
       cacheReadPrice: 'Cache Hit',
       imageOutputPrice: 'Image Output',
+      perImagePrice: 'Per Image',
       perRequestPrice: 'Single Request',
       intervals: 'Tiered Pricing',
       unitPerMillion: '/ 1M tokens',
@@ -1169,10 +1171,12 @@ export default {
       cacheWritePrice: 'Cache Write',
       cacheReadPrice: 'Cache Read',
       imageOutputPrice: 'Image Output',
+      perImagePrice: 'Per Image',
       perRequestPrice: 'Per Request',
       intervals: 'Tiered Pricing',
       unitPerMillion: '/ 1M tokens',
-      unitPerRequest: '/ request'
+      unitPerRequest: '/ request',
+      unitPerImage: '/ image'
     }
   },
 

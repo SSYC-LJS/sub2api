@@ -1125,7 +1125,8 @@ export default {
       cacheWrite: '缓存写',
       cacheRead: '缓存读',
       perRequest: '单次价格',
-      image: '图片输出'
+      image: '图片输出',
+      perImage: '单张价格'
     },
     pricing: {
       billingModeToken: '按 Token',
@@ -1136,6 +1137,7 @@ export default {
       cacheWritePrice: '缓存写入',
       cacheReadPrice: '缓存命中',
       imageOutputPrice: '图片输出',
+      perImagePrice: '单张价格',
       perRequestPrice: '单次价格',
       intervals: '阶梯定价',
       unitPerMillion: '/ 1M token',
@@ -1173,10 +1175,12 @@ export default {
       cacheWritePrice: '缓存写入',
       cacheReadPrice: '缓存读取',
       imageOutputPrice: '图片输出',
+      perImagePrice: '单张价格',
       perRequestPrice: '每次请求',
       intervals: '阶梯定价',
       unitPerMillion: '/ 1M token',
-      unitPerRequest: '/ 次'
+      unitPerRequest: '/ 次',
+      unitPerImage: '/ 张'
     }
   },
 

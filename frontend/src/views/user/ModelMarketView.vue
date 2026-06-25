@@ -388,7 +388,7 @@ function priceColumns(pricing: UserSupportedModelPricing | null): Array<{ kind: 
     return [{ kind: 'perRequest', label: t('modelMarket.priceTable.perRequest') }]
   }
   if (pricing?.billing_mode === BILLING_MODE_IMAGE) {
-    return [{ kind: 'image', label: t('modelMarket.priceTable.image') }]
+    return [{ kind: 'image', label: t('modelMarket.priceTable.perImage') }]
   }
 
   const columns: Array<{ kind: PriceCellKind; label: string }> = [
@@ -414,7 +414,7 @@ function groupPriceCell(
     return formatScaled(scaleNumber(pricing.per_request_price, multiplier), 1)
   }
   if (kind === 'image') {
-    return formatScaled(scaleNumber(pricing.image_output_price, multiplier), 1)
+    return formatScaled(scaleNumber(imageUnitPrice(pricing), multiplier), 1)
   }
   const source = {
     input: pricing.input_price,
@@ -449,6 +449,11 @@ function billingModeLabel(pricing: UserSupportedModelPricing | null): string {
     default:
       return '-'
   }
+}
+
+function imageUnitPrice(pricing: UserSupportedModelPricing | null): number | null {
+  if (!pricing) return null
+  return pricing.per_request_price ?? pricing.image_output_price ?? null
 }
 
 async function loadMarket() {
@@ -507,7 +512,7 @@ const PriceSummary = defineComponent({
       } else if (pricing.billing_mode === BILLING_MODE_PER_REQUEST) {
         rows.push(row(t(prefixKey('perRequestPrice')), pricing.per_request_price, unitRequest, 1))
       } else if (pricing.billing_mode === BILLING_MODE_IMAGE) {
-        rows.push(row(t(prefixKey('imageOutputPrice')), pricing.image_output_price, unitRequest, 1))
+        rows.push(row(t(prefixKey('perImagePrice')), imageUnitPrice(pricing), unitRequest, 1))
       }
 
       if (pricing.intervals?.length && !props.compact) {
