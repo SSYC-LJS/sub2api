@@ -3,7 +3,11 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -153,7 +157,7 @@ func shouldCaptureGatewayBody(r *http.Request) bool {
 		return false
 	}
 	contentType := strings.ToLower(r.Header.Get("Content-Type"))
-	return contentType == "" || strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/event-stream")
+	return contentType == "" || strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/event-stream") || strings.Contains(contentType, "multipart/form-data")
 }
 
 func captureRequestBody(r *http.Request, maxBytes int) (string, bool, int) {
@@ -166,8 +170,115 @@ func captureRequestBody(r *http.Request, maxBytes int) (string, bool, int) {
 		return "", false, 0
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
+	if isMultipartFormContentType(r.Header.Get("Content-Type")) {
+		return summarizeMultipartRequestBody(r.Header.Get("Content-Type"), body, maxBytes)
+	}
 	if maxBytes <= 0 || len(body) <= maxBytes {
 		return string(body), false, len(body)
 	}
 	return string(body[:maxBytes]), true, len(body)
+}
+
+type multipartCaptureSummary struct {
+	Multipart bool                          `json:"multipart"`
+	Model     string                        `json:"model,omitempty"`
+	Fields    map[string][]string           `json:"fields,omitempty"`
+	Files     []multipartCaptureFileSummary `json:"files,omitempty"`
+}
+
+type multipartCaptureFileSummary struct {
+	Field       string `json:"field"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type,omitempty"`
+	Size        int64  `json:"size"`
+	DataURL     string `json:"data_url,omitempty"`
+	Truncated   bool   `json:"truncated,omitempty"`
+}
+
+func isMultipartFormContentType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	return err == nil && strings.EqualFold(mediaType, "multipart/form-data")
+}
+
+func summarizeMultipartRequestBody(contentType string, body []byte, maxBytes int) (string, bool, int) {
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil || params["boundary"] == "" {
+		return "", false, len(body)
+	}
+
+	summary := multipartCaptureSummary{Multipart: true, Fields: make(map[string][]string)}
+	remainingImageBytes := maxBytes
+	if remainingImageBytes <= 0 || remainingImageBytes > defaultCaptureBodyMaxBytes {
+		remainingImageBytes = defaultCaptureBodyMaxBytes
+	}
+	reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			break
+		}
+		name := strings.TrimSpace(part.FormName())
+		if name == "" {
+			_ = part.Close()
+			continue
+		}
+		filename := strings.TrimSpace(part.FileName())
+		if filename != "" {
+			fileSummary, consumed := summarizeMultipartFilePart(part, name, filename, remainingImageBytes)
+			remainingImageBytes -= consumed
+			if remainingImageBytes < 0 {
+				remainingImageBytes = 0
+			}
+			summary.Files = append(summary.Files, fileSummary)
+			_ = part.Close()
+			continue
+		}
+		value, _ := io.ReadAll(io.LimitReader(part, int64(defaultCaptureBodyMaxBytes)+1))
+		fieldValue := string(value)
+		summary.Fields[name] = append(summary.Fields[name], fieldValue)
+		if strings.EqualFold(name, "model") && summary.Model == "" {
+			summary.Model = fieldValue
+		}
+		_ = part.Close()
+	}
+
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		return "", false, len(body)
+	}
+	if maxBytes <= 0 || len(encoded) <= maxBytes {
+		return string(encoded), false, len(body)
+	}
+	return string(encoded[:maxBytes]), true, len(body)
+}
+
+func summarizeMultipartFilePart(part *multipart.Part, field, filename string, maxPreviewBytes int) (multipartCaptureFileSummary, int) {
+	contentType := strings.TrimSpace(part.Header.Get("Content-Type"))
+	out := multipartCaptureFileSummary{Field: field, Filename: filename, ContentType: contentType}
+	isImage := isImageContentType(contentType)
+	if !isImage || maxPreviewBytes <= 0 {
+		size, _ := io.Copy(io.Discard, part)
+		out.Size = size
+		out.Truncated = isImage && size > 0
+		return out, 0
+	}
+
+	preview, _ := io.ReadAll(io.LimitReader(part, int64(maxPreviewBytes)+1))
+	if len(preview) > maxPreviewBytes {
+		out.Truncated = true
+		preview = preview[:maxPreviewBytes]
+	}
+	remainingSize, _ := io.Copy(io.Discard, part)
+	out.Size = int64(len(preview)) + remainingSize
+	if len(preview) > 0 {
+		out.DataURL = "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(preview)
+	}
+	return out, len(preview)
+}
+
+func isImageContentType(contentType string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(contentType)), "image/")
 }

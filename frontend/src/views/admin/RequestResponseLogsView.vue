@@ -119,7 +119,18 @@
             <div>
               <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">请求入参 <span v-if="selectedLog.request_truncated" class="text-amber-500">（已截断）</span></h4>
               <pre v-if="detailLoading" class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-400 dark:bg-dark-800">加载中...</pre>
-              <pre v-else class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-800 dark:bg-dark-800 dark:text-gray-100">{{ prettyBody(selectedLog.request_body) }}</pre>
+              <template v-else>
+                <div v-if="requestImageFiles.length" class="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div v-for="file in requestImageFiles" :key="`${file.field}-${file.filename}`" class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-700 dark:bg-dark-800">
+                    <img :src="file.data_url" :alt="file.filename" class="max-h-80 w-full rounded object-contain" />
+                    <div class="mt-2 break-all text-xs text-gray-600 dark:text-gray-300">
+                      {{ file.field }} / {{ file.filename }} / {{ file.content_type || 'image' }} / {{ file.size }}B
+                      <span v-if="file.truncated" class="text-amber-500">（预览已截断）</span>
+                    </div>
+                  </div>
+                </div>
+                <pre class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-800 dark:bg-dark-800 dark:text-gray-100">{{ prettyBody(selectedLog.request_body) }}</pre>
+              </template>
             </div>
             <div>
               <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">返回数据 <span v-if="selectedLog.response_truncated" class="text-amber-500">（已截断）</span></h4>
@@ -134,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { useAppStore } from '@/stores/app'
@@ -168,6 +179,27 @@ const filters = reactive<Record<string, string>>({
   end_date: '',
 })
 const pagination = reactive({ page: 1, page_size: 20, total: 0 })
+
+interface CapturedMultipartFile {
+  field: string
+  filename: string
+  content_type?: string
+  size: number
+  data_url?: string
+  truncated?: boolean
+}
+
+const requestImageFiles = computed<CapturedMultipartFile[]>(() => {
+  const body = selectedLog.value?.request_body
+  if (!body) return []
+  try {
+    const parsed = JSON.parse(body) as { multipart?: boolean; files?: CapturedMultipartFile[] }
+    if (!parsed.multipart || !Array.isArray(parsed.files)) return []
+    return parsed.files.filter((file) => typeof file.data_url === 'string' && file.data_url.startsWith('data:image/'))
+  } catch {
+    return []
+  }
+})
 
 function numericFilter(value: string): number | undefined {
   const trimmed = value.trim()
