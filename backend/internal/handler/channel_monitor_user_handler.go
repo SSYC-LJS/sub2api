@@ -54,6 +54,7 @@ type channelMonitorUserListItem struct {
 	PrimaryLatencyMs     *int                                 `json:"primary_latency_ms"`
 	PrimaryPingLatencyMs *int                                 `json:"primary_ping_latency_ms"`
 	Availability7d       float64                              `json:"availability_7d"`
+	WindowStats          service.GroupWindowStats             `json:"window_stats"`
 	ExtraModels          []dto.ChannelMonitorExtraModelStatus `json:"extra_models"`
 	Timeline             []channelMonitorUserTimelinePoint    `json:"timeline"`
 }
@@ -113,6 +114,7 @@ func userMonitorViewToItem(v *service.UserMonitorView) channelMonitorUserListIte
 		PrimaryLatencyMs:     v.PrimaryLatencyMs,
 		PrimaryPingLatencyMs: v.PrimaryPingLatencyMs,
 		Availability7d:       v.Availability7d,
+		WindowStats:          v.WindowStats,
 		ExtraModels:          extras,
 		Timeline:             timeline,
 	}
