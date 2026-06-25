@@ -141,6 +141,7 @@ type RedeemService struct {
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	affiliateService     *AffiliateService
+	webhookService       *WebhookService
 }
 
 // NewRedeemService 创建兑换码服务实例
@@ -164,6 +165,13 @@ func NewRedeemService(
 		authCacheInvalidator: authCacheInvalidator,
 		affiliateService:     affiliateService,
 	}
+}
+
+func (s *RedeemService) SetWebhookService(webhookService *WebhookService) {
+	if s == nil {
+		return
+	}
+	s.webhookService = webhookService
 }
 
 // GenerateRandomCode 生成随机兑换码
@@ -504,8 +512,33 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	if err != nil {
 		return nil, fmt.Errorf("get updated redeem code: %w", err)
 	}
+	s.notifyRedeemCodeUsed(user, redeemCode)
 
 	return redeemCode, nil
+}
+
+func (s *RedeemService) notifyRedeemCodeUsed(user *User, redeemCode *RedeemCode) {
+	if s == nil || s.webhookService == nil || user == nil || redeemCode == nil {
+		return
+	}
+	data := map[string]any{
+		"user_id":       user.ID,
+		"user_email":    user.Email,
+		"code":          redeemCode.Code,
+		"type":          redeemCode.Type,
+		"value":         redeemCode.Value,
+		"validity_days": redeemCode.ValidityDays,
+	}
+	if redeemCode.GroupID != nil {
+		data["group_id"] = *redeemCode.GroupID
+	}
+	s.webhookService.NotifyAsync(WebhookEvent{
+		Event:     "redeem.used",
+		Title:     "用户使用兑换码",
+		Severity:  "success",
+		Timestamp: time.Now(),
+		Data:      data,
+	})
 }
 
 // invalidateRedeemCaches 失效兑换相关的缓存

@@ -92,6 +92,7 @@ type Config struct {
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
+	Webhook                 WebhookConfig                 `mapstructure:"webhook"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 }
 
@@ -154,6 +155,14 @@ type UpdateConfig struct {
 	// 支持 http/https/socks5/socks5h 协议
 	// 例如: "http://127.0.0.1:7890", "socks5://127.0.0.1:1080"
 	ProxyURL string `mapstructure:"proxy_url"`
+}
+
+type WebhookConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	URL            string `mapstructure:"url"`
+	Format         string `mapstructure:"format"`
+	BearerToken    string `mapstructure:"bearer_token"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
 }
 
 type IdempotencyConfig struct {
@@ -1984,6 +1993,13 @@ func setDefaults() {
 	viper.SetDefault("gemini.oauth.client_secret", "")
 	viper.SetDefault("gemini.oauth.scopes", "")
 	viper.SetDefault("gemini.quota.policy", "")
+
+	// Webhook notifications (disabled by default)
+	viper.SetDefault("webhook.enabled", false)
+	viper.SetDefault("webhook.url", "")
+	viper.SetDefault("webhook.format", "feishu")
+	viper.SetDefault("webhook.bearer_token", "")
+	viper.SetDefault("webhook.timeout_seconds", 5)
 
 	// Subscription Maintenance (bounded queue + worker pool)
 	viper.SetDefault("subscription_maintenance.worker_count", 2)

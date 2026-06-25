@@ -46,6 +46,8 @@ type OpsService struct {
 	// UpdateOpsAdvancedSettings 写入新配置后调用，把最新的 quota auto-pause 全局默认阈值
 	// 立即同步到调度热路径读取的内存缓存，避免下次请求才能感知新值。
 	quotaAutoPauseSink func(OpsOpenAIAccountQuotaAutoPauseSettings)
+
+	webhookService *WebhookService
 }
 
 // CleanupReloader 由 OpsCleanupService 实现。
@@ -70,6 +72,13 @@ func (s *OpsService) SetOpenAIQuotaAutoPauseSettingsSink(sink func(OpsOpenAIAcco
 		return
 	}
 	s.quotaAutoPauseSink = sink
+}
+
+func (s *OpsService) SetWebhookService(webhookService *WebhookService) {
+	if s == nil {
+		return
+	}
+	s.webhookService = webhookService
 }
 
 func NewOpsService(
@@ -151,6 +160,7 @@ func (s *OpsService) RecordError(ctx context.Context, entry *OpsInsertErrorLogIn
 		log.Printf("[Ops] RecordError failed: %v", err)
 		return err
 	}
+	s.notifyOpsError(prepared)
 	return nil
 }
 
@@ -176,6 +186,8 @@ func (s *OpsService) RecordErrorBatch(ctx context.Context, entries []*OpsInsertE
 		_, err := s.opsRepo.InsertErrorLog(ctx, prepared[0])
 		if err != nil {
 			log.Printf("[Ops] RecordErrorBatch single insert failed: %v", err)
+		} else {
+			s.notifyOpsError(prepared[0])
 		}
 		return err
 	}
@@ -189,11 +201,52 @@ func (s *OpsService) RecordErrorBatch(ctx context.Context, entries []*OpsInsertE
 				if firstErr == nil {
 					firstErr = insertErr
 				}
+			} else {
+				s.notifyOpsError(entry)
 			}
 		}
 		return firstErr
 	}
+	for _, entry := range prepared {
+		s.notifyOpsError(entry)
+	}
 	return nil
+}
+
+func (s *OpsService) notifyOpsError(entry *OpsInsertErrorLogInput) {
+	if s == nil || s.webhookService == nil || entry == nil {
+		return
+	}
+	data := map[string]any{
+		"platform":          entry.Platform,
+		"model":             entry.Model,
+		"status_code":       entry.StatusCode,
+		"phase":             entry.ErrorPhase,
+		"type":              entry.ErrorType,
+		"message":           entry.ErrorMessage,
+		"request_path":      entry.RequestPath,
+		"request_id":        entry.RequestID,
+		"client_request_id": entry.ClientRequestID,
+	}
+	if entry.UserID != nil {
+		data["user_id"] = *entry.UserID
+	}
+	if entry.APIKeyID != nil {
+		data["api_key_id"] = *entry.APIKeyID
+	}
+	if entry.GroupID != nil {
+		data["group_id"] = *entry.GroupID
+	}
+	if entry.AccountID != nil {
+		data["account_id"] = *entry.AccountID
+	}
+	s.webhookService.NotifyAsync(WebhookEvent{
+		Event:     "ops.error",
+		Title:     "网关异常/账号报错",
+		Severity:  "error",
+		Timestamp: entry.CreatedAt,
+		Data:      data,
+	})
 }
 
 func (s *OpsService) prepareErrorLogInput(ctx context.Context, entry *OpsInsertErrorLogInput) (*OpsInsertErrorLogInput, bool, error) {

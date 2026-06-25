@@ -75,6 +75,7 @@ type AuthService struct {
 	affiliateService      *AffiliateService
 	defaultSubAssigner    DefaultSubscriptionAssigner
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	webhookService        *WebhookService
 }
 
 type DefaultSubscriptionAssigner interface {
@@ -126,6 +127,13 @@ func (s *AuthService) EntClient() *dbent.Client {
 		return nil
 	}
 	return s.entClient
+}
+
+func (s *AuthService) SetWebhookService(webhookService *WebhookService) {
+	if s == nil {
+		return
+	}
+	s.webhookService = webhookService
 }
 
 // Register 用户注册，返回token和用户
@@ -269,8 +277,29 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 	if err != nil {
 		return "", nil, fmt.Errorf("generate token: %w", err)
 	}
+	s.notifyUserRegistered(user)
 
 	return token, user, nil
+}
+
+func (s *AuthService) notifyUserRegistered(user *User) {
+	if s == nil || s.webhookService == nil || user == nil {
+		return
+	}
+	s.webhookService.NotifyAsync(WebhookEvent{
+		Event:     "user.registered",
+		Title:     "新用户注册",
+		Severity:  "info",
+		Timestamp: time.Now(),
+		Data: map[string]any{
+			"user_id":       user.ID,
+			"user_email":    user.Email,
+			"username":      user.Username,
+			"balance":       user.Balance,
+			"concurrency":   user.Concurrency,
+			"signup_source": user.SignupSource,
+		},
+	})
 }
 
 // SendVerifyCodeResult 发送验证码返回结果
