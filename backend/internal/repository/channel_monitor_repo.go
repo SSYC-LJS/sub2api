@@ -580,7 +580,16 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 		    SELECT
 		        group_id,
 		        COUNT(*) AS total,
-		        COUNT(*) FILTER (WHERE status = 'operational') AS ok
+		        COUNT(*) FILTER (WHERE status = 'operational') AS ok,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '1 hour') AS req_1h,
+		        COUNT(*) FILTER (WHERE status = 'operational' AND created_at >= NOW() - INTERVAL '1 hour') AS ok_1h,
+		        COUNT(*) FILTER (WHERE status = 'failed' AND created_at >= NOW() - INTERVAL '1 hour') AS err_1h,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '12 hours') AS req_12h,
+		        COUNT(*) FILTER (WHERE status = 'operational' AND created_at >= NOW() - INTERVAL '12 hours') AS ok_12h,
+		        COUNT(*) FILTER (WHERE status = 'failed' AND created_at >= NOW() - INTERVAL '12 hours') AS err_12h,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') AS req_24h,
+		        COUNT(*) FILTER (WHERE status = 'operational' AND created_at >= NOW() - INTERVAL '24 hours') AS ok_24h,
+		        COUNT(*) FILTER (WHERE status = 'failed' AND created_at >= NOW() - INTERVAL '24 hours') AS err_24h
 		    FROM events
 		    GROUP BY group_id
 		)
@@ -589,7 +598,10 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 		    l.model,
 		    l.status,
 		    l.latency_ms,
-		    CASE WHEN a.total > 0 THEN (a.ok::float8 * 100.0 / a.total::float8) ELSE 0 END AS availability_7d
+		    CASE WHEN a.total > 0 THEN (a.ok::float8 * 100.0 / a.total::float8) ELSE 0 END AS availability_7d,
+		    a.req_1h, a.ok_1h, a.err_1h,
+		    a.req_12h, a.ok_12h, a.err_12h,
+		    a.req_24h, a.ok_24h, a.err_24h
 		FROM agg a
 		JOIN ranked l ON l.group_id = a.group_id AND l.rn = 1
 	`
@@ -602,7 +614,12 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 	for rows.Next() {
 		stat := &service.RealUsageGroupMonitorStat{}
 		var latency sql.NullInt64
-		if err := rows.Scan(&stat.GroupID, &stat.PrimaryModel, &stat.PrimaryStatus, &latency, &stat.Availability7d); err != nil {
+		if err := rows.Scan(
+			&stat.GroupID, &stat.PrimaryModel, &stat.PrimaryStatus, &latency, &stat.Availability7d,
+			&stat.WindowStats.Requests1h, &stat.WindowStats.Success1h, &stat.WindowStats.Errors1h,
+			&stat.WindowStats.Requests12h, &stat.WindowStats.Success12h, &stat.WindowStats.Errors12h,
+			&stat.WindowStats.Requests24h, &stat.WindowStats.Success24h, &stat.WindowStats.Errors24h,
+		); err != nil {
 			return nil, fmt.Errorf("scan real usage group stat: %w", err)
 		}
 		assignNullInt(&stat.LatencyMs, latency)

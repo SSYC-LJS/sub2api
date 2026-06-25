@@ -39,6 +39,7 @@ func (s *ChannelMonitorService) ListUserRealUsageView(ctx context.Context, group
 			view.PrimaryStatus = stat.PrimaryStatus
 			view.PrimaryLatencyMs = stat.LatencyMs
 			view.Availability7d = stat.Availability7d
+			view.WindowStats = stat.WindowStats
 			view.Timeline = stat.Timeline
 		}
 		views = append(views, view)

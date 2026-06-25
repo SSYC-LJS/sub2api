@@ -129,6 +129,7 @@ type UserMonitorView struct {
 	PrimaryLatencyMs     *int
 	PrimaryPingLatencyMs *int    // 主模型最近一次 ping 延迟
 	Availability7d       float64 // 0-100
+	WindowStats          GroupWindowStats
 	ExtraModels          []ExtraModelStatus
 	Timeline             []UserMonitorTimelinePoint // 主模型最近 N 个历史点（按 checked_at DESC，最新在前）
 }
@@ -157,6 +158,19 @@ type UserMonitorDetail struct {
 	Models    []ModelDetail
 }
 
+// GroupWindowStats 分组在 1h/12h/24h 时间窗口内的请求统计。
+type GroupWindowStats struct {
+	Requests1h  int `json:"requests_1h"`
+	Success1h   int `json:"success_1h"`
+	Errors1h    int `json:"errors_1h"`
+	Requests12h int `json:"requests_12h"`
+	Success12h  int `json:"success_12h"`
+	Errors12h   int `json:"errors_12h"`
+	Requests24h int `json:"requests_24h"`
+	Success24h  int `json:"success_24h"`
+	Errors24h   int `json:"errors_24h"`
+}
+
 // RealUsageGroupMonitorStat 是基于真实用户请求日志聚合出来的分组健康状态。
 type RealUsageGroupMonitorStat struct {
 	GroupID        int64
@@ -164,6 +178,7 @@ type RealUsageGroupMonitorStat struct {
 	PrimaryModel   string
 	LatencyMs      *int
 	Availability7d float64
+	WindowStats    GroupWindowStats
 	Timeline       []UserMonitorTimelinePoint
 }
 

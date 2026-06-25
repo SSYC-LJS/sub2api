@@ -22,6 +22,18 @@ export interface MonitorTimelinePoint {
   checked_at: string
 }
 
+export interface GroupWindowStats {
+  requests_1h: number
+  success_1h: number
+  errors_1h: number
+  requests_12h: number
+  success_12h: number
+  errors_12h: number
+  requests_24h: number
+  success_24h: number
+  errors_24h: number
+}
+
 export interface UserMonitorView {
   id: number
   name: string
@@ -32,6 +44,7 @@ export interface UserMonitorView {
   primary_latency_ms: number | null
   primary_ping_latency_ms: number | null
   availability_7d: number
+  window_stats: GroupWindowStats
   extra_models: UserMonitorExtraModel[]
   timeline: MonitorTimelinePoint[]
 }

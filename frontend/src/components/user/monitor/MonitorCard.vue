@@ -54,6 +54,15 @@
       secondary-unit="ms"
     />
 
+    <!-- Window stats: 1h / 12h / 24h request counts with congestion indicator -->
+    <div class="mt-3 grid grid-cols-3 gap-2">
+      <div v-for="ws in windowStatsDisplay" :key="ws.label" class="rounded-lg px-2 py-1.5 text-center" :class="ws.bgClass">
+        <div class="text-[10px] font-medium text-gray-500 dark:text-gray-400">{{ ws.label }}</div>
+        <div class="mt-0.5 text-sm font-semibold" :class="ws.textClass">{{ ws.count }}</div>
+        <div class="text-[10px] text-gray-400 dark:text-gray-500">{{ ws.detail }}</div>
+      </div>
+    </div>
+
     <!-- Divider -->
     <div class="mt-4 border-t border-gray-100 dark:border-dark-700/60"></div>
 
@@ -124,5 +133,52 @@ const extraModelsCountLabel = computed(() => {
   const count = props.item.extra_models?.length ?? 0
   if (count === 0) return undefined
   return t('monitorCommon.extraModelsCount', { n: count })
+})
+
+// Window stats: 1h / 12h / 24h request counts with congestion indicator
+interface WindowStatDisplay {
+  label: string
+  count: number
+  detail: string
+  bgClass: string
+  textClass: string
+}
+
+function congestionLevel(requests: number, errors: number): 'idle' | 'normal' | 'busy' | 'congested' {
+  if (requests === 0) return 'idle'
+  const errorRate = errors / requests
+  if (errorRate > 0.3) return 'congested'
+  if (requests > 100) return 'busy'
+  if (errorRate > 0.1) return 'busy'
+  return 'normal'
+}
+
+const congestionStyles: Record<string, { bg: string; text: string }> = {
+  idle: { bg: 'bg-gray-50 dark:bg-dark-800/40', text: 'text-gray-500 dark:text-gray-400' },
+  normal: { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-600 dark:text-green-400' },
+  busy: { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-600 dark:text-amber-400' },
+  congested: { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-600 dark:text-red-400' },
+}
+
+const windowStatsDisplay = computed<WindowStatDisplay[]>(() => {
+  const ws = props.item.window_stats
+  if (!ws) return []
+  const windows: Array<{ label: string; req: number; ok: number; err: number }> = [
+    { label: '1h', req: ws.requests_1h, ok: ws.success_1h, err: ws.errors_1h },
+    { label: '12h', req: ws.requests_12h, ok: ws.success_12h, err: ws.errors_12h },
+    { label: '24h', req: ws.requests_24h, ok: ws.success_24h, err: ws.errors_24h },
+  ]
+  return windows.map(w => {
+    const level = congestionLevel(w.req, w.err)
+    const style = congestionStyles[level]
+    const detail = w.req > 0 ? `${w.ok}✓ ${w.err}✗` : '无请求'
+    return {
+      label: w.label,
+      count: w.req,
+      detail,
+      bgClass: style.bg,
+      textClass: style.text,
+    }
+  })
 })
 </script>
