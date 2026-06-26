@@ -610,6 +610,7 @@ export interface SystemSettings {
   webhook_format: string;
   webhook_bearer_token_configured: boolean;
   webhook_timeout_seconds: number;
+  webhook_events: string[];
 
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: boolean;
@@ -856,6 +857,7 @@ export interface UpdateSettingsRequest {
   webhook_format?: string;
   webhook_bearer_token?: string;
   webhook_timeout_seconds?: number;
+  webhook_events?: string[];
   payment_visible_method_alipay_source?: string;
   payment_visible_method_wxpay_source?: string;
   payment_visible_method_alipay_enabled?: boolean;
@@ -961,6 +963,17 @@ export async function sendTestEmail(
     "/admin/settings/send-test-email",
     request,
   );
+  return data;
+}
+
+export interface TestWebhookRequest {
+  event: "user.registered" | "redeem.used" | "ops.error";
+  title?: string;
+  message?: string;
+}
+
+export async function testWebhook(request: TestWebhookRequest): Promise<{ ok: boolean }> {
+  const { data } = await apiClient.post<{ ok: boolean }>("/admin/settings/webhook/test", request);
   return data;
 }
 
@@ -1371,6 +1384,7 @@ export const settingsAPI = {
   updateSettings,
   testSmtpConnection,
   sendTestEmail,
+  testWebhook,
   getEmailTemplates,
   getEmailTemplate,
   updateEmailTemplate,

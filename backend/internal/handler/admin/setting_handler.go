@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
@@ -83,6 +84,50 @@ func NewSettingHandler(settingService *service.SettingService, emailService *ser
 // the constructor signature used by existing unit tests.
 func (h *SettingHandler) SetNotificationEmailService(notificationEmailService *service.NotificationEmailService) {
 	h.notificationEmailService = notificationEmailService
+}
+
+// TestWebhook 测试系统通知 Webhook，必须真实发送到当前配置的 Webhook 地址。
+// POST /api/v1/admin/settings/webhook/test
+func (h *SettingHandler) TestWebhook(c *gin.Context) {
+	var req struct {
+		Event   string `json:"event"`
+		Title   string `json:"title"`
+		Message string `json:"message"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request body")
+		return
+	}
+	eventName := strings.TrimSpace(req.Event)
+	if eventName == "" {
+		eventName = service.WebhookEventRedeemUsed
+	}
+	if !service.IsAllowedWebhookEvent(eventName) {
+		response.BadRequest(c, "unsupported webhook event")
+		return
+	}
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		title = "Webhook 测试"
+	}
+	message := strings.TrimSpace(req.Message)
+	if message == "" {
+		message = "这是一条来自系统设置页面的真实 Webhook 测试消息。"
+	}
+	if err := h.settingService.TestWebhook(c.Request.Context(), service.WebhookEvent{
+		Event:     eventName,
+		Title:     title,
+		Severity:  "info",
+		Timestamp: time.Now(),
+		Data: map[string]any{
+			"message": message,
+			"source":  "admin_settings_test",
+		},
+	}); err != nil {
+		response.Error(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"ok": true})
 }
 
 // GetSettings 获取所有系统设置
@@ -272,6 +317,12 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentVisibleMethodAlipayEnabled:      settings.PaymentVisibleMethodAlipayEnabled,
 		PaymentVisibleMethodWxpayEnabled:       settings.PaymentVisibleMethodWxpayEnabled,
 		OpenAIAdvancedSchedulerEnabled:         settings.OpenAIAdvancedSchedulerEnabled,
+		WebhookEnabled:                         settings.WebhookEnabled,
+		WebhookURL:                             settings.WebhookURL,
+		WebhookFormat:                          settings.WebhookFormat,
+		WebhookBearerTokenConfigured:           settings.WebhookBearerTokenConfigured,
+		WebhookTimeoutSeconds:                  settings.WebhookTimeoutSeconds,
+		WebhookEvents:                          settings.WebhookEvents,
 		BalanceLowNotifyEnabled:                settings.BalanceLowNotifyEnabled,
 		BalanceLowNotifyThreshold:              settings.BalanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:            settings.BalanceLowNotifyRechargeURL,
@@ -650,11 +701,12 @@ type UpdateSettingsRequest struct {
 	PaymentAlipayForceQRCode *bool `json:"payment_alipay_force_qrcode"`
 
 	// 系统通知 Webhook
-	WebhookEnabled        *bool   `json:"webhook_enabled"`
-	WebhookURL            *string `json:"webhook_url"`
-	WebhookFormat         *string `json:"webhook_format"`
-	WebhookBearerToken    *string `json:"webhook_bearer_token"`
-	WebhookTimeoutSeconds *int    `json:"webhook_timeout_seconds"`
+	WebhookEnabled        *bool    `json:"webhook_enabled"`
+	WebhookURL            *string  `json:"webhook_url"`
+	WebhookFormat         *string  `json:"webhook_format"`
+	WebhookBearerToken    *string  `json:"webhook_bearer_token"`
+	WebhookTimeoutSeconds *int     `json:"webhook_timeout_seconds"`
+	WebhookEvents         []string `json:"webhook_events"`
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool `json:"channel_monitor_enabled"`
@@ -803,6 +855,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 	if webhookTimeoutSeconds > 30 {
 		webhookTimeoutSeconds = 30
+	}
+	webhookEvents := service.NormalizeWebhookEvents(req.WebhookEvents)
+	if len(webhookEvents) == 0 {
+		webhookEvents = service.DefaultWebhookEvents()
 	}
 	if webhookEnabled {
 		if webhookURL == "" {

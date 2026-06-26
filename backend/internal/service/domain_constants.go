@@ -63,6 +63,28 @@ func IsAllowedQuotaPlatform(s string) bool {
 	return false
 }
 
+// Webhook event constants
+const (
+	WebhookEventUserRegistered = "user.registered"
+	WebhookEventRedeemUsed     = "redeem.used"
+	WebhookEventOpsError       = "ops.error"
+)
+
+var AllowedWebhookEvents = []string{
+	WebhookEventUserRegistered,
+	WebhookEventRedeemUsed,
+	WebhookEventOpsError,
+}
+
+func IsAllowedWebhookEvent(event string) bool {
+	for _, allowed := range AllowedWebhookEvents {
+		if event == allowed {
+			return true
+		}
+	}
+	return false
+}
+
 // Account type constants
 const (
 	AccountTypeOAuth          = domain.AccountTypeOAuth          // OAuth类型账号（full scope: profile + inference）
@@ -141,6 +163,7 @@ const (
 	SettingKeyWebhookFormat                    = "webhook_format"                      // 系统通知 Webhook 格式：feishu/json
 	SettingKeyWebhookBearerToken               = "webhook_bearer_token"                // 系统通知 Webhook Bearer Token
 	SettingKeyWebhookTimeoutSeconds            = "webhook_timeout_seconds"             // 系统通知 Webhook 超时时间（秒）
+	SettingKeyWebhookEvents                    = "webhook_events"                      // 系统通知 Webhook 推送事件列表（JSON 数组）
 	SettingKeyCyberSessionBlockEnabled         = "cyber_session_block_enabled"         // cyber 命中后会话级自动屏蔽总开关(默认关)
 	SettingKeyCyberSessionBlockTTLSeconds      = "cyber_session_block_ttl_seconds"     // 会话屏蔽 TTL 秒数(默认 3600)
 	SettingKeyLoginAgreementEnabled            = "login_agreement_enabled"             // 登录前是否要求同意条款

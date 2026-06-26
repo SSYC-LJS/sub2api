@@ -52,6 +52,9 @@ func (s *WebhookService) SetSettingRepository(repo SettingRepository) {
 
 func (s *WebhookService) effectiveConfig(ctx context.Context) config.WebhookConfig {
 	cfg := s.cfg
+	if len(cfg.Events) == 0 {
+		cfg.Events = DefaultWebhookEvents()
+	}
 	if cfg.TimeoutSeconds <= 0 {
 		cfg.TimeoutSeconds = int(defaultWebhookTimeout / time.Second)
 	}
@@ -64,6 +67,7 @@ func (s *WebhookService) effectiveConfig(ctx context.Context) config.WebhookConf
 		SettingKeyWebhookFormat,
 		SettingKeyWebhookBearerToken,
 		SettingKeyWebhookTimeoutSeconds,
+		SettingKeyWebhookEvents,
 	})
 	if err != nil {
 		return cfg
@@ -91,6 +95,9 @@ func (s *WebhookService) effectiveConfig(ctx context.Context) config.WebhookConf
 			cfg.TimeoutSeconds = n
 		}
 	}
+	if raw, ok := settings[SettingKeyWebhookEvents]; ok {
+		cfg.Events = ParseWebhookEvents(raw)
+	}
 	if cfg.TimeoutSeconds < 1 {
 		cfg.TimeoutSeconds = int(defaultWebhookTimeout / time.Second)
 	}
@@ -100,13 +107,21 @@ func (s *WebhookService) effectiveConfig(ctx context.Context) config.WebhookConf
 	return cfg
 }
 
+func (s *WebhookService) IsEventEnabled(event string) bool {
+	if s == nil {
+		return false
+	}
+	cfg := s.effectiveConfig(context.Background())
+	return IsWebhookEventEnabled(cfg.Events, event)
+}
+
 func (s *WebhookService) NotifyAsync(event WebhookEvent) {
 	if s == nil {
 		return
 	}
 	go func() {
 		cfg := s.effectiveConfig(context.Background())
-		if !cfg.Enabled || strings.TrimSpace(cfg.URL) == "" {
+		if !cfg.Enabled || strings.TrimSpace(cfg.URL) == "" || !IsWebhookEventEnabled(cfg.Events, event.Event) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSeconds)*time.Second)
@@ -122,6 +137,9 @@ func (s *WebhookService) Notify(ctx context.Context, event WebhookEvent) error {
 		return nil
 	}
 	cfg := s.effectiveConfig(ctx)
+	if !IsWebhookEventEnabled(cfg.Events, event.Event) {
+		return fmt.Errorf("webhook event %s is not enabled", event.Event)
+	}
 	return s.notifyWithConfig(ctx, cfg, event)
 }
 

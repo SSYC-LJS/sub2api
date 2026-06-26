@@ -224,6 +224,7 @@ type SystemSettings struct {
 	WebhookFormat                string
 	WebhookBearerToken           string
 	WebhookTimeoutSeconds        int
+	WebhookEvents                []string
 	WebhookBearerTokenConfigured bool
 
 	// 余额不足提醒

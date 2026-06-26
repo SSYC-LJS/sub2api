@@ -158,11 +158,12 @@ type UpdateConfig struct {
 }
 
 type WebhookConfig struct {
-	Enabled        bool   `mapstructure:"enabled"`
-	URL            string `mapstructure:"url"`
-	Format         string `mapstructure:"format"`
-	BearerToken    string `mapstructure:"bearer_token"`
-	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
+	Enabled        bool     `mapstructure:"enabled"`
+	URL            string   `mapstructure:"url"`
+	Format         string   `mapstructure:"format"`
+	BearerToken    string   `mapstructure:"bearer_token"`
+	TimeoutSeconds int      `mapstructure:"timeout_seconds"`
+	Events         []string `mapstructure:"events"`
 }
 
 type IdempotencyConfig struct {

@@ -56,6 +56,64 @@ var (
 	)
 )
 
+func NormalizeWebhookEvents(events []string) []string {
+	seen := make(map[string]struct{}, len(events))
+	result := make([]string, 0, len(events))
+	for _, event := range events {
+		event = strings.TrimSpace(event)
+		if event == "" || !IsAllowedWebhookEvent(event) {
+			continue
+		}
+		if _, ok := seen[event]; ok {
+			continue
+		}
+		seen[event] = struct{}{}
+		result = append(result, event)
+	}
+	return result
+}
+
+func DefaultWebhookEvents() []string {
+	return append([]string(nil), AllowedWebhookEvents...)
+}
+
+func ParseWebhookEvents(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return DefaultWebhookEvents()
+	}
+	var events []string
+	if err := json.Unmarshal([]byte(raw), &events); err != nil {
+		return DefaultWebhookEvents()
+	}
+	events = NormalizeWebhookEvents(events)
+	if events == nil {
+		return []string{}
+	}
+	return events
+}
+
+func MarshalWebhookEvents(events []string) (string, error) {
+	events = NormalizeWebhookEvents(events)
+	if events == nil {
+		events = []string{}
+	}
+	data, err := json.Marshal(events)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func IsWebhookEventEnabled(events []string, event string) bool {
+	for _, allowed := range NormalizeWebhookEvents(events) {
+		if allowed == event {
+			return true
+		}
+	}
+	return false
+}
+
 type SettingRepository interface {
 	Get(ctx context.Context, key string) (*Setting, error)
 	GetValue(ctx context.Context, key string) (string, error)
@@ -1889,6 +1947,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		webhookTimeoutSeconds = 30
 	}
 	updates[SettingKeyWebhookTimeoutSeconds] = strconv.Itoa(webhookTimeoutSeconds)
+	webhookEvents, err := MarshalWebhookEvents(settings.WebhookEvents)
+	if err != nil {
+		return nil, err
+	}
+	updates[SettingKeyWebhookEvents] = webhookEvents
 
 	// LinuxDo Connect OAuth 登录
 	updates[SettingKeyLinuxDoConnectEnabled] = strconv.FormatBool(settings.LinuxDoConnectEnabled)
@@ -3118,6 +3181,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	if webhookTimeoutSeconds > 30 {
 		webhookTimeoutSeconds = 30
 	}
+	webhookEvents := ParseWebhookEvents(settings[SettingKeyWebhookEvents])
 	result := &SystemSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
 		EmailVerifyEnabled:               emailVerifyEnabled,
@@ -3147,6 +3211,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		WebhookBearerToken:               webhookBearerToken,
 		WebhookBearerTokenConfigured:     strings.TrimSpace(webhookBearerToken) != "",
 		WebhookTimeoutSeconds:            webhookTimeoutSeconds,
+		WebhookEvents:                    webhookEvents,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
@@ -5177,4 +5242,13 @@ func mergePlatformQuotaDefaults(dst, src *DefaultPlatformQuotaSetting) {
 	if src.MonthlyLimitUSD != nil {
 		dst.MonthlyLimitUSD = src.MonthlyLimitUSD
 	}
+}
+
+func (s *SettingService) TestWebhook(ctx context.Context, event WebhookEvent) error {
+	if s == nil {
+		return nil
+	}
+	svc := NewWebhookService(s.cfg)
+	svc.SetSettingRepository(s.settingRepo)
+	return svc.Notify(ctx, event)
 }

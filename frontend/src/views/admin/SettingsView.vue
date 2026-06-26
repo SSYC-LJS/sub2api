@@ -6589,6 +6589,25 @@
                 </div>
               </div>
 
+              <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                <div class="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div class="font-medium text-gray-900 dark:text-white">可推送事件</div>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">只会推送你勾选的事件，测试按钮也会真实发送当前选中的测试事件。</p>
+                  </div>
+                  <button class="btn btn-outline" type="button" @click="testWebhook">测试 Webhook</button>
+                </div>
+                <div class="space-y-3">
+                  <label v-for="item in webhookEventOptions" :key="item.value" class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
+                    <input v-model="form.webhook_events" :value="item.value" type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600" />
+                    <div>
+                      <div class="font-medium text-gray-900 dark:text-white">{{ item.label }}</div>
+                      <div class="text-sm text-gray-500 dark:text-gray-400">{{ item.description }}</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-900/20 dark:text-blue-200">
                 {{ t("admin.settings.webhook.eventHint") }}
               </div>
@@ -7106,6 +7125,7 @@ import {
   deriveWeChatConnectStoredMode,
   normalizeDefaultSubscriptionSettings,
   resolveWeChatConnectModeCapabilities,
+  testWebhook as testWebhookApi,
 } from "@/api/admin/settings";
 import type {
   AuthSourceDefaultsState,
@@ -7760,6 +7780,48 @@ interface DefaultSubscriptionGroupOption {
   [key: string]: unknown;
 }
 
+type WebhookTestEvent = "user.registered" | "redeem.used" | "ops.error";
+
+const webhookEventOptions: Array<{ value: WebhookTestEvent; label: string; description: string }> = [
+  { value: "user.registered", label: "用户注册", description: "用户完成注册后推送" },
+  { value: "redeem.used", label: "兑换码兑换成功", description: "兑换码被成功兑换后推送" },
+  { value: "ops.error", label: "运维/网关错误", description: "错误日志入库后推送" },
+];
+
+function defaultWebhookEvents(): WebhookTestEvent[] {
+  return webhookEventOptions.map((item) => item.value);
+}
+
+function normalizeWebhookEvents(values: unknown): WebhookTestEvent[] {
+  if (!Array.isArray(values)) return defaultWebhookEvents();
+  const allowed = new Set(webhookEventOptions.map((item) => item.value));
+  const result: WebhookTestEvent[] = [];
+  for (const value of values) {
+    if (typeof value === "string" && allowed.has(value as WebhookTestEvent) && !result.includes(value as WebhookTestEvent)) {
+      result.push(value as WebhookTestEvent);
+    }
+  }
+  return result.length ? result : defaultWebhookEvents();
+}
+
+async function testWebhook(): Promise<void> {
+  try {
+    await testWebhookApi({
+      event: webhookTestEvent.value,
+      title: `Webhook 测试 - ${webhookTestLabel.value}`,
+      message: `来自系统设置页面的真实测试消息，事件：${webhookTestEvent.value}`,
+    });
+    appStore.showSuccess(t("admin.settings.webhook.testSuccess"));
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t("admin.settings.webhook.testFailed")));
+  }
+}
+
+const webhookTestEvent = ref<WebhookTestEvent>("redeem.used");
+const webhookTestLabel = computed(() =>
+  webhookEventOptions.find((item) => item.value === webhookTestEvent.value)?.label ?? webhookTestEvent.value,
+);
+
 type SettingsForm = Omit<
   SystemSettings,
   | "wechat_connect_open_enabled"
@@ -7855,6 +7917,7 @@ const form = reactive<SettingsForm>({
   webhook_bearer_token: "",
   webhook_bearer_token_configured: false,
   webhook_timeout_seconds: 5,
+  webhook_events: defaultWebhookEvents(),
   table_default_page_size: tablePageSizeDefault,
   table_page_size_options: [10, 20, 50, 100],
   custom_menu_items: [] as Array<{
@@ -9188,6 +9251,7 @@ async function saveSettings() {
       webhook_format: form.webhook_format,
       webhook_bearer_token: form.webhook_bearer_token || undefined,
       webhook_timeout_seconds: Number(form.webhook_timeout_seconds) || 5,
+      webhook_events: normalizeWebhookEvents(form.webhook_events),
       openai_advanced_scheduler_enabled: form.openai_advanced_scheduler_enabled,
       // 余额、订阅到期与账号限额通知
       balance_low_notify_enabled: form.balance_low_notify_enabled,
