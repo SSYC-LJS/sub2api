@@ -6501,6 +6501,101 @@
           />
         </div>
 
+
+        <div v-show="activeTab === 'notifications'" class="space-y-6">
+          <div class="card">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.webhook.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.webhook.description") }}
+              </p>
+            </div>
+            <div class="space-y-6 p-6">
+              <div class="flex items-center justify-between rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                <div>
+                  <div class="font-medium text-gray-900 dark:text-white">
+                    {{ t("admin.settings.webhook.enable") }}
+                  </div>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.webhook.enableHint") }}
+                  </p>
+                </div>
+                <Toggle v-model="form.webhook_enabled" />
+              </div>
+
+              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div class="md:col-span-2">
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.webhook.url") }}
+                  </label>
+                  <input
+                    v-model.trim="form.webhook_url"
+                    type="url"
+                    class="input"
+                    placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.webhook.urlHint") }}
+                  </p>
+                </div>
+
+                <div>
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.webhook.format") }}
+                  </label>
+                  <select v-model="form.webhook_format" class="input">
+                    <option value="feishu">Feishu/Lark 卡片</option>
+                    <option value="json">JSON</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.webhook.timeout") }}
+                  </label>
+                  <input
+                    v-model.number="form.webhook_timeout_seconds"
+                    type="number"
+                    min="1"
+                    max="30"
+                    class="input"
+                  />
+                </div>
+
+                <div class="md:col-span-2">
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.webhook.bearerToken") }}
+                  </label>
+                  <input
+                    v-model="form.webhook_bearer_token"
+                    type="password"
+                    class="input"
+                    autocomplete="new-password"
+                    :placeholder="
+                      form.webhook_bearer_token_configured
+                        ? t('admin.settings.webhook.bearerTokenConfiguredPlaceholder')
+                        : t('admin.settings.webhook.bearerTokenPlaceholder')
+                    "
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      form.webhook_bearer_token_configured
+                        ? t("admin.settings.webhook.bearerTokenConfiguredHint")
+                        : t("admin.settings.webhook.bearerTokenHint")
+                    }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-900/20 dark:text-blue-200">
+                {{ t("admin.settings.webhook.eventHint") }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div v-show="activeTab === 'email'" class="space-y-6">
           <!-- Email disabled hint - show when email_verify_enabled is off -->
           <div v-if="!form.email_verify_enabled" class="card">
@@ -7087,6 +7182,7 @@ type SettingsTab =
   | "users"
   | "gateway"
   | "payment"
+  | "notifications"
   | "email"
   | "backup";
 const activeTab = ref<SettingsTab>("general");
@@ -7098,6 +7194,7 @@ const settingsTabs = [
   { key: "users" as SettingsTab, icon: "user" as const },
   { key: "gateway" as SettingsTab, icon: "server" as const },
   { key: "payment" as SettingsTab, icon: "creditCard" as const },
+  { key: "notifications" as SettingsTab, icon: "bell" as const },
   { key: "email" as SettingsTab, icon: "mail" as const },
   { key: "backup" as SettingsTab, icon: "database" as const },
 ];
@@ -7668,6 +7765,7 @@ type SettingsForm = Omit<
   | "wechat_connect_open_enabled"
   | "wechat_connect_mp_enabled"
   | "wechat_connect_mobile_enabled"
+  | "webhook_bearer_token_configured"
 > & {
   smtp_password: string;
   turnstile_secret_key: string;
@@ -7683,6 +7781,8 @@ type SettingsForm = Omit<
   oidc_connect_client_secret: string;
   github_oauth_client_secret: string;
   google_oauth_client_secret: string;
+  webhook_bearer_token: string;
+  webhook_bearer_token_configured: boolean;
   force_email_on_third_party_signup: boolean;
   openai_advanced_scheduler_enabled: boolean;
   // 系统全局平台限额 map；form 内始终归一化为全 4 平台对象（模板非空绑定依赖此不变量）
@@ -7749,6 +7849,12 @@ const form = reactive<SettingsForm>({
   payment_cancel_rate_limit_unit: "day",
   payment_cancel_rate_limit_window_mode: "rolling",
   payment_alipay_force_qrcode: false,
+  webhook_enabled: false,
+  webhook_url: "",
+  webhook_format: "feishu",
+  webhook_bearer_token: "",
+  webhook_bearer_token_configured: false,
+  webhook_timeout_seconds: 5,
   table_default_page_size: tablePageSizeDefault,
   table_page_size_options: [10, 20, 50, 100],
   custom_menu_items: [] as Array<{
@@ -9077,6 +9183,11 @@ async function saveSettings() {
       payment_cancel_rate_limit_window_mode:
         form.payment_cancel_rate_limit_window_mode,
       payment_alipay_force_qrcode: form.payment_alipay_force_qrcode,
+      webhook_enabled: form.webhook_enabled,
+      webhook_url: form.webhook_url,
+      webhook_format: form.webhook_format,
+      webhook_bearer_token: form.webhook_bearer_token || undefined,
+      webhook_timeout_seconds: Number(form.webhook_timeout_seconds) || 5,
       openai_advanced_scheduler_enabled: form.openai_advanced_scheduler_enabled,
       // 余额、订阅到期与账号限额通知
       balance_low_notify_enabled: form.balance_low_notify_enabled,
@@ -9194,6 +9305,7 @@ async function saveSettings() {
       form.wechat_connect_mode,
     );
     form.oidc_connect_client_secret = "";
+    form.webhook_bearer_token = "";
     // Refresh OpenAI fast/flex policy from server response
     if (
       updated.openai_fast_policy_settings &&

@@ -649,6 +649,13 @@ type UpdateSettingsRequest struct {
 	// Force Alipay mobile clients to use QR code payment instead of mobile redirect
 	PaymentAlipayForceQRCode *bool `json:"payment_alipay_force_qrcode"`
 
+	// 系统通知 Webhook
+	WebhookEnabled        *bool   `json:"webhook_enabled"`
+	WebhookURL            *string `json:"webhook_url"`
+	WebhookFormat         *string `json:"webhook_format"`
+	WebhookBearerToken    *string `json:"webhook_bearer_token"`
+	WebhookTimeoutSeconds *int    `json:"webhook_timeout_seconds"`
+
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool `json:"channel_monitor_enabled"`
 	ChannelMonitorDefaultIntervalSeconds *int  `json:"channel_monitor_default_interval_seconds"`
@@ -764,6 +771,49 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.SMTPPort = 587
 	}
 	req.DefaultSubscriptions = normalizeDefaultSubscriptions(req.DefaultSubscriptions)
+
+	webhookEnabled := previousSettings.WebhookEnabled
+	if req.WebhookEnabled != nil {
+		webhookEnabled = *req.WebhookEnabled
+	}
+	webhookURL := previousSettings.WebhookURL
+	if req.WebhookURL != nil {
+		webhookURL = strings.TrimSpace(*req.WebhookURL)
+	}
+	webhookFormat := previousSettings.WebhookFormat
+	if req.WebhookFormat != nil {
+		webhookFormat = strings.ToLower(strings.TrimSpace(*req.WebhookFormat))
+	}
+	if webhookFormat != "json" {
+		webhookFormat = "feishu"
+	}
+	webhookBearerToken := ""
+	if req.WebhookBearerToken != nil {
+		webhookBearerToken = strings.TrimSpace(*req.WebhookBearerToken)
+	}
+	if webhookBearerToken == "" {
+		webhookBearerToken = previousSettings.WebhookBearerToken
+	}
+	webhookTimeoutSeconds := previousSettings.WebhookTimeoutSeconds
+	if req.WebhookTimeoutSeconds != nil {
+		webhookTimeoutSeconds = *req.WebhookTimeoutSeconds
+	}
+	if webhookTimeoutSeconds < 1 {
+		webhookTimeoutSeconds = 5
+	}
+	if webhookTimeoutSeconds > 30 {
+		webhookTimeoutSeconds = 30
+	}
+	if webhookEnabled {
+		if webhookURL == "" {
+			response.BadRequest(c, "Webhook URL is required when enabled")
+			return
+		}
+		if err := config.ValidateAbsoluteHTTPURL(webhookURL); err != nil {
+			response.BadRequest(c, "Webhook URL must be an absolute http(s) URL")
+			return
+		}
+	}
 	req.AuthSourceDefaultEmailSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultEmailSubscriptions)
 	req.AuthSourceDefaultLinuxDoSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultLinuxDoSubscriptions)
 	req.AuthSourceDefaultOIDCSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultOIDCSubscriptions)

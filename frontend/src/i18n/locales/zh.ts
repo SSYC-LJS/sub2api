@@ -5687,6 +5687,7 @@ export default {
         email: '邮件设置',
         backup: '数据备份',
         payment: '支付设置',
+        notifications: '通知/Webhook',
       },
       features: {
         channelMonitor: {
@@ -5770,6 +5771,23 @@ export default {
             clearHint: '留空提交将清除所选用户的专属比例。',
           },
         },
+      },
+
+      webhook: {
+        title: '系统通知 Webhook',
+        description: '配置系统事件通知 Webhook。当前会在兑换码兑换成功等事件触发后异步推送，不用于支付回调。',
+        enable: '启用 Webhook 通知',
+        enableHint: '开启后，兑换码兑换成功会发送通知到配置的 Webhook 地址。',
+        url: 'Webhook 地址',
+        urlHint: '支持飞书/Lark 自定义机器人地址，也支持接收 JSON 的普通 HTTP(S) 地址。',
+        format: '消息格式',
+        timeout: '请求超时（秒）',
+        bearerToken: 'Bearer Token（可选）',
+        bearerTokenPlaceholder: '可选，用于 Authorization: Bearer ...',
+        bearerTokenConfiguredPlaceholder: '********',
+        bearerTokenHint: '如果目标服务不需要鉴权可以留空。',
+        bearerTokenConfiguredHint: '密钥已配置，留空以保留当前值。',
+        eventHint: '说明：这不是支付回调；它监听系统事件。兑换码兑换成功事件名为 redeem_code.used，payload 会包含兑换码类型、面值、有效期、用户等信息。',
       },
       emailTabDisabledTitle: '邮箱验证未启用',
       emailTabDisabledHint: '请在「安全与认证」选项卡中启用邮箱验证后，再配置 SMTP 设置。',

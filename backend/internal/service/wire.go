@@ -550,10 +550,16 @@ func ProvideAPIKeyService(
 	return svc
 }
 
+func ProvideWebhookService(cfg *config.Config, settingRepo SettingRepository) *WebhookService {
+	svc := NewWebhookService(cfg)
+	svc.SetSettingRepository(settingRepo)
+	return svc
+}
+
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
 	// Core services
-	NewWebhookService,
+	ProvideWebhookService,
 	ProvideAuthService,
 	NewUserService,
 	ProvideAPIKeyService,

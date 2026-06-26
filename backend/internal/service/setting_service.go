@@ -1871,6 +1871,24 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyTurnstileSecretKey] = settings.TurnstileSecretKey
 	}
 	updates[SettingKeyAPIKeyACLTrustForwardedIP] = strconv.FormatBool(settings.APIKeyACLTrustForwardedIP)
+	updates[SettingKeyWebhookEnabled] = strconv.FormatBool(settings.WebhookEnabled)
+	updates[SettingKeyWebhookURL] = strings.TrimSpace(settings.WebhookURL)
+	webhookFormat := strings.ToLower(strings.TrimSpace(settings.WebhookFormat))
+	if webhookFormat != "json" {
+		webhookFormat = "feishu"
+	}
+	updates[SettingKeyWebhookFormat] = webhookFormat
+	if strings.TrimSpace(settings.WebhookBearerToken) != "" {
+		updates[SettingKeyWebhookBearerToken] = strings.TrimSpace(settings.WebhookBearerToken)
+	}
+	webhookTimeoutSeconds := settings.WebhookTimeoutSeconds
+	if webhookTimeoutSeconds < 1 {
+		webhookTimeoutSeconds = int(defaultWebhookTimeout / time.Second)
+	}
+	if webhookTimeoutSeconds > 30 {
+		webhookTimeoutSeconds = 30
+	}
+	updates[SettingKeyWebhookTimeoutSeconds] = strconv.Itoa(webhookTimeoutSeconds)
 
 	// LinuxDo Connect OAuth 登录
 	updates[SettingKeyLinuxDoConnectEnabled] = strconv.FormatBool(settings.LinuxDoConnectEnabled)
@@ -3070,6 +3088,36 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	} else if s != nil && s.cfg != nil {
 		apiKeyACLTrustForwardedIP = s.cfg.Security.TrustForwardedIPForAPIKeyACL
 	}
+	webhookBase := config.WebhookConfig{}
+	if s != nil && s.cfg != nil {
+		webhookBase = s.cfg.Webhook
+	}
+	webhookEnabled := webhookBase.Enabled
+	if value, ok := settings[SettingKeyWebhookEnabled]; ok {
+		webhookEnabled = value == "true"
+	}
+	webhookURL := strings.TrimSpace(firstNonEmpty(settings[SettingKeyWebhookURL], webhookBase.URL))
+	webhookFormat := strings.ToLower(strings.TrimSpace(firstNonEmpty(settings[SettingKeyWebhookFormat], webhookBase.Format, "feishu")))
+	if webhookFormat != "json" {
+		webhookFormat = "feishu"
+	}
+	webhookBearerToken := settings[SettingKeyWebhookBearerToken]
+	if webhookBearerToken == "" {
+		webhookBearerToken = webhookBase.BearerToken
+	}
+	webhookTimeoutSeconds := webhookBase.TimeoutSeconds
+	if webhookTimeoutSeconds <= 0 {
+		webhookTimeoutSeconds = int(defaultWebhookTimeout / time.Second)
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(settings[SettingKeyWebhookTimeoutSeconds])); err == nil && n > 0 {
+		webhookTimeoutSeconds = n
+	}
+	if webhookTimeoutSeconds < 1 {
+		webhookTimeoutSeconds = 1
+	}
+	if webhookTimeoutSeconds > 30 {
+		webhookTimeoutSeconds = 30
+	}
 	result := &SystemSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
 		EmailVerifyEnabled:               emailVerifyEnabled,
@@ -3093,6 +3141,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
 		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
 		APIKeyACLTrustForwardedIP:        apiKeyACLTrustForwardedIP,
+		WebhookEnabled:                   webhookEnabled,
+		WebhookURL:                       webhookURL,
+		WebhookFormat:                    webhookFormat,
+		WebhookBearerToken:               webhookBearerToken,
+		WebhookBearerTokenConfigured:     strings.TrimSpace(webhookBearerToken) != "",
+		WebhookTimeoutSeconds:            webhookTimeoutSeconds,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),

@@ -5528,6 +5528,7 @@ export default {
         email: 'Email',
         backup: 'Backup',
         payment: 'Payment',
+        notifications: 'Notifications/Webhook',
       },
       features: {
         channelMonitor: {
@@ -5614,6 +5615,23 @@ export default {
       },
       emailTabDisabledTitle: 'Email Verification Not Enabled',
       emailTabDisabledHint: 'Enable email verification in the Security tab to configure SMTP settings.',
+
+      webhook: {
+        title: 'System Notification Webhook',
+        description: 'Configure system event webhooks. Redeem-code usage is sent asynchronously; this is not a payment callback.',
+        enable: 'Enable webhook notifications',
+        enableHint: 'When enabled, successful redeem-code usage sends a notification to the configured webhook URL.',
+        url: 'Webhook URL',
+        urlHint: 'Supports Feishu/Lark bot URLs and generic HTTP(S) endpoints that accept JSON.',
+        format: 'Message format',
+        timeout: 'Request timeout (seconds)',
+        bearerToken: 'Bearer Token (optional)',
+        bearerTokenPlaceholder: 'Optional, used as Authorization: Bearer ...',
+        bearerTokenConfiguredPlaceholder: '********',
+        bearerTokenHint: 'Leave empty if the target endpoint does not require auth.',
+        bearerTokenConfiguredHint: 'Token is configured. Leave empty to keep the current value.',
+        eventHint: 'Note: this is not a payment callback. It listens to system events. Successful redeem-code usage emits redeem_code.used with code type, value, validity days, user, and related fields.',
+      },
       registration: {
         title: 'Registration Settings',
         description: 'Control user registration and verification',

@@ -218,6 +218,14 @@ type SystemSettings struct {
 	// OpenAI 账号调度
 	OpenAIAdvancedSchedulerEnabled bool
 
+	// 系统通知 Webhook
+	WebhookEnabled               bool
+	WebhookURL                   string
+	WebhookFormat                string
+	WebhookBearerToken           string
+	WebhookTimeoutSeconds        int
+	WebhookBearerTokenConfigured bool
+
 	// 余额不足提醒
 	BalanceLowNotifyEnabled     bool
 	BalanceLowNotifyThreshold   float64

@@ -16,8 +16,9 @@ import (
 const defaultWebhookTimeout = 5 * time.Second
 
 type WebhookService struct {
-	cfg        config.WebhookConfig
-	httpClient *http.Client
+	cfg         config.WebhookConfig
+	settingRepo SettingRepository
+	httpClient  *http.Client
 }
 
 type WebhookEvent struct {
@@ -42,36 +43,105 @@ func NewWebhookService(cfg *config.Config) *WebhookService {
 	}
 }
 
+func (s *WebhookService) SetSettingRepository(repo SettingRepository) {
+	if s == nil {
+		return
+	}
+	s.settingRepo = repo
+}
+
+func (s *WebhookService) effectiveConfig(ctx context.Context) config.WebhookConfig {
+	cfg := s.cfg
+	if cfg.TimeoutSeconds <= 0 {
+		cfg.TimeoutSeconds = int(defaultWebhookTimeout / time.Second)
+	}
+	if s == nil || s.settingRepo == nil {
+		return cfg
+	}
+	settings, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyWebhookEnabled,
+		SettingKeyWebhookURL,
+		SettingKeyWebhookFormat,
+		SettingKeyWebhookBearerToken,
+		SettingKeyWebhookTimeoutSeconds,
+	})
+	if err != nil {
+		return cfg
+	}
+	if raw, ok := settings[SettingKeyWebhookEnabled]; ok {
+		cfg.Enabled = strings.TrimSpace(raw) == "true"
+	}
+	if raw, ok := settings[SettingKeyWebhookURL]; ok {
+		cfg.URL = strings.TrimSpace(raw)
+	}
+	if raw, ok := settings[SettingKeyWebhookFormat]; ok {
+		format := strings.ToLower(strings.TrimSpace(raw))
+		if format == "json" {
+			cfg.Format = "json"
+		} else if format != "" {
+			cfg.Format = "feishu"
+		}
+	}
+	if raw, ok := settings[SettingKeyWebhookBearerToken]; ok && strings.TrimSpace(raw) != "" {
+		cfg.BearerToken = strings.TrimSpace(raw)
+	}
+	if raw, ok := settings[SettingKeyWebhookTimeoutSeconds]; ok {
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimSpace(raw), "%d", &n); err == nil && n > 0 {
+			cfg.TimeoutSeconds = n
+		}
+	}
+	if cfg.TimeoutSeconds < 1 {
+		cfg.TimeoutSeconds = int(defaultWebhookTimeout / time.Second)
+	}
+	if cfg.TimeoutSeconds > 30 {
+		cfg.TimeoutSeconds = 30
+	}
+	return cfg
+}
+
 func (s *WebhookService) NotifyAsync(event WebhookEvent) {
-	if s == nil || !s.cfg.Enabled || strings.TrimSpace(s.cfg.URL) == "" {
+	if s == nil {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), s.timeout())
+		cfg := s.effectiveConfig(context.Background())
+		if !cfg.Enabled || strings.TrimSpace(cfg.URL) == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSeconds)*time.Second)
 		defer cancel()
-		if err := s.Notify(ctx, event); err != nil {
+		if err := s.notifyWithConfig(ctx, cfg, event); err != nil {
 			log.Printf("[Webhook] notify failed: %v", err)
 		}
 	}()
 }
 
 func (s *WebhookService) Notify(ctx context.Context, event WebhookEvent) error {
-	if s == nil || !s.cfg.Enabled || strings.TrimSpace(s.cfg.URL) == "" {
+	if s == nil {
+		return nil
+	}
+	cfg := s.effectiveConfig(ctx)
+	return s.notifyWithConfig(ctx, cfg, event)
+}
+
+func (s *WebhookService) notifyWithConfig(ctx context.Context, cfg config.WebhookConfig, event WebhookEvent) error {
+	if s == nil || !cfg.Enabled || strings.TrimSpace(cfg.URL) == "" {
 		return nil
 	}
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
-	payload, err := s.buildPayload(event)
+	payload, err := s.buildPayloadWithConfig(cfg, event)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(s.cfg.URL), bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(cfg.URL), bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token := strings.TrimSpace(s.cfg.BearerToken); token != "" {
+	if token := strings.TrimSpace(cfg.BearerToken); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := s.httpClient.Do(req)
@@ -86,7 +156,11 @@ func (s *WebhookService) Notify(ctx context.Context, event WebhookEvent) error {
 }
 
 func (s *WebhookService) buildPayload(event WebhookEvent) ([]byte, error) {
-	format := strings.ToLower(strings.TrimSpace(s.cfg.Format))
+	return s.buildPayloadWithConfig(s.cfg, event)
+}
+
+func (s *WebhookService) buildPayloadWithConfig(cfg config.WebhookConfig, event WebhookEvent) ([]byte, error) {
+	format := strings.ToLower(strings.TrimSpace(cfg.Format))
 	if format == "" || format == "feishu" || format == "lark" {
 		return json.Marshal(map[string]any{
 			"msg_type": "interactive",
