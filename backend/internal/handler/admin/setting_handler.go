@@ -701,12 +701,12 @@ type UpdateSettingsRequest struct {
 	PaymentAlipayForceQRCode *bool `json:"payment_alipay_force_qrcode"`
 
 	// 系统通知 Webhook
-	WebhookEnabled        *bool    `json:"webhook_enabled"`
-	WebhookURL            *string  `json:"webhook_url"`
-	WebhookFormat         *string  `json:"webhook_format"`
-	WebhookBearerToken    *string  `json:"webhook_bearer_token"`
-	WebhookTimeoutSeconds *int     `json:"webhook_timeout_seconds"`
-	WebhookEvents         []string `json:"webhook_events"`
+	WebhookEnabled        *bool     `json:"webhook_enabled"`
+	WebhookURL            *string   `json:"webhook_url"`
+	WebhookFormat         *string   `json:"webhook_format"`
+	WebhookBearerToken    *string   `json:"webhook_bearer_token"`
+	WebhookTimeoutSeconds *int      `json:"webhook_timeout_seconds"`
+	WebhookEvents         *[]string `json:"webhook_events"`
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool `json:"channel_monitor_enabled"`
@@ -856,9 +856,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if webhookTimeoutSeconds > 30 {
 		webhookTimeoutSeconds = 30
 	}
-	webhookEvents := service.NormalizeWebhookEvents(req.WebhookEvents)
-	if len(webhookEvents) == 0 {
-		webhookEvents = service.DefaultWebhookEvents()
+	webhookEvents := previousSettings.WebhookEvents
+	if req.WebhookEvents != nil {
+		webhookEvents = service.NormalizeWebhookEvents(*req.WebhookEvents)
+		if len(webhookEvents) == 0 {
+			webhookEvents = service.DefaultWebhookEvents()
+		}
 	}
 	if webhookEnabled {
 		if webhookURL == "" {
@@ -1626,6 +1629,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.APIKeyACLTrustForwardedIP
 		}(),
+		WebhookEnabled:                         webhookEnabled,
+		WebhookURL:                             webhookURL,
+		WebhookFormat:                          webhookFormat,
+		WebhookBearerToken:                     webhookBearerToken,
+		WebhookTimeoutSeconds:                  webhookTimeoutSeconds,
+		WebhookEvents:                          webhookEvents,
 		LinuxDoConnectEnabled:                  req.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                 req.LinuxDoConnectClientID,
 		LinuxDoConnectClientSecret:             req.LinuxDoConnectClientSecret,
