@@ -1118,7 +1118,6 @@ export default {
     searchPlaceholder: '搜索模型、分组或供应商...',
     allProviders: '全部供应商',
     availableModels: '当前分组可用模型',
-    noRealPrice: '不展示真实价格',
     emptyTitle: '暂无可用模型',
     emptyDescription: '当前没有匹配的分组或模型，或管理员尚未为您的可用分组配置模型。',
     exclusive: '专属分组',

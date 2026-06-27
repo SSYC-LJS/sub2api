@@ -1114,7 +1114,6 @@ export default {
     searchPlaceholder: 'Search models, groups, or providers...',
     allProviders: 'All Providers',
     availableModels: 'Available models in this group',
-    noRealPrice: 'Real prices hidden',
     emptyTitle: 'No available models',
     emptyDescription: 'No matching groups or models were found, or no models are configured for your accessible groups yet.',
     exclusive: 'Exclusive Group',

@@ -166,9 +166,8 @@
             </header>
 
             <div class="flex-1 rounded-2xl border border-gray-100 bg-gray-50/80 p-3 dark:border-dark-700 dark:bg-dark-900/70">
-              <div class="mb-2 flex items-center justify-between gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+              <div class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
                 <span>{{ t('modelMarket.availableModels') }}</span>
-                <span>{{ t('modelMarket.noRealPrice') }}</span>
               </div>
               <div class="flex max-h-72 flex-wrap gap-2 overflow-auto pr-1">
                 <button
