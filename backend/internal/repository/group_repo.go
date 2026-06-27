@@ -42,6 +42,8 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
 		SetRateMultiplier(groupIn.RateMultiplier).
+		SetRecommendationLabel(groupIn.RecommendationLabel).
+		SetRecommendationStars(normalizeGroupRecommendationStars(groupIn.RecommendationStars)).
 		SetSortOrder(groupIn.SortOrder).
 		SetIsExclusive(groupIn.IsExclusive).
 		SetStatus(groupIn.Status).
@@ -121,6 +123,8 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
 		SetRateMultiplier(groupIn.RateMultiplier).
+		SetRecommendationLabel(groupIn.RecommendationLabel).
+		SetRecommendationStars(normalizeGroupRecommendationStars(groupIn.RecommendationStars)).
 		SetIsExclusive(groupIn.IsExclusive).
 		SetStatus(groupIn.Status).
 		SetSubscriptionType(groupIn.SubscriptionType).
@@ -426,6 +430,19 @@ func groupListOrder(params pagination.PaginationParams) []func(*entsql.Selector)
 		return []func(*entsql.Selector){dbent.Asc(field)}
 	}
 	return []func(*entsql.Selector){dbent.Asc(field), dbent.Asc(tieField)}
+}
+
+func normalizeGroupRecommendationStars(stars int) int {
+	if stars <= 0 {
+		return 3
+	}
+	if stars < 3 {
+		return 3
+	}
+	if stars > 5 {
+		return 5
+	}
+	return stars
 }
 
 func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, error) {

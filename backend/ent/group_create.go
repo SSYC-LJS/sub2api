@@ -105,6 +105,34 @@ func (_c *GroupCreate) SetNillableRateMultiplier(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetRecommendationLabel sets the "recommendation_label" field.
+func (_c *GroupCreate) SetRecommendationLabel(v string) *GroupCreate {
+	_c.mutation.SetRecommendationLabel(v)
+	return _c
+}
+
+// SetNillableRecommendationLabel sets the "recommendation_label" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableRecommendationLabel(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetRecommendationLabel(*v)
+	}
+	return _c
+}
+
+// SetRecommendationStars sets the "recommendation_stars" field.
+func (_c *GroupCreate) SetRecommendationStars(v int) *GroupCreate {
+	_c.mutation.SetRecommendationStars(v)
+	return _c
+}
+
+// SetNillableRecommendationStars sets the "recommendation_stars" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableRecommendationStars(v *int) *GroupCreate {
+	if v != nil {
+		_c.SetRecommendationStars(*v)
+	}
+	return _c
+}
+
 // SetIsExclusive sets the "is_exclusive" field.
 func (_c *GroupCreate) SetIsExclusive(v bool) *GroupCreate {
 	_c.mutation.SetIsExclusive(v)
@@ -640,6 +668,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.RecommendationLabel(); !ok {
+		v := group.DefaultRecommendationLabel
+		_c.mutation.SetRecommendationLabel(v)
+	}
+	if _, ok := _c.mutation.RecommendationStars(); !ok {
+		v := group.DefaultRecommendationStars
+		_c.mutation.SetRecommendationStars(v)
+	}
 	if _, ok := _c.mutation.IsExclusive(); !ok {
 		v := group.DefaultIsExclusive
 		_c.mutation.SetIsExclusive(v)
@@ -741,6 +777,17 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Group.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.RecommendationLabel(); !ok {
+		return &ValidationError{Name: "recommendation_label", err: errors.New(`ent: missing required field "Group.recommendation_label"`)}
+	}
+	if v, ok := _c.mutation.RecommendationLabel(); ok {
+		if err := group.RecommendationLabelValidator(v); err != nil {
+			return &ValidationError{Name: "recommendation_label", err: fmt.Errorf(`ent: validator failed for field "Group.recommendation_label": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.RecommendationStars(); !ok {
+		return &ValidationError{Name: "recommendation_stars", err: errors.New(`ent: missing required field "Group.recommendation_stars"`)}
 	}
 	if _, ok := _c.mutation.IsExclusive(); !ok {
 		return &ValidationError{Name: "is_exclusive", err: errors.New(`ent: missing required field "Group.is_exclusive"`)}
@@ -872,6 +919,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(group.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.RecommendationLabel(); ok {
+		_spec.SetField(group.FieldRecommendationLabel, field.TypeString, value)
+		_node.RecommendationLabel = value
+	}
+	if value, ok := _c.mutation.RecommendationStars(); ok {
+		_spec.SetField(group.FieldRecommendationStars, field.TypeInt, value)
+		_node.RecommendationStars = value
 	}
 	if value, ok := _c.mutation.IsExclusive(); ok {
 		_spec.SetField(group.FieldIsExclusive, field.TypeBool, value)
@@ -1220,6 +1275,36 @@ func (u *GroupUpsert) UpdateRateMultiplier() *GroupUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *GroupUpsert) AddRateMultiplier(v float64) *GroupUpsert {
 	u.Add(group.FieldRateMultiplier, v)
+	return u
+}
+
+// SetRecommendationLabel sets the "recommendation_label" field.
+func (u *GroupUpsert) SetRecommendationLabel(v string) *GroupUpsert {
+	u.Set(group.FieldRecommendationLabel, v)
+	return u
+}
+
+// UpdateRecommendationLabel sets the "recommendation_label" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateRecommendationLabel() *GroupUpsert {
+	u.SetExcluded(group.FieldRecommendationLabel)
+	return u
+}
+
+// SetRecommendationStars sets the "recommendation_stars" field.
+func (u *GroupUpsert) SetRecommendationStars(v int) *GroupUpsert {
+	u.Set(group.FieldRecommendationStars, v)
+	return u
+}
+
+// UpdateRecommendationStars sets the "recommendation_stars" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateRecommendationStars() *GroupUpsert {
+	u.SetExcluded(group.FieldRecommendationStars)
+	return u
+}
+
+// AddRecommendationStars adds v to the "recommendation_stars" field.
+func (u *GroupUpsert) AddRecommendationStars(v int) *GroupUpsert {
+	u.Add(group.FieldRecommendationStars, v)
 	return u
 }
 
@@ -1830,6 +1915,41 @@ func (u *GroupUpsertOne) AddRateMultiplier(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateRateMultiplier() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetRecommendationLabel sets the "recommendation_label" field.
+func (u *GroupUpsertOne) SetRecommendationLabel(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRecommendationLabel(v)
+	})
+}
+
+// UpdateRecommendationLabel sets the "recommendation_label" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateRecommendationLabel() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRecommendationLabel()
+	})
+}
+
+// SetRecommendationStars sets the "recommendation_stars" field.
+func (u *GroupUpsertOne) SetRecommendationStars(v int) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRecommendationStars(v)
+	})
+}
+
+// AddRecommendationStars adds v to the "recommendation_stars" field.
+func (u *GroupUpsertOne) AddRecommendationStars(v int) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddRecommendationStars(v)
+	})
+}
+
+// UpdateRecommendationStars sets the "recommendation_stars" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateRecommendationStars() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRecommendationStars()
 	})
 }
 
@@ -2685,6 +2805,41 @@ func (u *GroupUpsertBulk) AddRateMultiplier(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateRateMultiplier() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetRecommendationLabel sets the "recommendation_label" field.
+func (u *GroupUpsertBulk) SetRecommendationLabel(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRecommendationLabel(v)
+	})
+}
+
+// UpdateRecommendationLabel sets the "recommendation_label" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateRecommendationLabel() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRecommendationLabel()
+	})
+}
+
+// SetRecommendationStars sets the "recommendation_stars" field.
+func (u *GroupUpsertBulk) SetRecommendationStars(v int) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRecommendationStars(v)
+	})
+}
+
+// AddRecommendationStars adds v to the "recommendation_stars" field.
+func (u *GroupUpsertBulk) AddRecommendationStars(v int) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddRecommendationStars(v)
+	})
+}
+
+// UpdateRecommendationStars sets the "recommendation_stars" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateRecommendationStars() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRecommendationStars()
 	})
 }
 

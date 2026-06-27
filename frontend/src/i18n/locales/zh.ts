@@ -1113,7 +1113,7 @@ export default {
   // Model Market (user-facing)
   modelMarket: {
     title: '模型广场',
-    description: '按您当前可用分组展示可用模型。卡片顶部显示分组名称和当前倍率，倍率越低推荐程度越高。',
+    description: '按您当前可用分组展示可用模型。卡片顶部显示分组名称、当前倍率和管理员配置的推荐指数。',
     badge: '按可用分组自动生成',
     searchPlaceholder: '搜索模型、分组或供应商...',
     allProviders: '全部供应商',
@@ -2449,6 +2449,13 @@ export default {
         selectPlaceholder: '选择分组以复制其账号...',
         hint: '可选多个分组，账号会自动去重',
         hintEdit: '⚠️ 注意：这会替换当前分组的所有账号绑定'
+      },
+      recommendation: {
+        label: '模型广场推荐字样',
+        labelPlaceholder: '例如：超值推荐 / 稳定优选',
+        labelHint: '留空时按倍率自动显示默认字样。',
+        stars: '模型广场星级',
+        starsHint: '范围 3-5 星，最低保留 3 星；星级越高卡片推荐配色越明显。'
       },
       modelRouting: {
         title: '模型路由配置',

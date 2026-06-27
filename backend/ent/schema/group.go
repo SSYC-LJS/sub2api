@@ -45,6 +45,13 @@ func (Group) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
+		field.String("recommendation_label").
+			MaxLen(50).
+			Default("").
+			Comment("模型广场推荐展示文案；为空时按倍率自动生成"),
+		field.Int("recommendation_stars").
+			Default(3).
+			Comment("模型广场推荐星级，范围 3-5"),
 		field.Bool("is_exclusive").
 			Default(false),
 		field.String("status").

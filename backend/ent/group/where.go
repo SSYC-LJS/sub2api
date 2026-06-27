@@ -85,6 +85,16 @@ func RateMultiplier(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldRateMultiplier, v))
 }
 
+// RecommendationLabel applies equality check predicate on the "recommendation_label" field. It's identical to RecommendationLabelEQ.
+func RecommendationLabel(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRecommendationLabel, v))
+}
+
+// RecommendationStars applies equality check predicate on the "recommendation_stars" field. It's identical to RecommendationStarsEQ.
+func RecommendationStars(v int) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRecommendationStars, v))
+}
+
 // IsExclusive applies equality check predicate on the "is_exclusive" field. It's identical to IsExclusiveEQ.
 func IsExclusive(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldIsExclusive, v))
@@ -518,6 +528,111 @@ func RateMultiplierLT(v float64) predicate.Group {
 // RateMultiplierLTE applies the LTE predicate on the "rate_multiplier" field.
 func RateMultiplierLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldRateMultiplier, v))
+}
+
+// RecommendationLabelEQ applies the EQ predicate on the "recommendation_label" field.
+func RecommendationLabelEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelNEQ applies the NEQ predicate on the "recommendation_label" field.
+func RecommendationLabelNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelIn applies the In predicate on the "recommendation_label" field.
+func RecommendationLabelIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldRecommendationLabel, vs...))
+}
+
+// RecommendationLabelNotIn applies the NotIn predicate on the "recommendation_label" field.
+func RecommendationLabelNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldRecommendationLabel, vs...))
+}
+
+// RecommendationLabelGT applies the GT predicate on the "recommendation_label" field.
+func RecommendationLabelGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelGTE applies the GTE predicate on the "recommendation_label" field.
+func RecommendationLabelGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelLT applies the LT predicate on the "recommendation_label" field.
+func RecommendationLabelLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelLTE applies the LTE predicate on the "recommendation_label" field.
+func RecommendationLabelLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelContains applies the Contains predicate on the "recommendation_label" field.
+func RecommendationLabelContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelHasPrefix applies the HasPrefix predicate on the "recommendation_label" field.
+func RecommendationLabelHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelHasSuffix applies the HasSuffix predicate on the "recommendation_label" field.
+func RecommendationLabelHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelEqualFold applies the EqualFold predicate on the "recommendation_label" field.
+func RecommendationLabelEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldRecommendationLabel, v))
+}
+
+// RecommendationLabelContainsFold applies the ContainsFold predicate on the "recommendation_label" field.
+func RecommendationLabelContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldRecommendationLabel, v))
+}
+
+// RecommendationStarsEQ applies the EQ predicate on the "recommendation_stars" field.
+func RecommendationStarsEQ(v int) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRecommendationStars, v))
+}
+
+// RecommendationStarsNEQ applies the NEQ predicate on the "recommendation_stars" field.
+func RecommendationStarsNEQ(v int) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldRecommendationStars, v))
+}
+
+// RecommendationStarsIn applies the In predicate on the "recommendation_stars" field.
+func RecommendationStarsIn(vs ...int) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldRecommendationStars, vs...))
+}
+
+// RecommendationStarsNotIn applies the NotIn predicate on the "recommendation_stars" field.
+func RecommendationStarsNotIn(vs ...int) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldRecommendationStars, vs...))
+}
+
+// RecommendationStarsGT applies the GT predicate on the "recommendation_stars" field.
+func RecommendationStarsGT(v int) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldRecommendationStars, v))
+}
+
+// RecommendationStarsGTE applies the GTE predicate on the "recommendation_stars" field.
+func RecommendationStarsGTE(v int) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldRecommendationStars, v))
+}
+
+// RecommendationStarsLT applies the LT predicate on the "recommendation_stars" field.
+func RecommendationStarsLT(v int) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldRecommendationStars, v))
+}
+
+// RecommendationStarsLTE applies the LTE predicate on the "recommendation_stars" field.
+func RecommendationStarsLTE(v int) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldRecommendationStars, v))
 }
 
 // IsExclusiveEQ applies the EQ predicate on the "is_exclusive" field.

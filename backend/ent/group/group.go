@@ -28,6 +28,10 @@ const (
 	FieldDescription = "description"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldRecommendationLabel holds the string denoting the recommendation_label field in the database.
+	FieldRecommendationLabel = "recommendation_label"
+	// FieldRecommendationStars holds the string denoting the recommendation_stars field in the database.
+	FieldRecommendationStars = "recommendation_stars"
 	// FieldIsExclusive holds the string denoting the is_exclusive field in the database.
 	FieldIsExclusive = "is_exclusive"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -167,6 +171,8 @@ var Columns = []string{
 	FieldName,
 	FieldDescription,
 	FieldRateMultiplier,
+	FieldRecommendationLabel,
+	FieldRecommendationStars,
 	FieldIsExclusive,
 	FieldStatus,
 	FieldPlatform,
@@ -235,6 +241,12 @@ var (
 	NameValidator func(string) error
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// DefaultRecommendationLabel holds the default value on creation for the "recommendation_label" field.
+	DefaultRecommendationLabel string
+	// RecommendationLabelValidator is a validator for the "recommendation_label" field. It is called by the builders before save.
+	RecommendationLabelValidator func(string) error
+	// DefaultRecommendationStars holds the default value on creation for the "recommendation_stars" field.
+	DefaultRecommendationStars int
 	// DefaultIsExclusive holds the default value on creation for the "is_exclusive" field.
 	DefaultIsExclusive bool
 	// DefaultStatus holds the default value on creation for the "status" field.
@@ -321,6 +333,16 @@ func ByDescription(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByRecommendationLabel orders the results by the recommendation_label field.
+func ByRecommendationLabel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRecommendationLabel, opts...).ToFunc()
+}
+
+// ByRecommendationStars orders the results by the recommendation_stars field.
+func ByRecommendationStars(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRecommendationStars, opts...).ToFunc()
 }
 
 // ByIsExclusive orders the results by the is_exclusive field.

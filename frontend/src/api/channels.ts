@@ -14,6 +14,10 @@ export interface UserAvailableGroup {
   subscription_type: string
   /** 分组默认倍率。用户专属倍率（若有）通过 /groups/rates 获取后在前端 join。 */
   rate_multiplier: number
+  /** 模型广场推荐展示文案；为空时按倍率自动生成。 */
+  recommendation_label?: string
+  /** 模型广场推荐星级，范围 3-5。 */
+  recommendation_stars?: number
   /** true = 专属分组（小范围授权）；false = 公开分组。 */
   is_exclusive: boolean
 }

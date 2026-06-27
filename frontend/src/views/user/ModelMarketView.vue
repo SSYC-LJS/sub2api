@@ -145,6 +145,9 @@
                   <div class="text-lg font-black" :class="recommendationTextClass(group.recommendation.level)">
                     {{ group.recommendation.label }}
                   </div>
+                  <div class="mt-1 flex justify-end gap-0.5 text-sm" :class="recommendationTextClass(group.recommendation.level)">
+                    <span v-for="i in 5" :key="i" :class="i <= group.recommendation.stars ? 'opacity-100' : 'opacity-25'">★</span>
+                  </div>
                   <div class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
                     {{ t('modelMarket.modelCount', { count: group.models.length }) }}
                   </div>
@@ -228,6 +231,7 @@ interface MarketGroupCard {
   recommendation: {
     level: RecommendationLevel
     label: string
+    stars: number
   }
 }
 
@@ -337,7 +341,7 @@ function buildMarketGroups(list: UserAvailableChannel[]): MarketGroupCard[] {
         isExclusive: group.is_exclusive,
         platforms: Array.from(platforms).sort((a, b) => platformLabel(a).localeCompare(platformLabel(b))),
         models: Array.from(models.values()).sort((a, b) => a.name.localeCompare(b.name)),
-        recommendation: recommendationForRate(rate),
+        recommendation: recommendationForGroup(group, rate),
       }
     })
     .sort((a, b) => a.rate - b.rate || a.name.localeCompare(b.name))
@@ -362,11 +366,47 @@ function formatRate(rate: number): string {
   return rate.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
 }
 
-function recommendationForRate(rate: number): MarketGroupCard['recommendation'] {
-  if (rate >= 1) return { level: 'normal', label: t('modelMarket.recommendation.normal') }
-  if (rate >= 0.5) return { level: 'moderate', label: t('modelMarket.recommendation.moderate') }
-  if (rate >= 0.1) return { level: 'recommended', label: t('modelMarket.recommendation.recommended') }
-  return { level: 'super', label: t('modelMarket.recommendation.super') }
+function normalizeStars(stars: number | undefined): 3 | 4 | 5 {
+  const value = Number(stars)
+  if (!Number.isFinite(value) || value <= 0) return 3
+  return Math.min(5, Math.max(3, Math.round(value))) as 3 | 4 | 5
+}
+
+function defaultStarsForRate(rate: number): 3 | 4 | 5 {
+  if (rate >= 1) return 3
+  if (rate >= 0.5) return 3
+  if (rate >= 0.1) return 4
+  return 5
+}
+
+function levelForStars(stars: number): RecommendationLevel {
+  if (stars >= 5) return 'super'
+  if (stars >= 4) return 'recommended'
+  return 'moderate'
+}
+
+function recommendationLevelForRate(rate: number): RecommendationLevel {
+  if (rate >= 1) return 'normal'
+  if (rate >= 0.5) return 'moderate'
+  if (rate >= 0.1) return 'recommended'
+  return 'super'
+}
+
+function defaultRecommendationLabelForRate(rate: number): string {
+  const level = recommendationLevelForRate(rate)
+  return t(`modelMarket.recommendation.${level}`)
+}
+
+function recommendationForGroup(group: UserAvailableGroup, rate: number): MarketGroupCard['recommendation'] {
+  const configuredLabel = group.recommendation_label?.trim()
+  const configuredStars = group.recommendation_stars && group.recommendation_stars > 0
+  const stars = configuredStars ? normalizeStars(group.recommendation_stars) : defaultStarsForRate(rate)
+  const level = configuredStars ? levelForStars(stars) : recommendationLevelForRate(rate)
+  return {
+    level,
+    label: configuredLabel || defaultRecommendationLabelForRate(rate),
+    stars,
+  }
 }
 
 function recommendationCardClass(level: RecommendationLevel): string[] {

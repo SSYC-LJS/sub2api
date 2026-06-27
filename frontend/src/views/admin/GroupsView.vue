@@ -497,6 +497,31 @@
           />
           <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
         </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="input-label">{{ t("admin.groups.recommendation.label") }}</label>
+            <input
+              v-model="createForm.recommendation_label"
+              type="text"
+              maxlength="50"
+              class="input"
+              :placeholder="t('admin.groups.recommendation.labelPlaceholder')"
+            />
+            <p class="input-hint">{{ t("admin.groups.recommendation.labelHint") }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t("admin.groups.recommendation.stars") }}</label>
+            <input
+              v-model.number="createForm.recommendation_stars"
+              type="number"
+              min="3"
+              max="5"
+              step="1"
+              class="input"
+            />
+            <p class="input-hint">{{ t("admin.groups.recommendation.starsHint") }}</p>
+          </div>
+        </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
           <input
@@ -1782,6 +1807,31 @@
             class="input"
             data-tour="group-form-multiplier"
           />
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="input-label">{{ t("admin.groups.recommendation.label") }}</label>
+            <input
+              v-model="editForm.recommendation_label"
+              type="text"
+              maxlength="50"
+              class="input"
+              :placeholder="t('admin.groups.recommendation.labelPlaceholder')"
+            />
+            <p class="input-hint">{{ t("admin.groups.recommendation.labelHint") }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t("admin.groups.recommendation.stars") }}</label>
+            <input
+              v-model.number="editForm.recommendation_stars"
+              type="number"
+              min="3"
+              max="5"
+              step="1"
+              class="input"
+            />
+            <p class="input-hint">{{ t("admin.groups.recommendation.starsHint") }}</p>
+          </div>
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -3328,6 +3378,8 @@ const createForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  recommendation_label: "",
+  recommendation_stars: 3,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -3658,6 +3710,8 @@ const editForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  recommendation_label: "",
+  recommendation_stars: 3,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -3911,6 +3965,8 @@ const closeCreateModal = () => {
   createForm.description = "";
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
+  createForm.recommendation_label = "";
+  createForm.recommendation_stars = 3;
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -3965,6 +4021,12 @@ const normalizeImageRateMultiplier = (
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
 };
 
+const normalizeRecommendationStars = (value: unknown): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 3;
+  return Math.min(5, Math.max(3, Math.round(parsed)));
+};
+
 const handleCreateGroup = async () => {
   if (!createForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
@@ -4011,6 +4073,9 @@ const handleCreateGroup = async () => {
     requestData.image_rate_multiplier = normalizeImageRateMultiplier(
       requestData.image_rate_multiplier,
     );
+    requestData.recommendation_stars = normalizeRecommendationStars(
+      requestData.recommendation_stars,
+    );
     await adminAPI.groups.create(requestData);
     appStore.showSuccess(t("admin.groups.groupCreated"));
     closeCreateModal();
@@ -4036,6 +4101,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.description = group.description || "";
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
+  editForm.recommendation_label = group.recommendation_label || "";
+  editForm.recommendation_stars = group.recommendation_stars || 3;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";
@@ -4149,6 +4216,9 @@ const handleUpdateGroup = async () => {
     payload.monthly_limit_usd = emptyToNull(payload.monthly_limit_usd);
     payload.image_rate_multiplier = normalizeImageRateMultiplier(
       payload.image_rate_multiplier,
+    );
+    payload.recommendation_stars = normalizeRecommendationStars(
+      payload.recommendation_stars,
     );
     await adminAPI.groups.update(editingGroup.value.id, payload);
     appStore.showSuccess(t("admin.groups.groupUpdated"));
