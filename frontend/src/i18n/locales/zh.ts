@@ -1113,50 +1113,29 @@ export default {
   // Model Market (user-facing)
   modelMarket: {
     title: '模型广场',
-    description: '根据您当前可访问的分组自动汇总可用模型，同名模型会合并展示，并展示官方价格与各分组价格。',
-    badge: '按当前权限自动生成',
+    description: '按您当前可用分组展示可用模型。卡片顶部显示分组名称和当前倍率，倍率越低推荐程度越高。',
+    badge: '按可用分组自动生成',
     searchPlaceholder: '搜索模型、分组或供应商...',
     allProviders: '全部供应商',
-    officialPrice: '官方价格',
-    currentGroupPrices: '当前分组价格',
-    multiplierHint: '按倍率换算',
-    noPricing: '未配置定价',
+    availableModels: '当前分组可用模型',
+    noRealPrice: '不展示真实价格',
     emptyTitle: '暂无可用模型',
-    emptyDescription: '当前没有匹配的模型，或管理员尚未为您的可用分组配置模型。',
+    emptyDescription: '当前没有匹配的分组或模型，或管理员尚未为您的可用分组配置模型。',
     exclusive: '专属分组',
     public: '公开分组',
-    groupCount: '{count} 个分组',
+    modelCount: '{count} 个模型',
     stats: {
       models: '可用模型',
       providers: '供应商',
       groups: '可用分组'
     },
-    priceTable: {
-      group: '分组',
-      rate: '倍率',
-      input: '输入',
-      output: '输出',
-      cacheWrite: '缓存写',
-      cacheRead: '缓存读',
-      perRequest: '单次价格',
-      image: '图片输出',
-      perImage: '单张价格'
-    },
-    pricing: {
-      billingModeToken: '按 Token',
-      billingModePerRequest: '按次',
-      billingModeImage: '按图片',
-      inputPrice: '输入',
-      outputPrice: '输出',
-      cacheWritePrice: '缓存写入',
-      cacheReadPrice: '缓存命中',
-      imageOutputPrice: '图片输出',
-      perImagePrice: '单张价格',
-      perRequestPrice: '单次价格',
-      intervals: '阶梯定价',
-      unitPerMillion: '/ 1M token',
-      unitPerRequest: '/ 次',
-      unitPerImage: '/ 张'
+    recommendation: {
+      normal: '正常',
+      moderate: '适中',
+      recommended: '推荐',
+      super: '超级性价比',
+      recommendedHint: '这个分组倍率较低，余额使用效率更高，优先推荐。',
+      superHint: '超低倍率分组，余额消耗极低，强烈推荐优先使用！'
     }
   },
 
