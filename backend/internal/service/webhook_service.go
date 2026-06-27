@@ -300,7 +300,11 @@ func feishuMarkdown(event WebhookEvent) string {
 }
 
 func sortedWebhookKeys(data map[string]any) []string {
-	preferred := []string{"user_id", "user_email", "group_id", "group_name", "account_id", "account_name", "platform", "model", "status_code", "message", "code", "type", "value", "validity_days"}
+	preferred := []string{
+		"报错Code", "报错内容", "报错分组", "用户邮箱", "报错阶段", "报错类型", "平台", "模型",
+		"注册时间", "注册邮箱", "使用用户邮箱", "兑换码", "兑换码额度", "兑换类型",
+		"user_id", "user_email", "group_id", "group_name", "account_id", "account_name", "platform", "model", "status_code", "message", "code", "type", "value", "validity_days",
+	}
 	keys := make([]string, 0, len(data))
 	seen := map[string]bool{}
 	for _, key := range preferred {

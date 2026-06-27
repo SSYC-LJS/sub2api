@@ -141,9 +141,10 @@ func TestWebhookServiceBusinessPayloadFields(t *testing.T) {
 			event: WebhookEvent{Event: WebhookEventOpsError, Title: "网关异常/账号报错", Timestamp: time.Now(), Data: map[string]any{
 				"报错Code": 429,
 				"报错内容":   "rate limited",
-				"报错分组":   "分组ID 7",
+				"报错分组":   "Claude 低倍率分组",
+				"用户邮箱":   "owner@example.com",
 			}},
-			want: []string{"报错Code：429", "报错内容：rate limited", "报错分组：分组ID 7"},
+			want: []string{"报错Code：429", "报错内容：rate limited", "报错分组：Claude 低倍率分组", "用户邮箱：owner@example.com"},
 		},
 	}
 

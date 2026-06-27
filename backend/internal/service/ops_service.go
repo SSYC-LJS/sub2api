@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -28,6 +27,7 @@ type OpsService struct {
 
 	accountRepo AccountRepository
 	userRepo    UserRepository
+	groupRepo   GroupRepository
 
 	// getAccountAvailability is a unit-test hook for overriding account availability lookup.
 	getAccountAvailability func(ctx context.Context, platformFilter string, groupIDFilter *int64) (*OpsAccountAvailability, error)
@@ -88,6 +88,7 @@ func NewOpsService(
 	cfg *config.Config,
 	accountRepo AccountRepository,
 	userRepo UserRepository,
+	groupRepo GroupRepository,
 	concurrencyService *ConcurrencyService,
 	gatewayService *GatewayService,
 	openAIGatewayService *OpenAIGatewayService,
@@ -102,6 +103,7 @@ func NewOpsService(
 
 		accountRepo: accountRepo,
 		userRepo:    userRepo,
+		groupRepo:   groupRepo,
 
 		concurrencyService:        concurrencyService,
 		gatewayService:            gatewayService,
@@ -161,7 +163,7 @@ func (s *OpsService) RecordError(ctx context.Context, entry *OpsInsertErrorLogIn
 		log.Printf("[Ops] RecordError failed: %v", err)
 		return err
 	}
-	s.notifyOpsError(prepared)
+	s.notifyOpsError(ctx, prepared)
 	return nil
 }
 
@@ -188,7 +190,7 @@ func (s *OpsService) RecordErrorBatch(ctx context.Context, entries []*OpsInsertE
 		if err != nil {
 			log.Printf("[Ops] RecordErrorBatch single insert failed: %v", err)
 		} else {
-			s.notifyOpsError(prepared[0])
+			s.notifyOpsError(ctx, prepared[0])
 		}
 		return err
 	}
@@ -203,18 +205,18 @@ func (s *OpsService) RecordErrorBatch(ctx context.Context, entries []*OpsInsertE
 					firstErr = insertErr
 				}
 			} else {
-				s.notifyOpsError(entry)
+				s.notifyOpsError(ctx, entry)
 			}
 		}
 		return firstErr
 	}
 	for _, entry := range prepared {
-		s.notifyOpsError(entry)
+		s.notifyOpsError(ctx, entry)
 	}
 	return nil
 }
 
-func (s *OpsService) notifyOpsError(entry *OpsInsertErrorLogInput) {
+func (s *OpsService) notifyOpsError(ctx context.Context, entry *OpsInsertErrorLogInput) {
 	if s == nil || s.webhookService == nil || entry == nil {
 		return
 	}
@@ -231,13 +233,13 @@ func (s *OpsService) notifyOpsError(entry *OpsInsertErrorLogInput) {
 		"客户端请求ID": entry.ClientRequestID,
 	}
 	if entry.UserID != nil {
-		data["用户ID"] = *entry.UserID
+		data["用户邮箱"] = s.lookupOpsUserEmail(ctx, *entry.UserID)
 	}
 	if entry.APIKeyID != nil {
 		data["APIKeyID"] = *entry.APIKeyID
 	}
 	if entry.GroupID != nil {
-		data["报错分组"] = fmt.Sprintf("分组ID %d", *entry.GroupID)
+		data["报错分组"] = s.lookupOpsGroupName(ctx, *entry.GroupID)
 	}
 	if entry.AccountID != nil {
 		data["账号ID"] = *entry.AccountID
@@ -249,6 +251,28 @@ func (s *OpsService) notifyOpsError(entry *OpsInsertErrorLogInput) {
 		Timestamp: entry.CreatedAt,
 		Data:      data,
 	})
+}
+
+func (s *OpsService) lookupOpsUserEmail(ctx context.Context, userID int64) string {
+	if s == nil || s.userRepo == nil || userID <= 0 {
+		return "未关联用户"
+	}
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil || user == nil || strings.TrimSpace(user.Email) == "" {
+		return "未知用户"
+	}
+	return strings.TrimSpace(user.Email)
+}
+
+func (s *OpsService) lookupOpsGroupName(ctx context.Context, groupID int64) string {
+	if s == nil || s.groupRepo == nil || groupID <= 0 {
+		return "未关联分组"
+	}
+	group, err := s.groupRepo.GetByIDLite(ctx, groupID)
+	if err != nil || group == nil || strings.TrimSpace(group.Name) == "" {
+		return "未知分组"
+	}
+	return strings.TrimSpace(group.Name)
 }
 
 func (s *OpsService) prepareErrorLogInput(ctx context.Context, entry *OpsInsertErrorLogInput) (*OpsInsertErrorLogInput, bool, error) {
