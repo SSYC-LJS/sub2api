@@ -286,18 +286,17 @@ func (s *AuthService) notifyUserRegistered(user *User) {
 	if s == nil || s.webhookService == nil || user == nil {
 		return
 	}
+	eventTimestamp := time.Now()
 	s.webhookService.NotifyAsync(WebhookEvent{
-		Event:     "user.registered",
+		Event:     WebhookEventUserRegistered,
 		Title:     "新用户注册",
 		Severity:  "info",
-		Timestamp: time.Now(),
+		Timestamp: eventTimestamp,
 		Data: map[string]any{
-			"user_id":       user.ID,
-			"user_email":    user.Email,
-			"username":      user.Username,
-			"balance":       user.Balance,
-			"concurrency":   user.Concurrency,
-			"signup_source": user.SignupSource,
+			"注册时间": eventTimestamp.Format(time.RFC3339),
+			"注册邮箱": user.Email,
+			"用户ID": user.ID,
+			"注册来源": user.SignupSource,
 		},
 	})
 }

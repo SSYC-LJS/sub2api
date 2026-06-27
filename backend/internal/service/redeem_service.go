@@ -522,23 +522,43 @@ func (s *RedeemService) notifyRedeemCodeUsed(user *User, redeemCode *RedeemCode)
 		return
 	}
 	data := map[string]any{
-		"user_id":       user.ID,
-		"user_email":    user.Email,
-		"code":          redeemCode.Code,
-		"type":          redeemCode.Type,
-		"value":         redeemCode.Value,
-		"validity_days": redeemCode.ValidityDays,
+		"使用用户邮箱": user.Email,
+		"兑换码":    redeemCode.Code,
+		"兑换码额度":  redeemWebhookValue(redeemCode),
+		"兑换类型":   redeemCode.Type,
+		"用户ID":   user.ID,
 	}
 	if redeemCode.GroupID != nil {
-		data["group_id"] = *redeemCode.GroupID
+		data["分组ID"] = *redeemCode.GroupID
 	}
 	s.webhookService.NotifyAsync(WebhookEvent{
-		Event:     "redeem.used",
+		Event:     WebhookEventRedeemUsed,
 		Title:     "用户使用兑换码",
 		Severity:  "success",
 		Timestamp: time.Now(),
 		Data:      data,
 	})
+}
+
+func redeemWebhookValue(redeemCode *RedeemCode) string {
+	if redeemCode == nil {
+		return ""
+	}
+	switch redeemCode.Type {
+	case RedeemTypeBalance, RedeemTypeAffiliateBalance:
+		return fmt.Sprintf("余额 %.8g", redeemCode.Value)
+	case RedeemTypeConcurrency:
+		return fmt.Sprintf("并发 %d", int64(redeemCode.Value))
+	case RedeemTypeSubscription:
+		if redeemCode.ValidityDays > 0 {
+			return fmt.Sprintf("订阅 %d 天", redeemCode.ValidityDays)
+		}
+		return fmt.Sprintf("订阅 %.8g", redeemCode.Value)
+	case RedeemTypeInvitation:
+		return "邀请码"
+	default:
+		return fmt.Sprintf("%s %.8g", redeemCode.Type, redeemCode.Value)
+	}
 }
 
 // invalidateRedeemCaches 失效兑换相关的缓存

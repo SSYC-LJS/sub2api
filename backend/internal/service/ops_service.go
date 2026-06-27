@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -218,30 +219,31 @@ func (s *OpsService) notifyOpsError(entry *OpsInsertErrorLogInput) {
 		return
 	}
 	data := map[string]any{
-		"platform":          entry.Platform,
-		"model":             entry.Model,
-		"status_code":       entry.StatusCode,
-		"phase":             entry.ErrorPhase,
-		"type":              entry.ErrorType,
-		"message":           entry.ErrorMessage,
-		"request_path":      entry.RequestPath,
-		"request_id":        entry.RequestID,
-		"client_request_id": entry.ClientRequestID,
+		"报错Code":  entry.StatusCode,
+		"报错内容":    entry.ErrorMessage,
+		"报错分组":    "未关联分组",
+		"报错阶段":    entry.ErrorPhase,
+		"报错类型":    entry.ErrorType,
+		"平台":      entry.Platform,
+		"模型":      entry.Model,
+		"请求路径":    entry.RequestPath,
+		"请求ID":    entry.RequestID,
+		"客户端请求ID": entry.ClientRequestID,
 	}
 	if entry.UserID != nil {
-		data["user_id"] = *entry.UserID
+		data["用户ID"] = *entry.UserID
 	}
 	if entry.APIKeyID != nil {
-		data["api_key_id"] = *entry.APIKeyID
+		data["APIKeyID"] = *entry.APIKeyID
 	}
 	if entry.GroupID != nil {
-		data["group_id"] = *entry.GroupID
+		data["报错分组"] = fmt.Sprintf("分组ID %d", *entry.GroupID)
 	}
 	if entry.AccountID != nil {
-		data["account_id"] = *entry.AccountID
+		data["账号ID"] = *entry.AccountID
 	}
 	s.webhookService.NotifyAsync(WebhookEvent{
-		Event:     "ops.error",
+		Event:     WebhookEventOpsError,
 		Title:     "网关异常/账号报错",
 		Severity:  "error",
 		Timestamp: entry.CreatedAt,
