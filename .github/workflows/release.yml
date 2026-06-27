@@ -36,12 +36,17 @@ jobs:
       - name: Update VERSION file
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.tag }}"
-            VERSION="${VERSION//[[:space:]]/}"
-            VERSION=${VERSION#v}
+            TAG_NAME="${{ github.event.inputs.tag }}"
+            TAG_NAME="${TAG_NAME//[[:space:]]/}"
           else
-            VERSION=${GITHUB_REF#refs/tags/v}
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
           fi
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $TAG_NAME" >&2
+            echo "Expected format: v1.2.3" >&2
+            exit 1
+          fi
+          VERSION=${TAG_NAME#v}
           echo "$VERSION" > backend/cmd/server/VERSION
           echo "Updated VERSION file to: $VERSION"
 
@@ -89,11 +94,27 @@ jobs:
     needs: [update-version, build-frontend]
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release tag
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME="${{ github.event.inputs.tag }}"
+            TAG_NAME="${TAG_NAME//[[:space:]]/}"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $TAG_NAME" >&2
+            echo "Expected format: v1.2.3" >&2
+            exit 1
+          fi
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ steps.release_tag.outputs.tag }}
 
       - name: Download VERSION artifact
         uses: actions/download-artifact@v8
@@ -149,12 +170,7 @@ jobs:
       - name: Get tag message
         id: tag_message
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG_NAME="${{ github.event.inputs.tag }}"
-            TAG_NAME="${TAG_NAME//[[:space:]]/}"
-          else
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-          fi
+          TAG_NAME="${{ steps.release_tag.outputs.tag }}"
           echo "Processing tag: $TAG_NAME"
 
           # 获取完整的 tag message（跳过第一行标题）
@@ -174,11 +190,24 @@ jobs:
         id: lowercase
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
+      - name: Resolve GoReleaser config
+        id: goreleaser_config
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ "${{ env.SIMPLE_RELEASE }}" = "true" ] || [ -z "$DOCKERHUB_USERNAME" ]; then
+            echo "config=--config=.goreleaser.simple.yaml" >> "$GITHUB_OUTPUT"
+            echo "Using simple GoReleaser config (GHCR only)"
+          else
+            echo "config=" >> "$GITHUB_OUTPUT"
+            echo "Using full GoReleaser config"
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
-          args: release --clean --skip=validate ${{ env.SIMPLE_RELEASE == 'true' && '--config=.goreleaser.simple.yaml' || '' }}
+          args: release --clean --skip=validate ${{ steps.goreleaser_config.outputs.config }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
@@ -189,7 +218,7 @@ jobs:
 
       # Update DockerHub description
       - name: Update DockerHub description
-        if: ${{ env.SIMPLE_RELEASE != 'true' && env.DOCKERHUB_USERNAME != '' }}
+        if: ${{ env.SIMPLE_RELEASE != 'true' && steps.goreleaser_config.outputs.config == '' }}
         uses: peter-evans/dockerhub-description@v5
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
