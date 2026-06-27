@@ -83,9 +83,9 @@
             {{ t('channelStatus.requestWindows.requests') }}
           </div>
           <div class="mt-1 space-y-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-            <div>{{ t('channelStatus.requestWindows.success') }} {{ ws.success }}</div>
-            <div>{{ t('channelStatus.requestWindows.errors') }} {{ ws.errors }}</div>
-            <div>{{ t('channelStatus.requestWindows.errorRate') }} {{ ws.errorRate }}</div>
+            <div>{{ t('channelStatus.requestWindows.success') }} {{ ws.successRate }}</div>
+            <div>{{ t('channelStatus.requestWindows.errors') }} {{ ws.errorRate }}</div>
+            <div>{{ t('channelStatus.requestWindows.avgHourlyRequests') }} {{ ws.avgHourlyRequests }}</div>
           </div>
         </div>
       </div>
@@ -158,9 +158,9 @@ const extraModelsCountLabel = computed(() => {
 interface WindowStatDisplay {
   label: string
   count: number
-  success: number
-  errors: number
+  successRate: string
   errorRate: string
+  avgHourlyRequests: string
   levelLabel: string
   cardClass: string
   badgeClass: string
@@ -169,12 +169,16 @@ interface WindowStatDisplay {
 
 type CongestionLevel = 'idle' | 'normal' | 'busy' | 'congested'
 
-function congestionLevel(requests: number, errors: number): CongestionLevel {
-  if (requests === 0) return 'idle'
-  const errorRate = errors / requests
-  if (errorRate > 0.3) return 'congested'
-  if (requests > 100) return 'busy'
-  if (errorRate > 0.1) return 'busy'
+function averageHourlyRequests(requests: number, hours: number): number {
+  if (requests <= 0 || hours <= 0) return 0
+  return requests / hours
+}
+
+function congestionLevel(requests: number, hours: number): CongestionLevel {
+  const avgHourly = averageHourlyRequests(requests, hours)
+  if (avgHourly <= 0) return 'idle'
+  if (avgHourly > 300) return 'congested'
+  if (avgHourly > 200) return 'busy'
   return 'normal'
 }
 
@@ -205,28 +209,35 @@ const congestionStyles: Record<CongestionLevel, { card: string; badge: string; t
   },
 }
 
-function formatErrorRate(requests: number, errors: number): string {
-  if (requests <= 0) return '0%'
-  return `${((errors / requests) * 100).toFixed(1).replace(/\.0$/, '')}%`
+function formatRate(numerator: number, denominator: number): string {
+  if (denominator <= 0) return '0%'
+  return `${((numerator / denominator) * 100).toFixed(1).replace(/\.0$/, '')}%`
+}
+
+function formatAverageHourlyRequests(requests: number, hours: number): string {
+  const avgHourly = averageHourlyRequests(requests, hours)
+  if (avgHourly <= 0) return '0/h'
+  const formatted = avgHourly >= 10 ? avgHourly.toFixed(0) : avgHourly.toFixed(1).replace(/\.0$/, '')
+  return `${formatted}/h`
 }
 
 const windowStatsDisplay = computed<WindowStatDisplay[]>(() => {
   const ws = props.item.window_stats
   if (!ws) return []
-  const windows: Array<{ label: string; req: number; ok: number; err: number }> = [
-    { label: '1h', req: ws.requests_1h, ok: ws.success_1h, err: ws.errors_1h },
-    { label: '12h', req: ws.requests_12h, ok: ws.success_12h, err: ws.errors_12h },
-    { label: '24h', req: ws.requests_24h, ok: ws.success_24h, err: ws.errors_24h },
+  const windows: Array<{ label: string; hours: number; req: number; ok: number; err: number }> = [
+    { label: '1h', hours: 1, req: ws.requests_1h, ok: ws.success_1h, err: ws.errors_1h },
+    { label: '12h', hours: 12, req: ws.requests_12h, ok: ws.success_12h, err: ws.errors_12h },
+    { label: '24h', hours: 24, req: ws.requests_24h, ok: ws.success_24h, err: ws.errors_24h },
   ]
   return windows.map(w => {
-    const level = congestionLevel(w.req, w.err)
+    const level = congestionLevel(w.req, w.hours)
     const style = congestionStyles[level]
     return {
       label: w.label,
       count: w.req,
-      success: w.ok,
-      errors: w.err,
-      errorRate: formatErrorRate(w.req, w.err),
+      successRate: formatRate(w.ok, w.req),
+      errorRate: formatRate(w.err, w.req),
+      avgHourlyRequests: formatAverageHourlyRequests(w.req, w.hours),
       levelLabel: t(`channelStatus.requestWindows.level.${style.labelKey}`),
       cardClass: style.card,
       badgeClass: style.badge,

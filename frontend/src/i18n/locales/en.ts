@@ -1067,9 +1067,10 @@ export default {
     requestWindows: {
       title: 'Request Windows',
       requests: 'requests',
-      success: 'Success',
-      errors: 'Errors',
+      success: 'Success rate',
+      errors: 'Error rate',
       errorRate: 'Error rate',
+      avgHourlyRequests: 'Avg hourly',
       level: {
         idle: 'Idle',
         normal: 'Normal',

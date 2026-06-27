@@ -1071,9 +1071,10 @@ export default {
     requestWindows: {
       title: '请求情况',
       requests: '请求',
-      success: '成功',
-      errors: '失败',
+      success: '成功率',
+      errors: '失败率',
       errorRate: '错误率',
+      avgHourlyRequests: '平均每小时',
       level: {
         idle: '空闲',
         normal: '正常',
