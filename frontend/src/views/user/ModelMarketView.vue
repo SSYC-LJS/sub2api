@@ -155,16 +155,11 @@
               </div>
 
               <div
-                v-if="group.recommendation.level === 'super'"
-                class="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200"
+                v-if="group.description"
+                class="rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm"
+                :class="recommendationDescriptionClass(group.recommendation.level)"
               >
-                🔥 {{ t('modelMarket.recommendation.superHint') }}
-              </div>
-              <div
-                v-else-if="group.recommendation.level === 'recommended'"
-                class="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-              >
-                ✨ {{ t('modelMarket.recommendation.recommendedHint') }}
+                {{ group.description }}
               </div>
             </header>
 
@@ -224,6 +219,7 @@ interface MarketGroupModel {
 interface MarketGroupCard {
   id: number
   name: string
+  description: string
   rate: number
   isExclusive: boolean
   platforms: string[]
@@ -337,6 +333,7 @@ function buildMarketGroups(list: UserAvailableChannel[]): MarketGroupCard[] {
       return {
         id: group.id,
         name: group.name,
+        description: group.description?.trim() || '',
         rate,
         isExclusive: group.is_exclusive,
         platforms: Array.from(platforms).sort((a, b) => platformLabel(a).localeCompare(platformLabel(b))),
@@ -445,6 +442,16 @@ function recommendationTextClass(level: RecommendationLevel): string {
     moderate: 'text-blue-600 dark:text-blue-300',
     recommended: 'text-emerald-600 dark:text-emerald-300',
     super: 'text-rose-600 dark:text-rose-300',
+  }
+  return map[level]
+}
+
+function recommendationDescriptionClass(level: RecommendationLevel): string {
+  const map: Record<RecommendationLevel, string> = {
+    normal: 'border-gray-200 bg-gray-50 text-gray-600 dark:border-dark-700 dark:bg-dark-800/80 dark:text-gray-300',
+    moderate: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200',
+    recommended: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200',
+    super: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200',
   }
   return map[level]
 }

@@ -1128,9 +1128,7 @@ export default {
       normal: 'Normal',
       moderate: 'Moderate',
       recommended: 'Recommended',
-      super: 'Super Value',
-      recommendedHint: 'This group has a lower multiplier, so balance lasts longer. Recommended.',
-      superHint: 'Ultra-low multiplier group. Very low balance consumption — strongly recommended!'
+      super: 'Super Value'
     }
   },
 

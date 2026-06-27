@@ -1132,9 +1132,7 @@ export default {
       normal: '正常',
       moderate: '适中',
       recommended: '推荐',
-      super: '超级性价比',
-      recommendedHint: '这个分组倍率较低，余额使用效率更高，优先推荐。',
-      superHint: '超低倍率分组，余额消耗极低，强烈推荐优先使用！'
+      super: '超级性价比'
     }
   },
 
