@@ -137,6 +137,12 @@ func (s *WebhookService) Notify(ctx context.Context, event WebhookEvent) error {
 		return nil
 	}
 	cfg := s.effectiveConfig(ctx)
+	if !cfg.Enabled {
+		return fmt.Errorf("webhook is disabled")
+	}
+	if strings.TrimSpace(cfg.URL) == "" {
+		return fmt.Errorf("webhook url is empty")
+	}
 	if !IsWebhookEventEnabled(cfg.Events, event.Event) {
 		return fmt.Errorf("webhook event %s is not enabled", event.Event)
 	}
@@ -167,8 +173,13 @@ func (s *WebhookService) notifyWithConfig(ctx context.Context, cfg config.Webhoo
 		return err
 	}
 	defer resp.Body.Close()
+	var responseBody map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&responseBody)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
+	}
+	if code, ok := webhookResponseCode(responseBody); ok && code != 0 {
+		return fmt.Errorf("webhook returned code %d: %s", code, webhookResponseMessage(responseBody))
 	}
 	return nil
 }
@@ -181,20 +192,9 @@ func (s *WebhookService) buildPayloadWithConfig(cfg config.WebhookConfig, event 
 	format := strings.ToLower(strings.TrimSpace(cfg.Format))
 	if format == "" || format == "feishu" || format == "lark" {
 		return json.Marshal(map[string]any{
-			"msg_type": "interactive",
-			"card": map[string]any{
-				"schema": "2.0",
-				"config": map[string]any{"wide_screen_mode": true},
-				"header": map[string]any{
-					"title":    map[string]any{"tag": "plain_text", "content": event.Title},
-					"template": feishuTemplate(event.Severity),
-				},
-				"body": map[string]any{
-					"elements": []any{map[string]any{
-						"tag":     "markdown",
-						"content": feishuMarkdown(event),
-					}},
-				},
+			"msg_type": "text",
+			"content": map[string]any{
+				"text": feishuText(event),
 			},
 		})
 	}
@@ -206,6 +206,65 @@ func (s *WebhookService) timeout() time.Duration {
 		return defaultWebhookTimeout
 	}
 	return s.httpClient.Timeout
+}
+
+func webhookResponseCode(body map[string]any) (int, bool) {
+	if body == nil {
+		return 0, false
+	}
+	for _, key := range []string{"code", "StatusCode"} {
+		value, ok := body[key]
+		if !ok {
+			continue
+		}
+		switch v := value.(type) {
+		case float64:
+			return int(v), true
+		case int:
+			return v, true
+		case string:
+			var n int
+			if _, err := fmt.Sscanf(v, "%d", &n); err == nil {
+				return n, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func webhookResponseMessage(body map[string]any) string {
+	if body == nil {
+		return ""
+	}
+	for _, key := range []string{"msg", "message", "StatusMessage"} {
+		if value, ok := body[key]; ok {
+			return fmt.Sprint(value)
+		}
+	}
+	return ""
+}
+
+func feishuText(event WebhookEvent) string {
+	var b strings.Builder
+	if strings.TrimSpace(event.Title) != "" {
+		b.WriteString(event.Title)
+		b.WriteString("\n")
+	}
+	b.WriteString("事件：")
+	b.WriteString(event.Event)
+	b.WriteString("\n时间：")
+	b.WriteString(event.Timestamp.Format(time.RFC3339))
+	if event.Severity != "" {
+		b.WriteString("\n级别：")
+		b.WriteString(event.Severity)
+	}
+	for _, key := range sortedWebhookKeys(event.Data) {
+		b.WriteString("\n")
+		b.WriteString(key)
+		b.WriteString("：")
+		b.WriteString(fmt.Sprint(event.Data[key]))
+	}
+	return b.String()
 }
 
 func feishuTemplate(severity string) string {
