@@ -1,4 +1,5 @@
-# 简化版 GoReleaser 配置 - 仅发布 x86_64 GHCR 镜像
+# 简化版 GoReleaser 配置 - DockerHub 未配置时使用
+# 仍然上传 linux/amd64 二进制包，保证后台自更新可以找到兼容资产。
 version: 2
 
 project_name: sub2api
@@ -26,17 +27,24 @@ builds:
       - -X main.Date={{.Date}}
       - -X main.BuildType=release
 
-# 跳过 archives
-archives: []
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE*
+      - README*
+      - deploy/*
 
-# 跳过 checksum
 checksum:
-  disable: true
+  name_template: 'checksums.txt'
+  algorithm: sha256
 
 changelog:
   disable: true
 
-# 仅 GHCR x86_64 镜像
+# 仅 GHCR x86_64 镜像，不构建 DockerHub 镜像，避免 skip/sub2api 无效 tag
 dockers:
   - id: ghcr-amd64
     goos: linux
@@ -55,7 +63,7 @@ dockers:
       - "--label=org.opencontainers.image.revision={{ .Commit }}"
       - "--label=org.opencontainers.image.source=https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }}"
 
-# 跳过 manifests（单架构不需要）
+# 单架构镜像不需要 manifest
 docker_manifests: []
 
 release:
@@ -65,11 +73,9 @@ release:
   draft: false
   prerelease: auto
   name_template: "Sub2API {{.Version}} (Simple)"
-  # 跳过上传二进制包
-  skip_upload: true
   header: |
     > AI API Gateway Platform - 将 AI 订阅配额分发和管理
-    > ⚡ Simple Release: 仅包含 x86_64 GHCR 镜像
+    > ⚡ Simple Release: GHCR x86_64 镜像 + linux/amd64 自更新包
 
     {{ .Env.TAG_MESSAGE }}
 
@@ -82,6 +88,9 @@ release:
     ```bash
     docker pull ghcr.io/{{ .Env.GITHUB_REPO_OWNER_LOWER }}/sub2api:{{ .Version }}
     ```
+
+    **Self-update asset:**
+    GitHub Release includes `sub2api_{{ .Version }}_linux_amd64.tar.gz` for admin panel self-update.
 
     ## 📚 Documentation
 
