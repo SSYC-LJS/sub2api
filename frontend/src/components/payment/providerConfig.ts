@@ -56,7 +56,6 @@ export const PAYMENT_MODE_REDIRECT = 'redirect'
 export const PAYMENT_CURRENCY_OPTIONS: TypeOption[] = [
   { value: 'CNY', label: 'CNY' },
   { value: 'HKD', label: 'HKD' },
-  { value: 'USD', label: 'USD' },
   { value: 'EUR', label: 'EUR' },
   { value: 'GBP', label: 'GBP' },
   { value: 'AUD', label: 'AUD' },

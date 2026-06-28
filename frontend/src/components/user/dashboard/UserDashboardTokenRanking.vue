@@ -74,7 +74,7 @@
           <div class="relative mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
             <span>{{ slot.placeholder ? '—' : formatNumber(slot.item.requests) }} {{ t('dashboard.requests') }}</span>
             <span class="h-1 w-1 rounded-full bg-gray-300 dark:bg-dark-500" />
-            <span>{{ slot.placeholder ? '—' : `$${formatCost(slot.item.actual_cost)}` }}</span>
+            <span>{{ slot.placeholder ? '—' : `￥${formatCost(slot.item.actual_cost)}` }}</span>
           </div>
         </article>
       </div>
@@ -107,7 +107,7 @@
               <p class="text-2xl font-black tracking-tight" :class="slot.placeholder ? 'text-gray-300 dark:text-dark-500' : 'text-gray-900 dark:text-white'">
                 {{ slot.placeholder ? '—' : formatTokens(slot.item.tokens) }}
               </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '—' : `$${formatCost(slot.item.actual_cost)}` }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '—' : `￥${formatCost(slot.item.actual_cost)}` }}</p>
             </div>
           </div>
         </article>

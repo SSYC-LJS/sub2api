@@ -48,10 +48,10 @@ func (UserPlatformQuota) Fields() []ent.Field {
 				}
 			}),
 
-		// 日 / 周 / 月 USD 上限：
+		// 日 / 周 / 月人民币上限：
 		//   nil / not set → 无限额（完全放行）
 		//   0            → 完全禁用（任何请求都会被拒绝，因为 usage >= 0 恒成立）
-		//   > 0          → USD 限额上限
+		//   > 0          → 人民币限额上限
 		field.Float("daily_limit_usd").
 			Optional().
 			Nillable().
@@ -65,7 +65,7 @@ func (UserPlatformQuota) Fields() []ent.Field {
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 
-		// 当前窗口已用量（USD，preflight 时与 limit 比较）
+		// 当前窗口已用量（人民币，preflight 时与 limit 比较）
 		field.Float("daily_usage_usd").
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),

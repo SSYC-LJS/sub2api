@@ -1716,7 +1716,7 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
     },
     extractor: function(response) {
       const remaining = response?.remaining ?? response?.quota?.remaining ?? response?.balance;
-      const unit = response?.unit ?? response?.quota?.unit ?? "USD";
+      const unit = response?.unit ?? response?.quota?.unit ?? "RMB";
       return {
         isValid: response?.is_active ?? response?.isValid ?? true,
         remaining,

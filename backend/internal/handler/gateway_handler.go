@@ -1307,10 +1307,10 @@ func (h *GatewayHandler) usageQuotaLimited(c *gin.Context, ctx context.Context, 
 			"limit":     apiKey.Quota,
 			"used":      apiKey.QuotaUsed,
 			"remaining": remaining,
-			"unit":      "USD",
+			"unit":      "CNY",
 		}
 		resp["remaining"] = remaining
-		resp["unit"] = "USD"
+		resp["unit"] = "CNY"
 	}
 
 	// 速率限制信息（从 DB 获取实时用量）
@@ -1393,7 +1393,7 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 			"mode":     "unrestricted",
 			"isValid":  true,
 			"planName": apiKey.Group.Name,
-			"unit":     "USD",
+			"unit":     "CNY",
 		}
 
 		// 订阅信息可能不在 context 中（/v1/usage 路径跳过了中间件的计费检查）
@@ -1437,7 +1437,7 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 		"isValid":   true,
 		"planName":  "钱包余额",
 		"remaining": latestUser.Balance,
-		"unit":      "USD",
+		"unit":      "CNY",
 		"balance":   latestUser.Balance,
 	}
 	if usageData != nil {
