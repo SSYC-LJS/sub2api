@@ -16,14 +16,18 @@
           </button>
         </div>
 
-        <UserDashboardTokenRanking :ranking="tokenRanking" :loading="loading" />
+        <UserDashboardTokenRanking
+          v-model:rank-type="rankType"
+          :ranking="tokenRanking"
+          :loading="loading"
+        />
       </div>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -33,12 +37,14 @@ import { usageAPI, type UserTokenRankingResponse } from '@/api/usage'
 const { t } = useI18n()
 const loading = ref(false)
 const tokenRanking = ref<UserTokenRankingResponse | null>(null)
+const rankType = ref<'tokens' | 'cost'>('tokens')
 
 const loadRanking = async () => {
   loading.value = true
   try {
     tokenRanking.value = await usageAPI.getDashboardRanking({
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      sort_by: rankType.value,
     })
   } catch (error) {
     console.error('Failed to load token ranking:', error)
@@ -49,6 +55,10 @@ const loadRanking = async () => {
 }
 
 onMounted(() => {
+  loadRanking()
+})
+
+watch(rankType, () => {
   loadRanking()
 })
 </script>

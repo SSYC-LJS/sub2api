@@ -287,6 +287,7 @@ export async function getDashboardModels(params?: {
  */
 export async function getDashboardRanking(params?: {
   timezone?: string
+  sort_by?: 'tokens' | 'cost'
 }): Promise<UserTokenRankingResponse> {
   const { data } = await apiClient.get<UserTokenRankingResponse>('/usage/dashboard/ranking', { params })
   return data

@@ -12,21 +12,39 @@
         </div>
         <h3 class="mt-3 text-2xl font-black tracking-tight text-gray-900 sm:text-3xl dark:text-white">{{ t('dashboard.tokenRankingSubtitle') }}</h3>
       </div>
-      <div class="inline-flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5 shadow-sm dark:border-dark-600 dark:bg-dark-700">
-        <button
-          v-for="tab in tabs"
-          :key="tab.key"
-          type="button"
-          :class="[
-            'rounded-md px-4 py-2 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5',
-            activePeriod === tab.key
-              ? 'bg-primary-600 text-white shadow-sm hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600'
-              : 'text-gray-500 hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-dark-600 dark:hover:text-white'
-          ]"
-          @click="activePeriod = tab.key"
-        >
-          {{ tab.label }}
-        </button>
+      <div class="flex flex-col gap-3 lg:items-end">
+        <div class="inline-flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5 shadow-sm dark:border-dark-600 dark:bg-dark-700">
+          <button
+            v-for="type in rankTypeTabs"
+            :key="type.key"
+            type="button"
+            :class="[
+              'rounded-md px-4 py-2 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5',
+              rankType === type.key
+                ? 'bg-primary-600 text-white shadow-sm hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600'
+                : 'text-gray-500 hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-dark-600 dark:hover:text-white'
+            ]"
+            @click="rankType = type.key"
+          >
+            {{ type.label }}
+          </button>
+        </div>
+        <div class="inline-flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5 shadow-sm dark:border-dark-600 dark:bg-dark-700">
+          <button
+            v-for="tab in tabs"
+            :key="tab.key"
+            type="button"
+            :class="[
+              'rounded-md px-4 py-2 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5',
+              activePeriod === tab.key
+                ? 'bg-primary-600 text-white shadow-sm hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600'
+                : 'text-gray-500 hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-dark-600 dark:hover:text-white'
+            ]"
+            @click="activePeriod = tab.key"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -69,12 +87,12 @@
           <h4 class="relative mt-3 truncate text-xl font-black text-gray-900 dark:text-white" :title="displayName(slot)">{{ displayName(slot) }}</h4>
           <p class="relative mt-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{{ rankDescription(slot.rank) }}</p>
           <p class="relative mt-4 font-black tracking-tight text-gray-900 dark:text-white" :class="slot.rank === 1 ? 'text-5xl sm:text-6xl' : 'text-4xl sm:text-5xl'">
-            {{ slot.placeholder ? '—' : formatTokens(slot.item.tokens) }}
+            {{ slot.placeholder ? '—' : formatPrimaryMetric(slot.item) }}
           </p>
           <div class="relative mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <span>{{ slot.placeholder ? '—' : formatNumber(slot.item.requests) }} {{ t('dashboard.requests') }}</span>
+            <span>{{ slot.placeholder ? '—' : formatCompactNumber(slot.item.requests) }} {{ t('dashboard.requests') }}</span>
             <span class="h-1 w-1 rounded-full bg-gray-300 dark:bg-dark-500" />
-            <span>{{ slot.placeholder ? '—' : `￥${formatCost(slot.item.actual_cost)}` }}</span>
+            <span>{{ slot.placeholder ? '—' : formatSecondaryMetric(slot.item) }}</span>
           </div>
         </article>
       </div>
@@ -101,13 +119,13 @@
                   {{ t('dashboard.rankingPlaceholder') }}
                 </span>
               </div>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '——' : `${formatNumber(slot.item.requests)} ${t('dashboard.requests')}` }}</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '——' : `${formatCompactNumber(slot.item.requests)} ${t('dashboard.requests')}` }}</p>
             </div>
             <div class="shrink-0 text-right">
               <p class="text-2xl font-black tracking-tight" :class="slot.placeholder ? 'text-gray-300 dark:text-dark-500' : 'text-gray-900 dark:text-white'">
-                {{ slot.placeholder ? '—' : formatTokens(slot.item.tokens) }}
+                {{ slot.placeholder ? '—' : formatPrimaryMetric(slot.item) }}
               </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '—' : `￥${formatCost(slot.item.actual_cost)}` }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '—' : formatSecondaryMetric(slot.item) }}</p>
             </div>
           </div>
         </article>
@@ -122,10 +140,14 @@ import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import type { UserTokenRankingItem, UserTokenRankingResponse } from '@/api/usage'
 
+type RankingType = 'tokens' | 'cost'
+
 const props = defineProps<{
   ranking: UserTokenRankingResponse | null
   loading: boolean
 }>()
+
+const rankType = defineModel<RankingType>('rankType', { default: 'tokens' })
 
 const { t } = useI18n()
 const activePeriod = ref<'all' | 'today' | 'week' | 'month'>('all')
@@ -136,6 +158,11 @@ type RankingSlot = {
   item: UserTokenRankingItem
   placeholder: boolean
 }
+
+const rankTypeTabs = computed(() => [
+  { key: 'tokens' as const, label: 'Token 排行' },
+  { key: 'cost' as const, label: '消费排行' },
+])
 
 const tabs = computed(() => [
   { key: 'all' as const, label: '总榜' },
@@ -154,10 +181,10 @@ const rankingSlots = computed<RankingSlot[]>(() =>
     const rank = index + 1
     const item = items.value[index]
     if (item) {
-      return { key: `user-${item.user_id}-${activePeriod.value}-${rank}`, rank, item, placeholder: false }
+      return { key: `user-${item.user_id}-${activePeriod.value}-${rankType.value}-${rank}`, rank, item, placeholder: false }
     }
     return {
-      key: `placeholder-${activePeriod.value}-${rank}`,
+      key: `placeholder-${activePeriod.value}-${rankType.value}-${rank}`,
       rank,
       placeholder: true,
       item: {
@@ -177,13 +204,30 @@ const restSlots = computed(() => rankingSlots.value.slice(3))
 const maskValue = (value: string) => {
   const text = (value || '').trim()
   if (!text) return '***'
-  return `${text.slice(0, 3)}***${text.slice(-3)}`
+
+  const maskSegment = (segment: string) => {
+    if (!segment) return '***'
+    if (segment.length <= 2) return `${segment[0] ?? ''}**`
+    if (segment.length <= 6) return `${segment.slice(0, 1)}**${segment.slice(-1)}`
+    return `${segment.slice(0, 2)}**${segment.slice(-2)}`
+  }
+
+  const atIndex = text.indexOf('@')
+  if (atIndex > 0) {
+    const local = text.slice(0, atIndex)
+    const domain = text.slice(atIndex + 1)
+    const [domainName = '', ...suffixParts] = domain.split('.')
+    const suffix = suffixParts.length > 0 ? `.${suffixParts.join('.')}` : ''
+    return `${maskSegment(local)}@${maskSegment(domainName)}${suffix}`
+  }
+
+  return maskSegment(text)
 }
 
 const displayName = (slot: RankingSlot) => {
   if (slot.placeholder) return t('dashboard.rankingPlaceholder')
   const username = slot.item.username?.trim()
-  if (username) return username
+  if (username) return maskValue(username)
   return maskValue(slot.item.email)
 }
 
@@ -201,14 +245,41 @@ const rankDescription = (rank: number) => {
   return ''
 }
 
-const formatNumber = (value: number) => new Intl.NumberFormat().format(value || 0)
-const formatTokens = (value: number) => {
-  const n = value || 0
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return formatNumber(n)
+const compactFormatter = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 2,
+})
+
+const formatCompactNumber = (value: number, fractionDigits = 2) => {
+  const n = Number(value) || 0
+  const abs = Math.abs(n)
+  const units = [
+    { value: 1_000_000_000, suffix: 'B' },
+    { value: 1_000_000, suffix: 'M' },
+    { value: 1_000, suffix: 'K' },
+  ]
+  const unit = units.find((item) => abs >= item.value)
+  if (!unit) return compactFormatter.format(n)
+
+  const scaled = n / unit.value
+  const formatted = scaled.toFixed(fractionDigits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+  return `${formatted}${unit.suffix}`
 }
-const formatCost = (value: number) => (value || 0).toFixed(4)
+
+const formatCostValue = (value: number) => {
+  const n = Number(value) || 0
+  if (Math.abs(n) >= 1_000) return `￥${formatCompactNumber(n)}`
+  return `￥${n.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')}`
+}
+
+const formatPrimaryMetric = (item: UserTokenRankingItem) => {
+  if (rankType.value === 'cost') return formatCostValue(item.actual_cost)
+  return formatCompactNumber(item.tokens)
+}
+
+const formatSecondaryMetric = (item: UserTokenRankingItem) => {
+  if (rankType.value === 'cost') return formatCompactNumber(item.tokens)
+  return formatCostValue(item.actual_cost)
+}
 
 const podiumCardClass = (rank: number) => {
   if (rank === 1) return 'border-primary-200 bg-primary-50/90 shadow-md dark:border-primary-500/30 dark:bg-primary-500/10 dark:shadow-[0_0_26px_rgba(20,184,166,0.10)]'

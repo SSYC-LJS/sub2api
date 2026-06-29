@@ -469,12 +469,55 @@ func rankingPeriodPayload(startTime, endTime time.Time, ranking *usagestats.User
 		ranking = &usagestats.UserSpendingRankingResponse{}
 	}
 	return gin.H{
-		"ranking":           ranking.Ranking,
+		"ranking":           maskUserRankingIdentities(ranking.Ranking),
 		"total_actual_cost": ranking.TotalActualCost,
 		"total_requests":    ranking.TotalRequests,
 		"total_tokens":      ranking.TotalTokens,
 		"start_date":        formatRankingDate(startTime),
 		"end_date":          formatRankingDate(endTime.Add(-24 * time.Hour)),
+	}
+}
+
+func maskUserRankingIdentities(items []usagestats.UserSpendingRankingItem) []usagestats.UserSpendingRankingItem {
+	masked := make([]usagestats.UserSpendingRankingItem, len(items))
+	copy(masked, items)
+	for i := range masked {
+		masked[i].Email = maskRankingIdentity(masked[i].Email)
+		masked[i].Username = maskRankingIdentity(masked[i].Username)
+	}
+	return masked
+}
+
+func maskRankingIdentity(value string) string {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return "***"
+	}
+	if at := strings.Index(text, "@"); at > 0 {
+		local := text[:at]
+		domain := text[at+1:]
+		domainName := domain
+		suffix := ""
+		if dot := strings.Index(domain, "."); dot >= 0 {
+			domainName = domain[:dot]
+			suffix = domain[dot:]
+		}
+		return maskRankingSegment(local) + "@" + maskRankingSegment(domainName) + suffix
+	}
+	return maskRankingSegment(text)
+}
+
+func maskRankingSegment(segment string) string {
+	runes := []rune(segment)
+	switch length := len(runes); {
+	case length == 0:
+		return "***"
+	case length <= 2:
+		return string(runes[:1]) + "**"
+	case length <= 6:
+		return string(runes[:1]) + "**" + string(runes[length-1:])
+	default:
+		return string(runes[:2]) + "**" + string(runes[length-2:])
 	}
 }
 
@@ -485,7 +528,7 @@ func formatRankingDate(t time.Time) string {
 	return t.Format("2006-01-02")
 }
 
-// DashboardRanking handles getting global user token ranking for all/today/week/month.
+// DashboardRanking handles getting global user token/spending ranking for all/today/week/month.
 // GET /api/v1/usage/dashboard/ranking
 func (h *UsageHandler) DashboardRanking(c *gin.Context) {
 	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
@@ -493,11 +536,23 @@ func (h *UsageHandler) DashboardRanking(c *gin.Context) {
 		return
 	}
 
+	sortBy := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort_by", "tokens")))
+	if sortBy != "tokens" && sortBy != "cost" {
+		response.BadRequest(c, "Invalid sort_by")
+		return
+	}
+
 	ranges := userTokenRankingRanges(c.Query("timezone"))
 	payload := gin.H{}
 	for _, period := range []string{"all", "today", "week", "month"} {
 		r := ranges[period]
-		ranking, err := h.usageService.GetUserTokenRanking(c.Request.Context(), r[0], r[1], dashboardRankingLimit)
+		var ranking *usagestats.UserSpendingRankingResponse
+		var err error
+		if sortBy == "cost" {
+			ranking, err = h.usageService.GetUserSpendingRanking(c.Request.Context(), r[0], r[1], dashboardRankingLimit)
+		} else {
+			ranking, err = h.usageService.GetUserTokenRanking(c.Request.Context(), r[0], r[1], dashboardRankingLimit)
+		}
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
