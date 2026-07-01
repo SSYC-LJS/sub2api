@@ -104,8 +104,14 @@
         <article
           v-for="group in filteredGroups"
           :key="group.id"
-          class="group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-dark-700 dark:bg-dark-900"
+          class="group relative cursor-pointer overflow-hidden rounded-3xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-500/60 dark:border-dark-700 dark:bg-dark-900"
           :class="recommendationCardClass(group.recommendation.level)"
+          role="button"
+          tabindex="0"
+          :title="t('modelMarket.pricing.openHint')"
+          @click="openPricingDialog(group)"
+          @keydown.enter.prevent="openPricingDialog(group)"
+          @keydown.space.prevent="openPricingDialog(group)"
         >
           <div class="h-1.5" :class="recommendationAccentClass(group.recommendation.level)"></div>
           <div class="flex h-full flex-col gap-4 p-5">
@@ -174,7 +180,7 @@
                   type="button"
                   class="inline-flex max-w-full items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs font-medium text-gray-700 transition-colors hover:border-primary-300 hover:text-primary-600 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-200 dark:hover:border-primary-500/60 dark:hover:text-primary-300"
                   :title="copiedModelName === model.name ? t('common.copied', 'Copied') : model.name"
-                  @click="copyModelName(model.name)"
+                  @click.stop="copyModelName(model.name)"
                 >
                   <PlatformIcon :platform="model.platform as GroupPlatform" size="xs" />
                   <span class="truncate">{{ model.name }}</span>
@@ -185,6 +191,84 @@
           </div>
         </article>
       </section>
+
+      <BaseDialog
+        :show="!!selectedPricingGroup"
+        :title="selectedPricingGroup ? t('modelMarket.pricing.title', { group: selectedPricingGroup.name }) : t('modelMarket.pricing.titleFallback')"
+        width="wide"
+        close-on-click-outside
+        @close="closePricingDialog"
+      >
+        <div v-if="selectedPricingGroup" class="space-y-5">
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <span
+              class="rounded-full px-2.5 py-1 text-xs font-bold tabular-nums"
+              :class="recommendationPillClass(selectedPricingGroup.recommendation.level)"
+            >
+              ×{{ formatRate(selectedPricingGroup.rate) }}
+            </span>
+            <span class="text-gray-500 dark:text-gray-400">
+              {{ t('modelMarket.pricing.rateHint') }}
+            </span>
+          </div>
+
+          <div class="max-h-[65vh] space-y-3 overflow-auto pr-1">
+            <div
+              v-for="model in selectedPricingGroup.models"
+              :key="`pricing-${selectedPricingGroup.id}-${model.platform}-${model.name}`"
+              class="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:border-dark-700 dark:bg-dark-800/70"
+            >
+              <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+                <div class="flex min-w-0 items-center gap-2">
+                  <PlatformIcon :platform="model.platform as GroupPlatform" size="xs" />
+                  <h3 class="min-w-0 truncate font-semibold text-gray-900 dark:text-white" :title="model.name">
+                    {{ model.name }}
+                  </h3>
+                </div>
+                <span class="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-500 dark:bg-dark-900 dark:text-gray-400">
+                  {{ pricingModeLabel(model.pricing?.billing_mode) }}
+                </span>
+              </div>
+
+              <div v-if="!model.pricing" class="text-sm text-gray-500 dark:text-gray-400">
+                {{ t('modelMarket.pricing.noPricing') }}
+              </div>
+
+              <div v-else class="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <template v-for="row in pricingRows(model.pricing, selectedPricingGroup.rate)" :key="row.label">
+                    <div class="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 dark:bg-dark-900/80">
+                      <span class="text-gray-500 dark:text-gray-400">{{ row.label }}</span>
+                      <span class="font-mono font-medium text-gray-900 dark:text-white">{{ row.value }}</span>
+                    </div>
+                  </template>
+                </div>
+
+                <div v-if="model.pricing.intervals?.length" class="rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900/80">
+                  <div class="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    {{ t('modelMarket.pricing.intervals') }}
+                  </div>
+                  <div class="space-y-2">
+                    <div
+                      v-for="(iv, idx) in model.pricing.intervals"
+                      :key="idx"
+                      class="flex flex-wrap items-center justify-between gap-2 text-xs"
+                    >
+                      <span class="text-gray-500 dark:text-gray-400">
+                        <template v-if="iv.tier_label">{{ iv.tier_label }}</template>
+                        <template v-else>{{ formatRange(iv.min_tokens, iv.max_tokens) }}</template>
+                      </span>
+                      <span class="font-mono text-gray-900 dark:text-white">
+                        {{ formatInterval(iv, model.pricing.billing_mode, selectedPricingGroup.rate) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </BaseDialog>
     </div>
   </AppLayout>
 </template>
@@ -195,15 +279,25 @@ import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import userChannelsAPI, {
   type UserAvailableChannel,
   type UserAvailableGroup,
+  type UserPricingInterval,
   type UserSupportedModel,
+  type UserSupportedModelPricing,
 } from '@/api/channels'
 import userGroupsAPI from '@/api/groups'
 import type { GroupPlatform } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatScaled } from '@/utils/pricing'
+import {
+  BILLING_MODE_IMAGE,
+  BILLING_MODE_PER_REQUEST,
+  BILLING_MODE_TOKEN,
+  type BillingMode,
+} from '@/constants/channel'
 import {
   platformBadgeClass,
   platformLabel,
@@ -214,6 +308,7 @@ type RecommendationLevel = 'normal' | 'moderate' | 'recommended' | 'super'
 interface MarketGroupModel {
   name: string
   platform: string
+  pricing: UserSupportedModelPricing | null
 }
 
 interface MarketGroupCard {
@@ -240,6 +335,7 @@ const loading = ref(false)
 const searchQuery = ref('')
 const selectedProvider = ref('')
 const copiedModelName = ref('')
+const selectedPricingGroup = ref<MarketGroupCard | null>(null)
 
 async function copyModelName(name: string) {
   try {
@@ -350,7 +446,7 @@ function addGroupModel(models: Map<string, MarketGroupModel>, model: UserSupport
   const platform = model.platform || fallbackPlatform || ''
   const key = `${platform}:${name}`
   if (!models.has(key)) {
-    models.set(key, { name, platform })
+    models.set(key, { name, platform, pricing: model.pricing })
   }
 }
 
@@ -361,6 +457,86 @@ function effectiveRate(group: UserAvailableGroup): number {
 
 function formatRate(rate: number): string {
   return rate.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+}
+
+function openPricingDialog(group: MarketGroupCard) {
+  selectedPricingGroup.value = group
+}
+
+function closePricingDialog() {
+  selectedPricingGroup.value = null
+}
+
+const perMillionScale = 1_000_000
+
+function scaledPrice(value: number | null | undefined, scale: number, rate: number): string {
+  if (value == null) return '-'
+  return formatScaled(value * rate, scale)
+}
+
+function priceWithUnit(value: number | null | undefined, scale: number, unit: string, rate: number): string {
+  return value == null ? '-' : `${scaledPrice(value, scale, rate)} ${unit}`
+}
+
+function pricingModeLabel(mode: BillingMode | undefined): string {
+  switch (mode) {
+    case BILLING_MODE_TOKEN:
+      return t('modelMarket.pricing.billingModeToken')
+    case BILLING_MODE_PER_REQUEST:
+      return t('modelMarket.pricing.billingModePerRequest')
+    case BILLING_MODE_IMAGE:
+      return t('modelMarket.pricing.billingModeImage')
+    default:
+      return t('modelMarket.pricing.noPricing')
+  }
+}
+
+function imageUnitPrice(pricing: UserSupportedModelPricing): number | null {
+  return pricing.per_request_price ?? pricing.image_output_price ?? null
+}
+
+function pricingRows(pricing: UserSupportedModelPricing, rate: number): Array<{ label: string; value: string }> {
+  if (pricing.billing_mode === BILLING_MODE_PER_REQUEST) {
+    return [{
+      label: t('modelMarket.pricing.perRequestPrice'),
+      value: priceWithUnit(pricing.per_request_price, 1, t('modelMarket.pricing.unitPerRequest'), rate),
+    }]
+  }
+
+  if (pricing.billing_mode === BILLING_MODE_IMAGE) {
+    return [{
+      label: t('modelMarket.pricing.perImagePrice'),
+      value: priceWithUnit(imageUnitPrice(pricing), 1, t('modelMarket.pricing.unitPerImage'), rate),
+    }]
+  }
+
+  const rows = [
+    { label: t('modelMarket.pricing.inputPrice'), value: priceWithUnit(pricing.input_price, perMillionScale, t('modelMarket.pricing.unitPerMillion'), rate) },
+    { label: t('modelMarket.pricing.outputPrice'), value: priceWithUnit(pricing.output_price, perMillionScale, t('modelMarket.pricing.unitPerMillion'), rate) },
+    { label: t('modelMarket.pricing.cacheWritePrice'), value: priceWithUnit(pricing.cache_write_price, perMillionScale, t('modelMarket.pricing.unitPerMillion'), rate) },
+    { label: t('modelMarket.pricing.cacheReadPrice'), value: priceWithUnit(pricing.cache_read_price, perMillionScale, t('modelMarket.pricing.unitPerMillion'), rate) },
+  ]
+  if (pricing.image_output_price != null && pricing.image_output_price > 0) {
+    rows.push({
+      label: t('modelMarket.pricing.imageOutputPrice'),
+      value: priceWithUnit(pricing.image_output_price, perMillionScale, t('modelMarket.pricing.unitPerMillion'), rate),
+    })
+  }
+  return rows
+}
+
+function formatRange(min: number, max: number | null): string {
+  const maxLabel = max == null ? '∞' : String(max)
+  return `(${min}, ${maxLabel}]`
+}
+
+function formatInterval(iv: UserPricingInterval, mode: BillingMode, rate: number): string {
+  if (mode === BILLING_MODE_PER_REQUEST || mode === BILLING_MODE_IMAGE) {
+    return priceWithUnit(iv.per_request_price, 1, mode === BILLING_MODE_IMAGE ? t('modelMarket.pricing.unitPerImage') : t('modelMarket.pricing.unitPerRequest'), rate)
+  }
+  const input = scaledPrice(iv.input_price, perMillionScale, rate)
+  const output = scaledPrice(iv.output_price, perMillionScale, rate)
+  return `${input} / ${output} ${t('modelMarket.pricing.unitPerMillion')}`
 }
 
 function normalizeStars(stars: number | undefined): 3 | 4 | 5 {
