@@ -139,6 +139,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import type { UserTokenRankingItem, UserTokenRankingResponse } from '@/api/usage'
+import { getRankingIdentityDisplay } from '@/utils/rankingIdentity'
 
 type RankingType = 'tokens' | 'cost'
 
@@ -201,34 +202,9 @@ const rankingSlots = computed<RankingSlot[]>(() =>
 const podiumSlots = computed(() => [rankingSlots.value[1], rankingSlots.value[0], rankingSlots.value[2]].filter(Boolean))
 const restSlots = computed(() => rankingSlots.value.slice(3))
 
-const maskValue = (value: string) => {
-  const text = (value || '').trim()
-  if (!text) return '***'
-
-  const maskSegment = (segment: string) => {
-    if (!segment) return '***'
-    if (segment.length <= 2) return `${segment[0] ?? ''}**`
-    if (segment.length <= 6) return `${segment.slice(0, 1)}**${segment.slice(-1)}`
-    return `${segment.slice(0, 2)}**${segment.slice(-2)}`
-  }
-
-  const atIndex = text.indexOf('@')
-  if (atIndex > 0) {
-    const local = text.slice(0, atIndex)
-    const domain = text.slice(atIndex + 1)
-    const [domainName = '', ...suffixParts] = domain.split('.')
-    const suffix = suffixParts.length > 0 ? `.${suffixParts.join('.')}` : ''
-    return `${maskSegment(local)}@${maskSegment(domainName)}${suffix}`
-  }
-
-  return maskSegment(text)
-}
-
 const displayName = (slot: RankingSlot) => {
   if (slot.placeholder) return t('dashboard.rankingPlaceholder')
-  const username = slot.item.username?.trim()
-  if (username) return maskValue(username)
-  return maskValue(slot.item.email)
+  return getRankingIdentityDisplay(slot.item)
 }
 
 const rankMedal = (rank: number) => {
