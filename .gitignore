@@ -121,6 +121,8 @@ CLAUDE.md
 scripts
 !mobile-shell/scripts/
 !mobile-shell/scripts/**
+!backend/scripts/
+!backend/scripts/resolve-version.sh
 .code-review-state
 #openspec/
 code-reviews/
@@ -140,3 +142,4 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+
