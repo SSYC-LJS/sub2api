@@ -191,14 +191,56 @@ func (s *WebhookService) buildPayload(event WebhookEvent) ([]byte, error) {
 func (s *WebhookService) buildPayloadWithConfig(cfg config.WebhookConfig, event WebhookEvent) ([]byte, error) {
 	format := strings.ToLower(strings.TrimSpace(cfg.Format))
 	if format == "" || format == "feishu" || format == "lark" {
-		return json.Marshal(map[string]any{
-			"msg_type": "text",
-			"content": map[string]any{
-				"text": feishuText(event),
-			},
-		})
+		return json.Marshal(buildFeishuCardPayload(event))
 	}
 	return json.Marshal(event)
+}
+
+func buildFeishuCardPayload(event WebhookEvent) map[string]any {
+	title := strings.TrimSpace(event.Title)
+	if title == "" {
+		title = event.Event
+	}
+	if title == "" {
+		title = "Webhook 通知"
+	}
+	fields := []map[string]any{
+		buildFeishuCardField("事件", event.Event),
+		buildFeishuCardField("时间", event.Timestamp.Format(time.RFC3339)),
+	}
+	if event.Severity != "" {
+		fields = append(fields, buildFeishuCardField("级别", event.Severity))
+	}
+	for _, key := range sortedWebhookKeys(event.Data) {
+		fields = append(fields, buildFeishuCardField(key, fmt.Sprint(event.Data[key])))
+	}
+	return map[string]any{
+		"msg_type": "interactive",
+		"card": map[string]any{
+			"config": map[string]any{
+				"wide_screen_mode": true,
+				"update_multi":     true,
+			},
+			"header": map[string]any{
+				"title": map[string]any{
+					"tag":     "plain_text",
+					"content": title,
+				},
+				"template": feishuTemplate(event.Severity),
+			},
+			"elements": fields,
+		},
+	}
+}
+
+func buildFeishuCardField(title, value string) map[string]any {
+	return map[string]any{
+		"tag": "div",
+		"text": map[string]any{
+			"tag":     "lark_md",
+			"content": fmt.Sprintf("**%s**：%s", escapeFeishuText(title), escapeFeishuText(value)),
+		},
+	}
 }
 
 func (s *WebhookService) timeout() time.Duration {

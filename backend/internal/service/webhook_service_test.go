@@ -13,7 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 )
 
-func TestWebhookServiceBuildsFeishuTextPayload(t *testing.T) {
+func TestWebhookServiceBuildsFeishuCardPayload(t *testing.T) {
 	svc := NewWebhookService(&config.Config{Webhook: config.WebhookConfig{Format: "feishu"}})
 	payload, err := svc.buildPayloadWithConfig(config.WebhookConfig{Format: "feishu"}, WebhookEvent{
 		Event:     WebhookEventRedeemUsed,
@@ -31,16 +31,16 @@ func TestWebhookServiceBuildsFeishuTextPayload(t *testing.T) {
 	if err := json.Unmarshal(payload, &body); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
-	if body["msg_type"] != "text" {
-		t.Fatalf("msg_type = %v, want text; payload=%s", body["msg_type"], payload)
+	if body["msg_type"] != "interactive" {
+		t.Fatalf("msg_type = %v, want interactive; payload=%s", body["msg_type"], payload)
 	}
-	content, ok := body["content"].(map[string]any)
+	card, ok := body["card"].(map[string]any)
 	if !ok {
-		t.Fatalf("content missing or invalid: %#v", body["content"])
+		t.Fatalf("card missing or invalid: %#v", body["card"])
 	}
-	text, _ := content["text"].(string)
-	if !strings.Contains(text, "redeem.used") || !strings.Contains(text, "hello") {
-		t.Fatalf("text payload missing event/data: %q", text)
+	texts := feishuCardTexts(card)
+	if !strings.Contains(texts, "redeem.used") || !strings.Contains(texts, "hello") {
+		t.Fatalf("card payload missing event/data: %q", texts)
 	}
 }
 
@@ -83,8 +83,8 @@ func TestWebhookServiceUsesSettingRepositoryForBusinessEvents(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
-		content, _ := body["content"].(map[string]any)
-		requests <- fmt.Sprint(content["text"])
+		card, _ := body["card"].(map[string]any)
+		requests <- normalizeFeishuCardText(feishuCardTexts(card))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"code":0,"msg":"ok"}`))
 	}))
@@ -159,8 +159,8 @@ func TestWebhookServiceBusinessPayloadFields(t *testing.T) {
 			if err := json.Unmarshal(payload, &body); err != nil {
 				t.Fatalf("unmarshal payload: %v", err)
 			}
-			content, _ := body["content"].(map[string]any)
-			text := fmt.Sprint(content["text"])
+			card, _ := body["card"].(map[string]any)
+			text := normalizeFeishuCardText(feishuCardTexts(card))
 			for _, want := range tt.want {
 				if !strings.Contains(text, want) {
 					t.Fatalf("payload missing %q: %q", want, text)
@@ -221,4 +221,26 @@ func (r *webhookSettingRepoStub) GetAll(ctx context.Context) (map[string]string,
 func (r *webhookSettingRepoStub) Delete(ctx context.Context, key string) error {
 	delete(r.values, key)
 	return nil
+}
+
+func feishuCardTexts(card map[string]any) string {
+	parts := make([]string, 0)
+	if header, ok := card["header"].(map[string]any); ok {
+		if title, ok := header["title"].(map[string]any); ok {
+			parts = append(parts, fmt.Sprint(title["content"]))
+		}
+	}
+	if elements, ok := card["elements"].([]any); ok {
+		for _, element := range elements {
+			item, _ := element.(map[string]any)
+			text, _ := item["text"].(map[string]any)
+			parts = append(parts, fmt.Sprint(text["content"]))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func normalizeFeishuCardText(text string) string {
+	text = strings.ReplaceAll(text, "**", "")
+	return text
 }

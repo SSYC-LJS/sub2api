@@ -114,20 +114,44 @@ func (h *SettingHandler) TestWebhook(c *gin.Context) {
 	if message == "" {
 		message = "这是一条来自系统设置页面的真实 Webhook 测试消息。"
 	}
+	now := time.Now()
 	if err := h.settingService.TestWebhook(c.Request.Context(), service.WebhookEvent{
 		Event:     eventName,
 		Title:     title,
 		Severity:  "info",
-		Timestamp: time.Now(),
-		Data: map[string]any{
-			"message": message,
-			"source":  "admin_settings_test",
-		},
+		Timestamp: now,
+		Data:      buildWebhookTestData(eventName, message, now),
 	}); err != nil {
 		response.Error(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	response.Success(c, gin.H{"ok": true})
+}
+
+func buildWebhookTestData(eventName, message string, now time.Time) map[string]any {
+	base := map[string]any{
+		"message": message,
+		"source":  "admin_settings_test",
+	}
+	switch eventName {
+	case service.WebhookEventUserRegistered:
+		base["注册邮箱"] = "test-user@example.com"
+		base["注册时间"] = now.Format(time.RFC3339)
+	case service.WebhookEventRedeemUsed:
+		base["使用用户邮箱"] = "test-user@example.com"
+		base["兑换码"] = "TEST-CODE-1234"
+		base["兑换码额度"] = "余额 10"
+		base["兑换类型"] = "balance"
+	case service.WebhookEventOpsError:
+		base["报错Code"] = 429
+		base["报错内容"] = "上游限流或请求失败测试"
+		base["报错分组"] = "测试分组"
+		base["用户邮箱"] = "test-user@example.com"
+		base["报错阶段"] = "gateway"
+		base["平台"] = "openai"
+		base["模型"] = "gpt-test"
+	}
+	return base
 }
 
 // GetSettings 获取所有系统设置
