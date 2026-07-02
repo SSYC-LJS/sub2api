@@ -472,8 +472,14 @@ func maskUserRankingIdentities(items []usagestats.UserSpendingRankingItem) []usa
 	masked := make([]usagestats.UserSpendingRankingItem, len(items))
 	copy(masked, items)
 	for i := range masked {
-		masked[i].Email = maskRankingIdentity(masked[i].Email)
-		masked[i].Username = maskRankingIdentity(masked[i].Username)
+		masked[i].Username = strings.TrimSpace(masked[i].Username)
+		masked[i].Email = strings.TrimSpace(masked[i].Email)
+		if masked[i].Username != "" {
+			masked[i].Username = maskRankingIdentity(masked[i].Username)
+			masked[i].Email = ""
+			continue
+		}
+		masked[i].Email = maskRankingEmail(masked[i].Email)
 	}
 	return masked
 }
@@ -481,34 +487,33 @@ func maskUserRankingIdentities(items []usagestats.UserSpendingRankingItem) []usa
 func maskRankingIdentity(value string) string {
 	text := strings.TrimSpace(value)
 	if text == "" {
-		return "***"
+		return "****"
 	}
-	if at := strings.Index(text, "@"); at > 0 {
-		local := text[:at]
-		domain := text[at+1:]
-		domainName := domain
-		suffix := ""
-		if dot := strings.Index(domain, "."); dot >= 0 {
-			domainName = domain[:dot]
-			suffix = domain[dot:]
-		}
-		return maskRankingSegment(local) + "@" + maskRankingSegment(domainName) + suffix
+	runes := []rune(text)
+	if len(runes) > 6 {
+		return string(runes[:3]) + "****" + string(runes[len(runes)-3:])
 	}
-	return maskRankingSegment(text)
+	if len(runes) > 4 {
+		return string(runes[:2]) + "****" + string(runes[len(runes)-2:])
+	}
+	if len(runes) > 1 {
+		return string(runes[:1]) + "****" + string(runes[len(runes)-1:])
+	}
+	return string(runes[:1]) + "****"
 }
 
-func maskRankingSegment(segment string) string {
-	runes := []rune(segment)
-	switch length := len(runes); {
-	case length == 0:
-		return "***"
-	case length <= 2:
-		return string(runes[:1]) + "**"
-	case length <= 6:
-		return string(runes[:1]) + "**" + string(runes[length-1:])
-	default:
-		return string(runes[:2]) + "**" + string(runes[length-2:])
+func maskRankingEmail(value string) string {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return "****"
 	}
+	at := strings.LastIndex(text, "@")
+	if at <= 0 || at == len(text)-1 {
+		return maskRankingIdentity(text)
+	}
+	local := text[:at]
+	domain := text[at+1:]
+	return maskRankingIdentity(local) + "@" + domain
 }
 
 func formatRankingDate(t time.Time) string {

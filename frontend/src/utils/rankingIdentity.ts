@@ -16,8 +16,20 @@ export function maskRankingIdentity(value: string): string {
   return `${chars[0] ?? ''}${MASK}${chars[chars.length - 1] ?? ''}`
 }
 
+export function maskRankingEmail(value: string): string {
+  const text = (value || '').trim()
+  if (!text) return MASK
+
+  const atIndex = text.lastIndexOf('@')
+  if (atIndex <= 0 || atIndex === text.length - 1) return maskRankingIdentity(text)
+
+  const local = text.slice(0, atIndex)
+  const domain = text.slice(atIndex + 1)
+  return `${maskRankingIdentity(local)}@${domain}`
+}
+
 export function getRankingIdentityDisplay(item: Pick<UserTokenRankingItem, 'username' | 'email'>): string {
   const username = item.username?.trim()
   if (username) return maskRankingIdentity(username)
-  return maskRankingIdentity(item.email)
+  return maskRankingEmail(item.email)
 }
