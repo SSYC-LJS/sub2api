@@ -100,11 +100,28 @@ export interface UserTokenRankingPeriod {
   end_date: string
 }
 
+export interface UserRedeemRankingItem {
+  user_id: number
+  email: string
+  username: string
+  amount: number
+  redeem_count: number
+}
+
+export interface UserRedeemRankingPeriod {
+  ranking: UserRedeemRankingItem[]
+  total_amount: number
+  total_redeem_count: number
+  start_date: string
+  end_date: string
+}
+
 export interface UserTokenRankingResponse {
   all: UserTokenRankingPeriod
   today: UserTokenRankingPeriod
   week: UserTokenRankingPeriod
   month: UserTokenRankingPeriod
+  today_redeem: UserRedeemRankingPeriod
 }
 
 export interface ApiKeyDailyUsagePoint {

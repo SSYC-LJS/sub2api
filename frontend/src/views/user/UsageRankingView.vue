@@ -37,14 +37,14 @@ import { usageAPI, type UserTokenRankingResponse } from '@/api/usage'
 const { t } = useI18n()
 const loading = ref(false)
 const tokenRanking = ref<UserTokenRankingResponse | null>(null)
-const rankType = ref<'tokens' | 'cost'>('tokens')
+const rankType = ref<'tokens' | 'cost' | 'redeem'>('tokens')
 
 const loadRanking = async () => {
   loading.value = true
   try {
     tokenRanking.value = await usageAPI.getDashboardRanking({
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      sort_by: rankType.value,
+      sort_by: rankType.value === 'cost' ? 'cost' : 'tokens',
     })
   } catch (error) {
     console.error('Failed to load token ranking:', error)

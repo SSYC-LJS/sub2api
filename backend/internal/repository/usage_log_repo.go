@@ -2581,6 +2581,93 @@ func (r *usageLogRepository) GetUserTokenRanking(ctx context.Context, startTime,
 	}, nil
 }
 
+// GetUserBalanceRedeemRanking returns user balance redeem ranking aggregated within the time range.
+func (r *usageLogRepository) GetUserBalanceRedeemRanking(ctx context.Context, startTime, endTime time.Time, limit int) (result *usagestats.UserRedeemRankingResponse, err error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	whereClause := "rc.used_at < $1"
+	args := []any{endTime}
+	if !startTime.IsZero() {
+		whereClause = "rc.used_at >= $1 AND rc.used_at < $2"
+		args = []any{startTime, endTime}
+	}
+	args = append(args, service.RedeemTypeBalance, service.StatusUsed, limit)
+
+	query := fmt.Sprintf(`
+		WITH user_redeems AS (
+			SELECT
+				rc.used_by AS user_id,
+				COALESCE(us.email, '') as email,
+				COALESCE(us.username, '') as username,
+				COALESCE(SUM(rc.value), 0) as amount,
+				COUNT(*) as redeem_count
+			FROM redeem_codes rc
+			LEFT JOIN users us ON rc.used_by = us.id
+			WHERE %s
+			  AND rc.type = $%d
+			  AND rc.status = $%d
+			  AND rc.used_by IS NOT NULL
+			GROUP BY rc.used_by, us.email, us.username
+		),
+		ranked AS (
+			SELECT
+				user_id,
+				email,
+				username,
+				amount,
+				redeem_count,
+				COALESCE(SUM(amount) OVER (), 0) as total_amount,
+				COALESCE(SUM(redeem_count) OVER (), 0) as total_redeem_count
+			FROM user_redeems
+			ORDER BY amount DESC, redeem_count DESC, user_id ASC
+			LIMIT $%d
+		)
+		SELECT
+			user_id,
+			email,
+			username,
+			amount,
+			redeem_count,
+			total_amount,
+			total_redeem_count
+		FROM ranked
+		ORDER BY amount DESC, redeem_count DESC, user_id ASC
+	`, whereClause, len(args)-2, len(args)-1, len(args))
+
+	rows, err := r.sql.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+			result = nil
+		}
+	}()
+
+	ranking := make([]usagestats.UserRedeemRankingItem, 0)
+	totalAmount := 0.0
+	totalRedeemCount := int64(0)
+	for rows.Next() {
+		var row usagestats.UserRedeemRankingItem
+		if err = rows.Scan(&row.UserID, &row.Email, &row.Username, &row.Amount, &row.RedeemCount, &totalAmount, &totalRedeemCount); err != nil {
+			return nil, err
+		}
+		ranking = append(ranking, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &usagestats.UserRedeemRankingResponse{
+		Ranking:          ranking,
+		TotalAmount:      totalAmount,
+		TotalRedeemCount: totalRedeemCount,
+	}, nil
+}
+
 // UserDashboardStats 用户仪表盘统计
 type UserDashboardStats = usagestats.UserDashboardStats
 

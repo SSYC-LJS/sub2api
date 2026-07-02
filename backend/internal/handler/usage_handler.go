@@ -484,6 +484,22 @@ func maskUserRankingIdentities(items []usagestats.UserSpendingRankingItem) []usa
 	return masked
 }
 
+func maskUserRedeemRankingIdentities(items []usagestats.UserRedeemRankingItem) []usagestats.UserRedeemRankingItem {
+	masked := make([]usagestats.UserRedeemRankingItem, len(items))
+	copy(masked, items)
+	for i := range masked {
+		masked[i].Username = strings.TrimSpace(masked[i].Username)
+		masked[i].Email = strings.TrimSpace(masked[i].Email)
+		if masked[i].Username != "" {
+			masked[i].Username = maskRankingIdentity(masked[i].Username)
+			masked[i].Email = ""
+			continue
+		}
+		masked[i].Email = maskRankingEmail(masked[i].Email)
+	}
+	return masked
+}
+
 func maskRankingIdentity(value string) string {
 	text := strings.TrimSpace(value)
 	if text == "" {
@@ -553,6 +569,23 @@ func (h *UsageHandler) DashboardRanking(c *gin.Context) {
 			return
 		}
 		payload[period] = rankingPeriodPayload(r[0], r[1], ranking)
+	}
+
+	todayRange := ranges["today"]
+	redeemRanking, err := h.usageService.GetUserBalanceRedeemRanking(c.Request.Context(), todayRange[0], todayRange[1], dashboardRankingLimit)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if redeemRanking == nil {
+		redeemRanking = &usagestats.UserRedeemRankingResponse{}
+	}
+	payload["today_redeem"] = gin.H{
+		"ranking":            maskUserRedeemRankingIdentities(redeemRanking.Ranking),
+		"total_amount":       redeemRanking.TotalAmount,
+		"total_redeem_count": redeemRanking.TotalRedeemCount,
+		"start_date":         formatRankingDate(todayRange[0]),
+		"end_date":           formatRankingDate(todayRange[1].Add(-24 * time.Hour)),
 	}
 
 	response.Success(c, payload)

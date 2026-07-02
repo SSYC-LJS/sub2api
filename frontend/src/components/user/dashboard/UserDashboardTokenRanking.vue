@@ -90,7 +90,7 @@
             {{ slot.placeholder ? '—' : formatPrimaryMetric(slot.item) }}
           </p>
           <div class="relative mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <span>{{ slot.placeholder ? '—' : formatCompactNumber(slot.item.requests) }} {{ t('dashboard.requests') }}</span>
+            <span>{{ slot.placeholder ? '—' : formatActivityMetric(slot.item) }}</span>
             <span class="h-1 w-1 rounded-full bg-gray-300 dark:bg-dark-500" />
             <span>{{ slot.placeholder ? '—' : formatSecondaryMetric(slot.item) }}</span>
           </div>
@@ -119,7 +119,7 @@
                   {{ t('dashboard.rankingPlaceholder') }}
                 </span>
               </div>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '——' : `${formatCompactNumber(slot.item.requests)} ${t('dashboard.requests')}` }}</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ slot.placeholder ? '——' : formatActivityMetric(slot.item) }}</p>
             </div>
             <div class="shrink-0 text-right">
               <p class="text-2xl font-black tracking-tight" :class="slot.placeholder ? 'text-gray-300 dark:text-dark-500' : 'text-gray-900 dark:text-white'">
@@ -135,13 +135,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import type { UserTokenRankingItem, UserTokenRankingResponse } from '@/api/usage'
+import type { UserRedeemRankingItem, UserTokenRankingItem, UserTokenRankingResponse } from '@/api/usage'
 import { getRankingIdentityDisplay } from '@/utils/rankingIdentity'
 
-type RankingType = 'tokens' | 'cost'
+type RankingType = 'tokens' | 'cost' | 'redeem'
 
 const props = defineProps<{
   ranking: UserTokenRankingResponse | null
@@ -153,26 +153,41 @@ const rankType = defineModel<RankingType>('rankType', { default: 'tokens' })
 const { t } = useI18n()
 const activePeriod = ref<'all' | 'today' | 'week' | 'month'>('all')
 
+watch(rankType, (value) => {
+  if (value === 'redeem') {
+    activePeriod.value = 'today'
+  }
+})
+
 type RankingSlot = {
   key: string
   rank: number
-  item: UserTokenRankingItem
+  item: UserTokenRankingItem | UserRedeemRankingItem
   placeholder: boolean
 }
 
 const rankTypeTabs = computed(() => [
   { key: 'tokens' as const, label: 'Token 排行' },
   { key: 'cost' as const, label: '消费排行' },
+  { key: 'redeem' as const, label: '今日大哥榜' },
 ])
 
-const tabs = computed(() => [
-  { key: 'all' as const, label: '总榜' },
-  { key: 'today' as const, label: t('dashboard.rankingToday') },
-  { key: 'week' as const, label: t('dashboard.rankingWeek') },
-  { key: 'month' as const, label: t('dashboard.rankingMonth') },
-])
+const tabs = computed(() => {
+  if (rankType.value === 'redeem') {
+    return [{ key: 'today' as const, label: t('dashboard.rankingToday') }]
+  }
+  return [
+    { key: 'all' as const, label: '总榜' },
+    { key: 'today' as const, label: t('dashboard.rankingToday') },
+    { key: 'week' as const, label: t('dashboard.rankingWeek') },
+    { key: 'month' as const, label: t('dashboard.rankingMonth') },
+  ]
+})
 
 const items = computed(() => {
+  if (rankType.value === 'redeem') {
+    return props.ranking?.today_redeem?.ranking ?? []
+  }
   const period = props.ranking?.[activePeriod.value]
   return period?.ranking ?? []
 })
@@ -195,6 +210,8 @@ const rankingSlots = computed<RankingSlot[]>(() =>
         actual_cost: 0,
         requests: 0,
         tokens: 0,
+        amount: 0,
+        redeem_count: 0,
       },
     }
   })
@@ -206,6 +223,9 @@ const displayName = (slot: RankingSlot) => {
   if (slot.placeholder) return t('dashboard.rankingPlaceholder')
   return getRankingIdentityDisplay(slot.item)
 }
+
+const isRedeemItem = (item: RankingSlot['item']): item is UserRedeemRankingItem =>
+  'amount' in item && 'redeem_count' in item
 
 const rankMedal = (rank: number) => {
   if (rank === 1) return '🥇'
@@ -247,14 +267,21 @@ const formatCostValue = (value: number) => {
   return `￥${n.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')}`
 }
 
-const formatPrimaryMetric = (item: UserTokenRankingItem) => {
+const formatPrimaryMetric = (item: RankingSlot['item']) => {
+  if (isRedeemItem(item)) return formatCostValue(item.amount)
   if (rankType.value === 'cost') return formatCostValue(item.actual_cost)
   return formatCompactNumber(item.tokens)
 }
 
-const formatSecondaryMetric = (item: UserTokenRankingItem) => {
+const formatSecondaryMetric = (item: RankingSlot['item']) => {
+  if (isRedeemItem(item)) return `${formatCompactNumber(item.redeem_count)} 次兑换`
   if (rankType.value === 'cost') return formatCompactNumber(item.tokens)
   return formatCostValue(item.actual_cost)
+}
+
+const formatActivityMetric = (item: RankingSlot['item']) => {
+  if (isRedeemItem(item)) return `${formatCompactNumber(item.redeem_count)} 次兑换`
+  return `${formatCompactNumber(item.requests)} ${t('dashboard.requests')}`
 }
 
 const podiumCardClass = (rank: number) => {

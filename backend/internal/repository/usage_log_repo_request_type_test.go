@@ -699,6 +699,31 @@ func TestUsageLogRepositoryGetUserTokenRanking(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUsageLogRepositoryGetUserBalanceRedeemRanking(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &usageLogRepository{sql: db}
+
+	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+	rows := sqlmock.NewRows([]string{"user_id", "email", "username", "amount", "redeem_count", "total_amount", "total_redeem_count"}).
+		AddRow(int64(9), "nine@example.com", "Nine", 88.8, int64(2), 100.0, int64(3)).
+		AddRow(int64(8), "eight@example.com", "", 11.2, int64(1), 100.0, int64(3))
+
+	mock.ExpectQuery("WITH user_redeems AS \\(").
+		WithArgs(start, end, service.RedeemTypeBalance, service.StatusUsed, 10).
+		WillReturnRows(rows)
+
+	got, err := repo.GetUserBalanceRedeemRanking(context.Background(), start, end, 10)
+	require.NoError(t, err)
+	require.Equal(t, []usagestats.UserRedeemRankingItem{
+		{UserID: 9, Email: "nine@example.com", Username: "Nine", Amount: 88.8, RedeemCount: 2},
+		{UserID: 8, Email: "eight@example.com", Amount: 11.2, RedeemCount: 1},
+	}, got.Ranking)
+	require.Equal(t, 100.0, got.TotalAmount)
+	require.Equal(t, int64(3), got.TotalRedeemCount)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestBuildRequestTypeFilterConditionLegacyFallback(t *testing.T) {
 	tests := []struct {
 		name      string

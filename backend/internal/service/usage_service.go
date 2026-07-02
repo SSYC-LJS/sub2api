@@ -444,6 +444,15 @@ func (s *UsageService) GetUserTokenRanking(ctx context.Context, startTime, endTi
 	return ranking, nil
 }
 
+// GetUserBalanceRedeemRanking returns global user balance redeem ranking in a time range.
+func (s *UsageService) GetUserBalanceRedeemRanking(ctx context.Context, startTime, endTime time.Time, limit int) (*usagestats.UserRedeemRankingResponse, error) {
+	ranking, err := s.usageRepo.GetUserBalanceRedeemRanking(ctx, startTime, endTime, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get user balance redeem ranking: %w", err)
+	}
+	return ranking, nil
+}
+
 // GetBatchAPIKeyUsageStats returns today/total actual_cost for given api keys.
 func (s *UsageService) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*usagestats.BatchAPIKeyUsageStats, error) {
 	stats, err := s.usageRepo.GetBatchAPIKeyUsageStats(ctx, apiKeyIDs, startTime, endTime)
