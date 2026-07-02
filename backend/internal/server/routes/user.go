@@ -81,6 +81,13 @@ func RegisterUserRoutes(
 			channels.GET("/available", h.AvailableChannel.List)
 		}
 
+		// 生图无限画布
+		imageCanvas := authenticated.Group("/image-canvas")
+		{
+			imageCanvas.GET("/history", h.ImageCanvas.ListHistory)
+			imageCanvas.POST("/history", h.ImageCanvas.CreateHistory)
+		}
+
 		// 使用记录
 		usage := authenticated.Group("/usage")
 		{
