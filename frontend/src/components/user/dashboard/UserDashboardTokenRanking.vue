@@ -5,13 +5,7 @@
     <div class="pointer-events-none absolute -right-16 top-40 h-52 w-52 animate-blob-delayed rounded-full bg-gray-300/20 blur-3xl dark:bg-dark-600/30" />
     <div class="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary-400/35 to-transparent dark:via-primary-400/25" />
 
-    <div class="relative mb-6 flex animate-fade-up flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <div class="inline-flex items-center gap-2 rounded-full border border-primary-100 bg-primary-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.32em] text-primary-600 shadow-sm dark:border-primary-500/20 dark:bg-primary-500/10 dark:text-primary-300">
-          {{ t('dashboard.tokenRankingTitle') }}
-        </div>
-        <h3 class="mt-3 text-2xl font-black tracking-tight text-gray-900 sm:text-3xl dark:text-white">{{ t('dashboard.tokenRankingSubtitle') }}</h3>
-      </div>
+    <div class="relative mb-6 flex animate-fade-up justify-end">
       <div class="flex flex-col gap-3 lg:items-end">
         <div class="inline-flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5 shadow-sm dark:border-dark-600 dark:bg-dark-700">
           <button

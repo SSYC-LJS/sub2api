@@ -4,12 +4,7 @@
       <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,184,166,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top,rgba(20,184,166,0.10),transparent_36%)]" />
       <div class="pointer-events-none absolute left-1/2 top-8 h-72 w-72 -translate-x-1/2 rounded-full bg-primary-100/35 blur-3xl dark:bg-primary-500/10" />
       <div class="relative mx-auto max-w-6xl space-y-6">
-        <div class="flex animate-page-title flex-col gap-3 text-gray-900 sm:flex-row sm:items-center sm:justify-between dark:text-white">
-          <div>
-            <p class="text-xs font-bold uppercase tracking-[0.35em] text-primary-600 dark:text-primary-400">Leaderboard</p>
-            <h1 class="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{{ t('usageRanking.title') }}</h1>
-            <p class="mt-2 max-w-2xl text-sm text-gray-500 dark:text-gray-400">{{ t('usageRanking.description') }}</p>
-          </div>
+        <div class="flex animate-page-title justify-end text-gray-900 dark:text-white">
           <button type="button" class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-gray-50 disabled:opacity-60 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700" :disabled="loading" @click="loadRanking">
             <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
             {{ t('common.refresh') }}
