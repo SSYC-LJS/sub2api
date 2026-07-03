@@ -94,10 +94,11 @@
                         <span class="rounded-full bg-gray-100 px-2 py-1 dark:bg-dark-900">{{ node.apiKeyName }}</span>
                       </div>
                       <div v-if="node.error" class="rounded-xl border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200 whitespace-pre-wrap">{{ node.error }}</div>
-                      <div class="grid grid-cols-3 gap-2">
+                      <div class="grid grid-cols-4 gap-2">
                         <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="!canUseImage(node)" @click="downloadOriginal(node)">下载</button>
                         <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="!canUseImage(node) || isBusy(node)" @click="openEditDialog(node)">修改</button>
                         <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="isBusy(node)" @click="retryNode(node)">重试</button>
+                        <button class="btn btn-secondary justify-center px-2 text-xs text-red-600 hover:text-red-700 dark:text-red-300" :disabled="isBusy(node)" @click="deleteNode(node)">删除</button>
                       </div>
                     </div>
                   </article>
@@ -359,10 +360,12 @@ function statusBadgeClass(status: NodeStatus): string {
 }
 
 function nodeFromHistory(item: ImageCanvasHistoryItem): CanvasNode {
-  const rootId = item.source_image_url ? `history-${item.id}` : `history-${item.id}`
+  const localId = item.node_id || `history-${item.id}`
+  const rootId = item.root_node_id || localId
   return {
-    localId: `history-${item.id}`,
+    localId,
     rootId,
+    parentId: item.parent_node_id || undefined,
     historyId: item.id,
     apiKeyId: item.api_key_id,
     apiKeyName: item.api_key_name,
@@ -376,8 +379,8 @@ function nodeFromHistory(item: ImageCanvasHistoryItem): CanvasNode {
     sourceImageUrl: item.source_image_url,
     imageExpired: Boolean(item.image_expired),
     expiresAt: item.expires_at,
-    status: 'completed',
-    error: '',
+    status: item.status === 'failed' ? 'failed' : 'completed',
+    error: item.error_message || '',
     createdAt: item.created_at,
     retryPayload: {
       apiKeyId: item.api_key_id,
@@ -552,6 +555,7 @@ async function runGenerateTask(node: CanvasNode, apiKey: string) {
   } catch (error) {
     node.status = 'failed'
     node.error = extractDisplayError(error)
+    await saveFailedHistory(node)
   }
 }
 
@@ -572,6 +576,7 @@ async function runEditTask(node: CanvasNode, sourceNode: CanvasNode, apiKey: str
   } catch (error) {
     node.status = 'failed'
     node.error = extractDisplayError(error)
+    await saveFailedHistory(node)
   }
 }
 
@@ -588,7 +593,11 @@ async function applyImagesToNode(node: CanvasNode, response: OpenAIImagesRespons
     image_url: image.url || '',
     b64_json: image.b64_json || '',
     mime_type: 'image/png',
-    source_image_url: operation === 'edit' ? node.sourceImageUrl || '' : ''
+    source_image_url: operation === 'edit' ? node.sourceImageUrl || '' : '',
+    node_id: node.localId,
+    root_node_id: node.rootId,
+    parent_node_id: node.parentId || '',
+    status: 'completed'
   })
   Object.assign(node, {
     historyId: saved.id,
@@ -601,6 +610,30 @@ async function applyImagesToNode(node: CanvasNode, response: OpenAIImagesRespons
     error: '',
     createdAt: saved.created_at || node.createdAt
   })
+}
+
+async function saveFailedHistory(node: CanvasNode) {
+  if (node.historyId) return
+  try {
+    const saved = await imageCanvasAPI.saveHistory({
+      api_key_id: node.apiKeyId,
+      operation: node.operation,
+      model: node.model,
+      prompt: node.prompt,
+      size: node.size,
+      output_format: 'png',
+      mime_type: 'image/png',
+      source_image_url: node.operation === 'edit' ? node.sourceImageUrl || '' : '',
+      node_id: node.localId,
+      root_node_id: node.rootId,
+      parent_node_id: node.parentId || '',
+      status: 'failed',
+      error_message: node.error || '图片任务失败'
+    })
+    node.historyId = saved.id
+    node.createdAt = saved.created_at || node.createdAt
+  } catch {
+  }
 }
 
 async function nodeToBlob(node: CanvasNode): Promise<Blob> {
@@ -638,6 +671,31 @@ function retryNode(node: CanvasNode) {
   node.prompt = node.retryPayload.prompt
   node.size = node.retryPayload.size
   void runGenerateTask(node, key.key)
+}
+
+async function deleteNode(node: CanvasNode) {
+  if (isBusy(node)) return
+  if (node.historyId) {
+    try {
+      await imageCanvasAPI.deleteHistory(node.historyId)
+    } catch (error) {
+      node.error = extractDisplayError(error)
+      return
+    }
+  }
+  const removeIds = new Set<string>([node.localId])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const item of nodes.value) {
+      if (item.parentId && removeIds.has(item.parentId) && !removeIds.has(item.localId)) {
+        removeIds.add(item.localId)
+        changed = true
+      }
+    }
+  }
+  nodes.value = nodes.value.filter(item => !removeIds.has(item.localId))
+  if (previewNode.value && removeIds.has(previewNode.value.localId)) previewNode.value = null
 }
 
 function openPreview(node: CanvasNode) {

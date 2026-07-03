@@ -26,12 +26,35 @@ func (r *imageCanvasHistoryRepository) Create(ctx context.Context, item *service
 	return r.db.QueryRowContext(ctx, `
 		INSERT INTO image_canvas_histories (
 			user_id, api_key_id, api_key_name, operation, model, prompt, size,
-			output_format, image_url, b64_json, mime_type, source_image_url, created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			output_format, image_url, b64_json, mime_type, source_image_url,
+			node_id, root_node_id, parent_node_id, status, error_message, created_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 		RETURNING id, created_at
 	`, item.UserID, item.APIKeyID, item.APIKeyName, item.Operation, item.Model, item.Prompt, item.Size,
-		item.OutputFormat, item.ImageURL, item.B64JSON, item.MimeType, item.SourceImageURL, item.CreatedAt,
+		item.OutputFormat, item.ImageURL, item.B64JSON, item.MimeType, item.SourceImageURL,
+		item.NodeID, item.RootNodeID, item.ParentNodeID, item.Status, item.ErrorMessage, item.CreatedAt,
 	).Scan(&item.ID, &item.CreatedAt)
+}
+
+func (r *imageCanvasHistoryRepository) DeleteByID(ctx context.Context, userID, id int64) error {
+	_, err := r.db.ExecContext(ctx, `
+		WITH RECURSIVE target AS (
+			SELECT node_id FROM image_canvas_histories WHERE id = $1 AND user_id = $2
+		), descendants AS (
+			SELECT node_id FROM target WHERE node_id <> ''
+			UNION ALL
+			SELECT h.node_id
+			FROM image_canvas_histories h
+			JOIN descendants d ON h.parent_node_id = d.node_id
+			WHERE h.user_id = $2 AND h.deleted_at IS NULL AND h.node_id <> ''
+		)
+		UPDATE image_canvas_histories
+		SET deleted_at = NOW(), image_url = '', b64_json = '', source_image_url = ''
+		WHERE user_id = $2 AND deleted_at IS NULL AND (
+			id = $1 OR node_id IN (SELECT node_id FROM descendants)
+		)
+	`, id, userID)
+	return err
 }
 
 func (r *imageCanvasHistoryRepository) CleanupExpiredImages(ctx context.Context, before time.Time) error {
@@ -45,14 +68,15 @@ func (r *imageCanvasHistoryRepository) CleanupExpiredImages(ctx context.Context,
 
 func (r *imageCanvasHistoryRepository) ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]service.ImageCanvasHistory, *pagination.PaginationResult, error) {
 	var total int64
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM image_canvas_histories WHERE user_id = $1`, userID).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM image_canvas_histories WHERE user_id = $1 AND deleted_at IS NULL`, userID).Scan(&total); err != nil {
 		return nil, nil, err
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, user_id, api_key_id, api_key_name, operation, model, prompt, size,
-		       output_format, image_url, b64_json, mime_type, source_image_url, created_at
+		       output_format, image_url, b64_json, mime_type, source_image_url,
+		       node_id, root_node_id, parent_node_id, status, error_message, created_at
 		FROM image_canvas_histories
-		WHERE user_id = $1
+		WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC, id DESC
 		LIMIT $2 OFFSET $3
 	`, userID, params.Limit(), params.Offset())
@@ -65,7 +89,8 @@ func (r *imageCanvasHistoryRepository) ListByUser(ctx context.Context, userID in
 		var item service.ImageCanvasHistory
 		if err := rows.Scan(
 			&item.ID, &item.UserID, &item.APIKeyID, &item.APIKeyName, &item.Operation, &item.Model, &item.Prompt, &item.Size,
-			&item.OutputFormat, &item.ImageURL, &item.B64JSON, &item.MimeType, &item.SourceImageURL, &item.CreatedAt,
+			&item.OutputFormat, &item.ImageURL, &item.B64JSON, &item.MimeType, &item.SourceImageURL,
+			&item.NodeID, &item.RootNodeID, &item.ParentNodeID, &item.Status, &item.ErrorMessage, &item.CreatedAt,
 		); err != nil {
 			return nil, nil, err
 		}

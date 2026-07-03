@@ -29,6 +29,11 @@ type ImageCanvasHistory struct {
 	B64JSON        string    `json:"b64_json,omitempty"`
 	MimeType       string    `json:"mime_type"`
 	SourceImageURL string    `json:"source_image_url,omitempty"`
+	NodeID         string    `json:"node_id"`
+	RootNodeID     string    `json:"root_node_id"`
+	ParentNodeID   string    `json:"parent_node_id,omitempty"`
+	Status         string    `json:"status"`
+	ErrorMessage   string    `json:"error_message,omitempty"`
 	ImageExpired   bool      `json:"image_expired"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -45,12 +50,18 @@ type CreateImageCanvasHistoryRequest struct {
 	B64JSON        string `json:"b64_json"`
 	MimeType       string `json:"mime_type"`
 	SourceImageURL string `json:"source_image_url"`
+	NodeID         string `json:"node_id"`
+	RootNodeID     string `json:"root_node_id"`
+	ParentNodeID   string `json:"parent_node_id"`
+	Status         string `json:"status"`
+	ErrorMessage   string `json:"error_message"`
 }
 
 type ImageCanvasHistoryRepository interface {
 	Create(ctx context.Context, item *ImageCanvasHistory) error
 	ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]ImageCanvasHistory, *pagination.PaginationResult, error)
 	CleanupExpiredImages(ctx context.Context, before time.Time) error
+	DeleteByID(ctx context.Context, userID, id int64) error
 }
 
 type ImageCanvasService struct {
@@ -87,7 +98,14 @@ func (s *ImageCanvasService) CreateHistory(ctx context.Context, userID int64, re
 	}
 	imageURL := strings.TrimSpace(req.ImageURL)
 	b64 := strings.TrimSpace(req.B64JSON)
-	if imageURL == "" && b64 == "" {
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = "completed"
+	}
+	if status != "completed" && status != "failed" {
+		status = "completed"
+	}
+	if status == "completed" && imageURL == "" && b64 == "" {
 		return nil, infraerrors.BadRequest("IMAGE_CANVAS_IMAGE_REQUIRED", "缺少生成后的图片内容")
 	}
 	format := strings.ToLower(strings.TrimSpace(req.OutputFormat))
@@ -111,11 +129,23 @@ func (s *ImageCanvasService) CreateHistory(ctx context.Context, userID int64, re
 		B64JSON:        b64,
 		MimeType:       mime,
 		SourceImageURL: strings.TrimSpace(req.SourceImageURL),
+		NodeID:         strings.TrimSpace(req.NodeID),
+		RootNodeID:     strings.TrimSpace(req.RootNodeID),
+		ParentNodeID:   strings.TrimSpace(req.ParentNodeID),
+		Status:         status,
+		ErrorMessage:   strings.TrimSpace(req.ErrorMessage),
 	}
 	if err := s.repo.Create(ctx, item); err != nil {
 		return nil, err
 	}
 	return item, nil
+}
+
+func (s *ImageCanvasService) DeleteHistory(ctx context.Context, userID, id int64) error {
+	if id <= 0 {
+		return infraerrors.BadRequest("IMAGE_CANVAS_INVALID_HISTORY_ID", "无效的生图节点")
+	}
+	return s.repo.DeleteByID(ctx, userID, id)
 }
 
 func (s *ImageCanvasService) ListHistory(ctx context.Context, userID int64, params pagination.PaginationParams) ([]ImageCanvasHistory, *pagination.PaginationResult, error) {

@@ -15,6 +15,11 @@ export interface ImageCanvasHistoryItem {
   b64_json?: string
   mime_type: string
   source_image_url?: string
+  node_id?: string
+  root_node_id?: string
+  parent_node_id?: string
+  status?: 'completed' | 'failed'
+  error_message?: string
   image_expired?: boolean
   expires_at?: string
   created_at: string
@@ -31,6 +36,11 @@ export interface ImageCanvasHistoryPayload {
   b64_json?: string
   mime_type?: string
   source_image_url?: string
+  node_id?: string
+  root_node_id?: string
+  parent_node_id?: string
+  status?: 'completed' | 'failed'
+  error_message?: string
 }
 
 export interface PaginatedImageCanvasHistory {
@@ -65,6 +75,10 @@ export async function saveHistory(payload: ImageCanvasHistoryPayload): Promise<I
   return data
 }
 
+export async function deleteHistory(id: number): Promise<void> {
+  await apiClient.delete(`/image-canvas/history/${id}`)
+}
+
 export async function generateImage(apiKey: string, payload: Record<string, unknown>): Promise<OpenAIImagesResponse> {
   const { data } = await axios.post<OpenAIImagesResponse>(buildGatewayUrl('/v1/images/generations'), payload, {
     headers: {
@@ -89,6 +103,7 @@ export async function editImage(apiKey: string, formData: FormData): Promise<Ope
 export const imageCanvasAPI = {
   listHistory,
   saveHistory,
+  deleteHistory,
   generateImage,
   editImage
 }

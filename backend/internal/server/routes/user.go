@@ -86,6 +86,7 @@ func RegisterUserRoutes(
 		{
 			imageCanvas.GET("/history", h.ImageCanvas.ListHistory)
 			imageCanvas.POST("/history", h.ImageCanvas.CreateHistory)
+			imageCanvas.DELETE("/history/:id", h.ImageCanvas.DeleteHistory)
 		}
 
 		// 使用记录
