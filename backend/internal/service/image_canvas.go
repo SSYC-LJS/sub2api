@@ -12,6 +12,7 @@ import (
 const (
 	ImageCanvasOperationGenerate = "generate"
 	ImageCanvasOperationEdit     = "edit"
+	ImageCanvasImageRetention    = 2 * time.Hour
 )
 
 type ImageCanvasHistory struct {
@@ -28,6 +29,8 @@ type ImageCanvasHistory struct {
 	B64JSON        string    `json:"b64_json,omitempty"`
 	MimeType       string    `json:"mime_type"`
 	SourceImageURL string    `json:"source_image_url,omitempty"`
+	ImageExpired   bool      `json:"image_expired"`
+	ExpiresAt      time.Time `json:"expires_at"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -47,6 +50,7 @@ type CreateImageCanvasHistoryRequest struct {
 type ImageCanvasHistoryRepository interface {
 	Create(ctx context.Context, item *ImageCanvasHistory) error
 	ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]ImageCanvasHistory, *pagination.PaginationResult, error)
+	CleanupExpiredImages(ctx context.Context, before time.Time) error
 }
 
 type ImageCanvasService struct {
@@ -123,5 +127,22 @@ func (s *ImageCanvasService) ListHistory(ctx context.Context, userID int64, para
 	}
 	params.SortBy = "created_at"
 	params.SortOrder = pagination.SortOrderDesc
-	return s.repo.ListByUser(ctx, userID, params)
+	if err := s.repo.CleanupExpiredImages(ctx, time.Now().Add(-ImageCanvasImageRetention)); err != nil {
+		return nil, nil, err
+	}
+	items, result, err := s.repo.ListByUser(ctx, userID, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	now := time.Now()
+	for i := range items {
+		items[i].ExpiresAt = items[i].CreatedAt.Add(ImageCanvasImageRetention)
+		if now.After(items[i].ExpiresAt) {
+			items[i].ImageExpired = true
+			items[i].ImageURL = ""
+			items[i].B64JSON = ""
+			items[i].SourceImageURL = ""
+		}
+	}
+	return items, result, nil
 }

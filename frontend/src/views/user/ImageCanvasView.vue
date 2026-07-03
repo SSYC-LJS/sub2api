@@ -65,7 +65,7 @@
                   <h3 class="font-semibold text-gray-900 dark:text-white">生图节点 #{{ chain.index + 1 }}</h3>
                   <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">修改步骤从左往右排列</p>
                 </div>
-                <button class="btn btn-secondary" @click="openEditDialog(chain.nodes[chain.nodes.length - 1])" :disabled="!nodeImageSrc(chain.nodes[chain.nodes.length - 1])">
+                <button class="btn btn-secondary" @click="openEditDialog(chain.nodes[chain.nodes.length - 1])" :disabled="!canUseImage(chain.nodes[chain.nodes.length - 1])">
                   <Icon name="edit" size="sm" />
                   继续修改
                 </button>
@@ -73,11 +73,12 @@
               <div class="flex items-stretch gap-4 overflow-x-auto pb-2">
                 <template v-for="(node, nodeIndex) in chain.nodes" :key="node.localId">
                   <article class="w-72 flex-shrink-0 overflow-hidden rounded-2xl border bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800" :class="node.status === 'failed' ? 'border-red-200 dark:border-red-500/40' : 'border-gray-200'">
-                    <button class="relative block aspect-[4/3] w-full bg-gray-100 text-left dark:bg-dark-700" :disabled="!nodeImageSrc(node)" @click="openPreview(node)">
-                      <img v-if="nodeImageSrc(node)" :src="nodeImageSrc(node)" :alt="node.prompt" class="h-full w-full object-cover" loading="lazy" />
+                    <button class="relative block aspect-[4/3] w-full bg-gray-100 text-left dark:bg-dark-700" :disabled="!canUseImage(node)" @click="openPreview(node)">
+                      <img v-if="canUseImage(node)" :src="nodeImageSrc(node)" :alt="node.prompt" class="h-full w-full object-cover" loading="lazy" />
                       <div v-else class="flex h-full flex-col items-center justify-center gap-2 p-5 text-center">
-                        <Icon :name="node.status === 'failed' ? 'exclamationCircle' : 'sparkles'" size="xl" :class="node.status === 'failed' ? 'text-red-400' : 'text-primary-400'" />
-                        <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ statusText(node) }}</span>
+                        <Icon :name="node.imageExpired ? 'clock' : node.status === 'failed' ? 'exclamationCircle' : 'sparkles'" size="xl" :class="node.imageExpired ? 'text-amber-400' : node.status === 'failed' ? 'text-red-400' : 'text-primary-400'" />
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ node.imageExpired ? '图片已过期' : statusText(node) }}</span>
+                        <span v-if="node.imageExpired" class="text-xs text-gray-500 dark:text-gray-400">生成图片只保留 2 小时，请重试重新生成</span>
                       </div>
                       <span class="absolute left-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold" :class="statusBadgeClass(node.status)">{{ statusText(node) }}</span>
                     </button>
@@ -94,8 +95,8 @@
                       </div>
                       <div v-if="node.error" class="rounded-xl border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200 whitespace-pre-wrap">{{ node.error }}</div>
                       <div class="grid grid-cols-3 gap-2">
-                        <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="!nodeImageSrc(node)" @click="downloadOriginal(node)">下载</button>
-                        <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="!nodeImageSrc(node) || isBusy(node)" @click="openEditDialog(node)">修改</button>
+                        <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="!canUseImage(node)" @click="downloadOriginal(node)">下载</button>
+                        <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="!canUseImage(node) || isBusy(node)" @click="openEditDialog(node)">修改</button>
                         <button class="btn btn-secondary justify-center px-2 text-xs" :disabled="isBusy(node)" @click="retryNode(node)">重试</button>
                       </div>
                     </div>
@@ -211,6 +212,8 @@ interface CanvasNode {
   b64Json?: string
   mimeType: string
   sourceImageUrl?: string
+  imageExpired: boolean
+  expiresAt?: string
   status: NodeStatus
   error: string
   createdAt: string
@@ -333,8 +336,13 @@ function isBusy(node: CanvasNode): boolean {
 }
 
 function nodeImageSrc(node: CanvasNode): string {
+  if (node.imageExpired) return ''
   if (node.b64Json) return `data:${node.mimeType || 'image/png'};base64,${node.b64Json}`
   return node.imageUrl || ''
+}
+
+function canUseImage(node: CanvasNode | null | undefined): boolean {
+  return Boolean(node && !node.imageExpired && nodeImageSrc(node))
 }
 
 function statusText(node: CanvasNode): string {
@@ -366,6 +374,8 @@ function nodeFromHistory(item: ImageCanvasHistoryItem): CanvasNode {
     b64Json: item.b64_json,
     mimeType: item.mime_type || 'image/png',
     sourceImageUrl: item.source_image_url,
+    imageExpired: Boolean(item.image_expired),
+    expiresAt: item.expires_at,
     status: 'completed',
     error: '',
     createdAt: item.created_at,
@@ -427,7 +437,7 @@ function openGenerateDialog(payload?: Partial<TaskPayload>) {
 }
 
 function openEditDialog(node: CanvasNode) {
-  if (!nodeImageSrc(node)) return
+  if (!canUseImage(node)) return
   taskDialog.show = true
   taskDialog.mode = 'edit'
   taskDialog.sourceNode = node
@@ -492,6 +502,7 @@ function createGenerateNode(payload: TaskPayload, key: ApiKey) {
     prompt: payload.prompt,
     size: payload.size,
     mimeType: 'image/png',
+    imageExpired: false,
     status: 'generating',
     error: '',
     createdAt: new Date().toISOString(),
@@ -514,6 +525,7 @@ function createEditNode(sourceNode: CanvasNode, payload: TaskPayload, apiKey: st
     size: payload.size,
     mimeType: 'image/png',
     sourceImageUrl: nodeImageSrc(sourceNode),
+    imageExpired: false,
     status: 'editing',
     error: '',
     createdAt: new Date().toISOString(),
@@ -629,10 +641,11 @@ function retryNode(node: CanvasNode) {
 }
 
 function openPreview(node: CanvasNode) {
-  if (nodeImageSrc(node)) previewNode.value = node
+  if (canUseImage(node)) previewNode.value = node
 }
 
 function downloadOriginal(node: CanvasNode) {
+  if (!canUseImage(node)) return
   const src = nodeImageSrc(node)
   if (!src) return
   const a = document.createElement('a')

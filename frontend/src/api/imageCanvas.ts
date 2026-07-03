@@ -15,6 +15,8 @@ export interface ImageCanvasHistoryItem {
   b64_json?: string
   mime_type: string
   source_image_url?: string
+  image_expired?: boolean
+  expires_at?: string
   created_at: string
 }
 

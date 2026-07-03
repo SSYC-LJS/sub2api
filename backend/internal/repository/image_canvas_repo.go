@@ -34,6 +34,15 @@ func (r *imageCanvasHistoryRepository) Create(ctx context.Context, item *service
 	).Scan(&item.ID, &item.CreatedAt)
 }
 
+func (r *imageCanvasHistoryRepository) CleanupExpiredImages(ctx context.Context, before time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE image_canvas_histories
+		SET image_url = '', b64_json = '', source_image_url = ''
+		WHERE created_at < $1 AND (image_url <> '' OR b64_json <> '' OR source_image_url <> '')
+	`, before)
+	return err
+}
+
 func (r *imageCanvasHistoryRepository) ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]service.ImageCanvasHistory, *pagination.PaginationResult, error) {
 	var total int64
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM image_canvas_histories WHERE user_id = $1`, userID).Scan(&total); err != nil {
