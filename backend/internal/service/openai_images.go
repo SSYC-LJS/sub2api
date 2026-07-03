@@ -507,7 +507,22 @@ func applyOpenAIImagesDefaults(req *OpenAIImagesRequest) {
 }
 
 func isOpenAIImageGenerationModel(model string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-image-")
+	model = strings.ToLower(strings.TrimSpace(model))
+	if model == "" {
+		return false
+	}
+	if strings.HasPrefix(model, "gpt-image-") || strings.HasPrefix(model, "dall-e-") {
+		return true
+	}
+	imageModelHints := []string{
+		"image", "imagine", "imagen", "flux", "ideogram", "stable-diffusion", "sdxl",
+	}
+	for _, hint := range imageModelHints {
+		if strings.Contains(model, hint) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateOpenAIImagesModel(model string) error {
