@@ -34,6 +34,10 @@ type User struct {
 
 	// IsParentAccount 为 true 时用户侧展示子账号管理入口。
 	IsParentAccount bool `json:"is_parent_account"`
+	// IsChildAccount 为 true 时该用户当前已绑定为某个母账号的子账号。
+	IsChildAccount bool `json:"is_child_account"`
+	// ParentAccountID 表示该用户当前活跃母账号 ID；普通用户接口不会额外暴露母账号详情。
+	ParentAccountID *int64 `json:"parent_account_id,omitempty"`
 
 	APIKeys       []APIKey           `json:"api_keys,omitempty"`
 	Subscriptions []UserSubscription `json:"subscriptions,omitempty"`

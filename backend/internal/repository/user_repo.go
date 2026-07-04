@@ -132,6 +132,9 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, 
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
 	}
+	if err := r.decorateUserAccountRelation(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -148,6 +151,9 @@ func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*
 	}
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
+	}
+	if err := r.decorateUserAccountRelation(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -175,6 +181,9 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 	}
 	if v, ok := groups[m.ID]; ok {
 		out.AllowedGroups = v
+	}
+	if err := r.decorateUserAccountRelation(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -931,6 +940,55 @@ func (r *userRepository) GetFirstAdmin(ctx context.Context) (*service.User, erro
 		out.AllowedGroups = v
 	}
 	return out, nil
+}
+
+func (r *userRepository) decorateUserAccountRelation(ctx context.Context, user *service.User) error {
+	if user == nil || user.ID <= 0 {
+		return nil
+	}
+	parents, err := r.loadActiveChildParents(ctx, []int64{user.ID})
+	if err != nil {
+		return err
+	}
+	if parentID, ok := parents[user.ID]; ok {
+		user.IsChildAccount = true
+		pid := parentID
+		user.ParentAccountID = &pid
+	}
+	return nil
+}
+
+func (r *userRepository) loadActiveChildParents(ctx context.Context, userIDs []int64) (map[int64]int64, error) {
+	result := make(map[int64]int64, len(userIDs))
+	if len(userIDs) == 0 || r.sql == nil {
+		return result, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT child_user_id, parent_user_id
+		FROM parent_child_accounts
+		WHERE child_user_id = ANY($1)
+		  AND status = 'active'
+		  AND deleted_at IS NULL
+	`, pq.Array(userIDs))
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "parent_child_accounts") && (strings.Contains(msg, "no such table") || strings.Contains(msg, "does not exist")) {
+			return result, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var childID, parentID int64
+		if err := rows.Scan(&childID, &parentID); err != nil {
+			return nil, err
+		}
+		result[childID] = parentID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *userRepository) loadAllowedGroups(ctx context.Context, userIDs []int64) (map[int64][]int64, error) {

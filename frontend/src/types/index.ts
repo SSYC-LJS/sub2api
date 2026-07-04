@@ -86,6 +86,8 @@ export interface User {
   wechat_bound?: boolean
   role: 'admin' | 'user' // User role for authorization
   is_parent_account: boolean // Whether this user can manage child accounts
+  is_child_account?: boolean // Whether this user is bound under a parent account
+  parent_account_id?: number | null // Active parent account id when this user is a child account
   balance: number // User balance for API usage
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit

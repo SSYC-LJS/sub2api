@@ -31,6 +31,8 @@ func UserFromServiceShallow(u *service.User) *User {
 		TotalRecharged:             u.TotalRecharged,
 		RPMLimit:                   u.RPMLimit,
 		IsParentAccount:            u.IsParentAccount,
+		IsChildAccount:             u.IsChildAccount,
+		ParentAccountID:            u.ParentAccountID,
 		DeletedAt:                  u.DeletedAt,
 	}
 }

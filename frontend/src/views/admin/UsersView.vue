@@ -316,6 +316,33 @@
             </span>
           </template>
 
+          <template #cell-account_system="{ row }">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span
+                v-if="row.is_parent_account"
+                class="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:border-primary-800/70 dark:bg-primary-900/20 dark:text-primary-300"
+                title="该用户可管理子账号、分配额度并查看子账号使用记录"
+              >
+                <Icon name="users" size="xs" class="h-3.5 w-3.5" />
+                母账号
+              </span>
+              <span
+                v-if="row.is_child_account"
+                class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-800/70 dark:bg-amber-900/20 dark:text-amber-300"
+                :title="row.parent_account_id ? `母账号 ID：${row.parent_account_id}` : '该用户已绑定为子账号'"
+              >
+                <Icon name="link" size="xs" class="h-3.5 w-3.5" />
+                子账号
+              </span>
+              <span
+                v-if="!row.is_parent_account && !row.is_child_account"
+                class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-500 dark:border-dark-600 dark:bg-dark-700/50 dark:text-dark-300"
+              >
+                普通账号
+              </span>
+            </div>
+          </template>
+
           <template #cell-groups="{ row }">
             <div v-if="allGroups.length > 0" class="flex flex-col gap-1">
               <!-- 专属分组行 -->
@@ -845,6 +872,7 @@ const allColumns = computed<Column[]>(() => [
   // Dynamic attribute columns
   ...attributeColumns.value,
   { key: 'role', label: t('admin.users.columns.role'), sortable: true },
+  { key: 'account_system', label: '账号体系', sortable: false },
   { key: 'groups', label: t('admin.users.columns.groups'), sortable: false },
   { key: 'subscriptions', label: t('admin.users.columns.subscriptions'), sortable: false },
   { key: 'balance', label: t('admin.users.columns.balance'), sortable: true },
