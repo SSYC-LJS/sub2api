@@ -85,6 +85,7 @@ export interface User {
   oidc_bound?: boolean
   wechat_bound?: boolean
   role: 'admin' | 'user' // User role for authorization
+  is_parent_account: boolean // Whether this user can manage child accounts
   balance: number // User balance for API usage
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
@@ -1268,6 +1269,8 @@ export interface UsageLog {
   user_id: number
   api_key_id: number
   account_id: number | null
+  payer_user_id?: number | null
+  parent_account_id?: number | null
   request_id: string
   model: string
   service_tier?: string | null
@@ -1291,6 +1294,7 @@ export interface UsageLog {
   cache_read_cost: number
   total_cost: number
   actual_cost: number
+  parent_quota_used?: number
   rate_multiplier: number
   billing_type: number
 
@@ -1592,6 +1596,7 @@ export interface UpdateUserRequest {
   username?: string
   notes?: string
   role?: 'admin' | 'user'
+  is_parent_account?: boolean
   balance?: number
   concurrency?: number
   status?: 'active' | 'disabled'

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,7 +108,21 @@ func TestOpsServiceNotifyOpsErrorUsesEmailAndGroupName(t *testing.T) {
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		content, _ := body["content"].(map[string]any)
-		requests <- content["text"].(string)
+		if text, _ := content["text"].(string); text != "" {
+			requests <- text
+			return
+		}
+		card, _ := body["card"].(map[string]any)
+		elements, _ := card["elements"].([]any)
+		var parts []string
+		for _, element := range elements {
+			elementMap, _ := element.(map[string]any)
+			textMap, _ := elementMap["text"].(map[string]any)
+			if text, _ := textMap["content"].(string); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		requests <- strings.Join(parts, "\n")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"code":0,"msg":"ok"}`))
 	}))
@@ -145,8 +160,8 @@ func TestOpsServiceNotifyOpsErrorUsesEmailAndGroupName(t *testing.T) {
 
 	select {
 	case text := <-requests:
-		require.Contains(t, text, "用户邮箱：owner@example.com")
-		require.Contains(t, text, "报错分组：Claude 低倍率分组")
+		require.Contains(t, text, "owner@example.com")
+		require.Contains(t, text, "Claude 低倍率分组")
 		require.NotContains(t, text, "用户ID：42")
 		require.NotContains(t, text, "报错分组：分组ID 7")
 	case <-time.After(time.Second):

@@ -269,6 +269,60 @@ func (_u *UsageLogUpdate) ClearSubscriptionID() *UsageLogUpdate {
 	return _u
 }
 
+// SetPayerUserID sets the "payer_user_id" field.
+func (_u *UsageLogUpdate) SetPayerUserID(v int64) *UsageLogUpdate {
+	_u.mutation.ResetPayerUserID()
+	_u.mutation.SetPayerUserID(v)
+	return _u
+}
+
+// SetNillablePayerUserID sets the "payer_user_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillablePayerUserID(v *int64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetPayerUserID(*v)
+	}
+	return _u
+}
+
+// AddPayerUserID adds value to the "payer_user_id" field.
+func (_u *UsageLogUpdate) AddPayerUserID(v int64) *UsageLogUpdate {
+	_u.mutation.AddPayerUserID(v)
+	return _u
+}
+
+// ClearPayerUserID clears the value of the "payer_user_id" field.
+func (_u *UsageLogUpdate) ClearPayerUserID() *UsageLogUpdate {
+	_u.mutation.ClearPayerUserID()
+	return _u
+}
+
+// SetParentAccountID sets the "parent_account_id" field.
+func (_u *UsageLogUpdate) SetParentAccountID(v int64) *UsageLogUpdate {
+	_u.mutation.ResetParentAccountID()
+	_u.mutation.SetParentAccountID(v)
+	return _u
+}
+
+// SetNillableParentAccountID sets the "parent_account_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableParentAccountID(v *int64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetParentAccountID(*v)
+	}
+	return _u
+}
+
+// AddParentAccountID adds value to the "parent_account_id" field.
+func (_u *UsageLogUpdate) AddParentAccountID(v int64) *UsageLogUpdate {
+	_u.mutation.AddParentAccountID(v)
+	return _u
+}
+
+// ClearParentAccountID clears the value of the "parent_account_id" field.
+func (_u *UsageLogUpdate) ClearParentAccountID() *UsageLogUpdate {
+	_u.mutation.ClearParentAccountID()
+	return _u
+}
+
 // SetInputTokens sets the "input_tokens" field.
 func (_u *UsageLogUpdate) SetInputTokens(v int) *UsageLogUpdate {
 	_u.mutation.ResetInputTokens()
@@ -518,6 +572,27 @@ func (_u *UsageLogUpdate) SetNillableActualCost(v *float64) *UsageLogUpdate {
 // AddActualCost adds value to the "actual_cost" field.
 func (_u *UsageLogUpdate) AddActualCost(v float64) *UsageLogUpdate {
 	_u.mutation.AddActualCost(v)
+	return _u
+}
+
+// SetParentQuotaUsed sets the "parent_quota_used" field.
+func (_u *UsageLogUpdate) SetParentQuotaUsed(v float64) *UsageLogUpdate {
+	_u.mutation.ResetParentQuotaUsed()
+	_u.mutation.SetParentQuotaUsed(v)
+	return _u
+}
+
+// SetNillableParentQuotaUsed sets the "parent_quota_used" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableParentQuotaUsed(v *float64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetParentQuotaUsed(*v)
+	}
+	return _u
+}
+
+// AddParentQuotaUsed adds value to the "parent_quota_used" field.
+func (_u *UsageLogUpdate) AddParentQuotaUsed(v float64) *UsageLogUpdate {
+	_u.mutation.AddParentQuotaUsed(v)
 	return _u
 }
 
@@ -1048,6 +1123,24 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.BillingModeCleared() {
 		_spec.ClearField(usagelog.FieldBillingMode, field.TypeString)
 	}
+	if value, ok := _u.mutation.PayerUserID(); ok {
+		_spec.SetField(usagelog.FieldPayerUserID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPayerUserID(); ok {
+		_spec.AddField(usagelog.FieldPayerUserID, field.TypeInt64, value)
+	}
+	if _u.mutation.PayerUserIDCleared() {
+		_spec.ClearField(usagelog.FieldPayerUserID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.ParentAccountID(); ok {
+		_spec.SetField(usagelog.FieldParentAccountID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedParentAccountID(); ok {
+		_spec.AddField(usagelog.FieldParentAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.ParentAccountIDCleared() {
+		_spec.ClearField(usagelog.FieldParentAccountID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.InputTokens(); ok {
 		_spec.SetField(usagelog.FieldInputTokens, field.TypeInt, value)
 	}
@@ -1119,6 +1212,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedActualCost(); ok {
 		_spec.AddField(usagelog.FieldActualCost, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ParentQuotaUsed(); ok {
+		_spec.SetField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedParentQuotaUsed(); ok {
+		_spec.AddField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
@@ -1615,6 +1714,60 @@ func (_u *UsageLogUpdateOne) ClearSubscriptionID() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetPayerUserID sets the "payer_user_id" field.
+func (_u *UsageLogUpdateOne) SetPayerUserID(v int64) *UsageLogUpdateOne {
+	_u.mutation.ResetPayerUserID()
+	_u.mutation.SetPayerUserID(v)
+	return _u
+}
+
+// SetNillablePayerUserID sets the "payer_user_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillablePayerUserID(v *int64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetPayerUserID(*v)
+	}
+	return _u
+}
+
+// AddPayerUserID adds value to the "payer_user_id" field.
+func (_u *UsageLogUpdateOne) AddPayerUserID(v int64) *UsageLogUpdateOne {
+	_u.mutation.AddPayerUserID(v)
+	return _u
+}
+
+// ClearPayerUserID clears the value of the "payer_user_id" field.
+func (_u *UsageLogUpdateOne) ClearPayerUserID() *UsageLogUpdateOne {
+	_u.mutation.ClearPayerUserID()
+	return _u
+}
+
+// SetParentAccountID sets the "parent_account_id" field.
+func (_u *UsageLogUpdateOne) SetParentAccountID(v int64) *UsageLogUpdateOne {
+	_u.mutation.ResetParentAccountID()
+	_u.mutation.SetParentAccountID(v)
+	return _u
+}
+
+// SetNillableParentAccountID sets the "parent_account_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableParentAccountID(v *int64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetParentAccountID(*v)
+	}
+	return _u
+}
+
+// AddParentAccountID adds value to the "parent_account_id" field.
+func (_u *UsageLogUpdateOne) AddParentAccountID(v int64) *UsageLogUpdateOne {
+	_u.mutation.AddParentAccountID(v)
+	return _u
+}
+
+// ClearParentAccountID clears the value of the "parent_account_id" field.
+func (_u *UsageLogUpdateOne) ClearParentAccountID() *UsageLogUpdateOne {
+	_u.mutation.ClearParentAccountID()
+	return _u
+}
+
 // SetInputTokens sets the "input_tokens" field.
 func (_u *UsageLogUpdateOne) SetInputTokens(v int) *UsageLogUpdateOne {
 	_u.mutation.ResetInputTokens()
@@ -1864,6 +2017,27 @@ func (_u *UsageLogUpdateOne) SetNillableActualCost(v *float64) *UsageLogUpdateOn
 // AddActualCost adds value to the "actual_cost" field.
 func (_u *UsageLogUpdateOne) AddActualCost(v float64) *UsageLogUpdateOne {
 	_u.mutation.AddActualCost(v)
+	return _u
+}
+
+// SetParentQuotaUsed sets the "parent_quota_used" field.
+func (_u *UsageLogUpdateOne) SetParentQuotaUsed(v float64) *UsageLogUpdateOne {
+	_u.mutation.ResetParentQuotaUsed()
+	_u.mutation.SetParentQuotaUsed(v)
+	return _u
+}
+
+// SetNillableParentQuotaUsed sets the "parent_quota_used" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableParentQuotaUsed(v *float64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetParentQuotaUsed(*v)
+	}
+	return _u
+}
+
+// AddParentQuotaUsed adds value to the "parent_quota_used" field.
+func (_u *UsageLogUpdateOne) AddParentQuotaUsed(v float64) *UsageLogUpdateOne {
+	_u.mutation.AddParentQuotaUsed(v)
 	return _u
 }
 
@@ -2424,6 +2598,24 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	if _u.mutation.BillingModeCleared() {
 		_spec.ClearField(usagelog.FieldBillingMode, field.TypeString)
 	}
+	if value, ok := _u.mutation.PayerUserID(); ok {
+		_spec.SetField(usagelog.FieldPayerUserID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPayerUserID(); ok {
+		_spec.AddField(usagelog.FieldPayerUserID, field.TypeInt64, value)
+	}
+	if _u.mutation.PayerUserIDCleared() {
+		_spec.ClearField(usagelog.FieldPayerUserID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.ParentAccountID(); ok {
+		_spec.SetField(usagelog.FieldParentAccountID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedParentAccountID(); ok {
+		_spec.AddField(usagelog.FieldParentAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.ParentAccountIDCleared() {
+		_spec.ClearField(usagelog.FieldParentAccountID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.InputTokens(); ok {
 		_spec.SetField(usagelog.FieldInputTokens, field.TypeInt, value)
 	}
@@ -2495,6 +2687,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedActualCost(); ok {
 		_spec.AddField(usagelog.FieldActualCost, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ParentQuotaUsed(); ok {
+		_spec.SetField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedParentQuotaUsed(); ok {
+		_spec.AddField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)

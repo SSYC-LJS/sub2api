@@ -9114,6 +9114,18 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 		return false, nil
 	}
 
+	if usageLog != nil && result != nil && result.Applied {
+		if result.BalancePayerUserID > 0 {
+			payerID := result.BalancePayerUserID
+			usageLog.PayerUserID = &payerID
+		}
+		if result.ParentQuotaUsed > 0 {
+			parentID := result.BalancePayerUserID
+			usageLog.ParentAccountID = &parentID
+			usageLog.ParentQuotaUsed = result.ParentQuotaUsed
+		}
+	}
+
 	if result.APIKeyQuotaExhausted {
 		if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok && p.APIKey != nil && p.APIKey.Key != "" {
 			invalidator.InvalidateAuthCacheByKey(billingCtx, p.APIKey.Key)
@@ -9187,10 +9199,14 @@ func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingPara
 	if p == nil || p.Cost == nil || p.User == nil || deps == nil || deps.billingCacheService == nil {
 		return
 	}
+	payerUserID := p.User.ID
+	if result != nil && result.BalancePayerUserID > 0 {
+		payerUserID = result.BalancePayerUserID
+	}
 	if result != nil && result.NewBalance != nil && deps.billingCacheService.balanceBelowEligibilityThreshold(*result.NewBalance) {
-		if err := deps.billingCacheService.InvalidateUserBalance(ctx, p.User.ID); err != nil {
+		if err := deps.billingCacheService.InvalidateUserBalance(ctx, payerUserID); err != nil {
 			slog.Warn("invalidate balance cache after exhausted deduction failed",
-				"user_id", p.User.ID,
+				"user_id", payerUserID,
 				"new_balance", *result.NewBalance,
 				"balance_overdrafted", result.BalanceOverdrafted,
 				"error", err,
@@ -9198,7 +9214,7 @@ func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingPara
 		}
 		return
 	}
-	deps.billingCacheService.QueueDeductBalance(p.User.ID, p.Cost.ActualCost)
+	deps.billingCacheService.QueueDeductBalance(payerUserID, p.Cost.ActualCost)
 }
 
 // notifyBalanceLow sends balance low notification after deduction.
@@ -9210,6 +9226,9 @@ func notifyBalanceLow(p *postUsageBillingParams, deps *billingDeps, result *Usag
 			slog.Error("panic in notifyBalanceLow", "recover", r)
 		}
 	}()
+	if result != nil && result.ParentQuotaUsed > 0 {
+		return
+	}
 	if p.IsSubscriptionBill || p.Cost.ActualCost <= 0 || p.User == nil || deps.balanceNotifyService == nil {
 		slog.Debug("notifyBalanceLow: skipped",
 			"is_subscription", p.IsSubscriptionBill,

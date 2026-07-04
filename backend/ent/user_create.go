@@ -340,6 +340,20 @@ func (_c *UserCreate) SetNillableRpmLimit(v *int) *UserCreate {
 	return _c
 }
 
+// SetIsParentAccount sets the "is_parent_account" field.
+func (_c *UserCreate) SetIsParentAccount(v bool) *UserCreate {
+	_c.mutation.SetIsParentAccount(v)
+	return _c
+}
+
+// SetNillableIsParentAccount sets the "is_parent_account" field if the given value is not nil.
+func (_c *UserCreate) SetNillableIsParentAccount(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetIsParentAccount(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *UserCreate) AddAPIKeyIDs(ids ...int64) *UserCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -638,6 +652,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
 	}
+	if _, ok := _c.mutation.IsParentAccount(); !ok {
+		v := user.DefaultIsParentAccount
+		_c.mutation.SetIsParentAccount(v)
+	}
 	return nil
 }
 
@@ -723,6 +741,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "User.rpm_limit"`)}
+	}
+	if _, ok := _c.mutation.IsParentAccount(); !ok {
+		return &ValidationError{Name: "is_parent_account", err: errors.New(`ent: missing required field "User.is_parent_account"`)}
 	}
 	return nil
 }
@@ -842,6 +863,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
+	}
+	if value, ok := _c.mutation.IsParentAccount(); ok {
+		_spec.SetField(user.FieldIsParentAccount, field.TypeBool, value)
+		_node.IsParentAccount = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1437,6 +1462,18 @@ func (u *UserUpsert) AddRpmLimit(v int) *UserUpsert {
 	return u
 }
 
+// SetIsParentAccount sets the "is_parent_account" field.
+func (u *UserUpsert) SetIsParentAccount(v bool) *UserUpsert {
+	u.Set(user.FieldIsParentAccount, v)
+	return u
+}
+
+// UpdateIsParentAccount sets the "is_parent_account" field to the value that was provided on create.
+func (u *UserUpsert) UpdateIsParentAccount() *UserUpsert {
+	u.SetExcluded(user.FieldIsParentAccount)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -1864,6 +1901,20 @@ func (u *UserUpsertOne) AddRpmLimit(v int) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRpmLimit() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetIsParentAccount sets the "is_parent_account" field.
+func (u *UserUpsertOne) SetIsParentAccount(v bool) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetIsParentAccount(v)
+	})
+}
+
+// UpdateIsParentAccount sets the "is_parent_account" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateIsParentAccount() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateIsParentAccount()
 	})
 }
 
@@ -2460,6 +2511,20 @@ func (u *UserUpsertBulk) AddRpmLimit(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRpmLimit() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetIsParentAccount sets the "is_parent_account" field.
+func (u *UserUpsertBulk) SetIsParentAccount(v bool) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetIsParentAccount(v)
+	})
+}
+
+// UpdateIsParentAccount sets the "is_parent_account" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateIsParentAccount() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateIsParentAccount()
 	})
 }
 

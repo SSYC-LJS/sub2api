@@ -113,6 +113,7 @@ type BillingCacheService struct {
 	cfg                   *config.Config
 	circuitBreaker        *billingCircuitBreaker
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	subAccountRepo        SubAccountRepository
 
 	cacheWriteChan     chan cacheWriteTask
 	cacheWriteWg       sync.WaitGroup
@@ -138,6 +139,7 @@ func NewBillingCacheService(
 	userGroupRateRepo UserGroupRateRepository,
 	cfg *config.Config,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	subAccountRepo SubAccountRepository,
 ) *BillingCacheService {
 	svc := &BillingCacheService{
 		cache:                 cache,
@@ -148,6 +150,7 @@ func NewBillingCacheService(
 		userGroupRateRepo:     userGroupRateRepo,
 		cfg:                   cfg,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
+		subAccountRepo:        subAccountRepo,
 	}
 	svc.circuitBreaker = newBillingCircuitBreaker(cfg.Billing.CircuitBreaker)
 	svc.startCacheWriteWorkers()
@@ -890,10 +893,29 @@ func (s *BillingCacheService) checkBalanceEligibility(ctx context.Context, userI
 	}
 
 	if s.balanceBelowEligibilityThreshold(balance) {
+		if s.hasUsableParentQuota(ctx, userID) {
+			return nil
+		}
 		return ErrInsufficientBalance
 	}
 
 	return nil
+}
+
+func (s *BillingCacheService) hasUsableParentQuota(ctx context.Context, childUserID int64) bool {
+	if s == nil || s.subAccountRepo == nil {
+		return false
+	}
+	rel, err := s.subAccountRepo.GetActiveByChild(ctx, childUserID)
+	if err != nil || rel == nil || rel.RemainingQuota() <= 0 {
+		return false
+	}
+	balance, err := s.GetUserBalance(ctx, rel.ParentUserID)
+	if err != nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: parent balance check failed parent=%d child=%d: %v", rel.ParentUserID, childUserID, err)
+		return false
+	}
+	return !s.balanceBelowEligibilityThreshold(balance)
 }
 
 // checkSubscriptionEligibility 检查订阅模式资格

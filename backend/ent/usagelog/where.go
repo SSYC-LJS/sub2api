@@ -120,6 +120,16 @@ func SubscriptionID(v int64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldSubscriptionID, v))
 }
 
+// PayerUserID applies equality check predicate on the "payer_user_id" field. It's identical to PayerUserIDEQ.
+func PayerUserID(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldPayerUserID, v))
+}
+
+// ParentAccountID applies equality check predicate on the "parent_account_id" field. It's identical to ParentAccountIDEQ.
+func ParentAccountID(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldParentAccountID, v))
+}
+
 // InputTokens applies equality check predicate on the "input_tokens" field. It's identical to InputTokensEQ.
 func InputTokens(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldInputTokens, v))
@@ -178,6 +188,11 @@ func TotalCost(v float64) predicate.UsageLog {
 // ActualCost applies equality check predicate on the "actual_cost" field. It's identical to ActualCostEQ.
 func ActualCost(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldActualCost, v))
+}
+
+// ParentQuotaUsed applies equality check predicate on the "parent_quota_used" field. It's identical to ParentQuotaUsedEQ.
+func ParentQuotaUsed(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldParentQuotaUsed, v))
 }
 
 // RateMultiplier applies equality check predicate on the "rate_multiplier" field. It's identical to RateMultiplierEQ.
@@ -930,6 +945,106 @@ func SubscriptionIDNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldSubscriptionID))
 }
 
+// PayerUserIDEQ applies the EQ predicate on the "payer_user_id" field.
+func PayerUserIDEQ(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldPayerUserID, v))
+}
+
+// PayerUserIDNEQ applies the NEQ predicate on the "payer_user_id" field.
+func PayerUserIDNEQ(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldPayerUserID, v))
+}
+
+// PayerUserIDIn applies the In predicate on the "payer_user_id" field.
+func PayerUserIDIn(vs ...int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldPayerUserID, vs...))
+}
+
+// PayerUserIDNotIn applies the NotIn predicate on the "payer_user_id" field.
+func PayerUserIDNotIn(vs ...int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldPayerUserID, vs...))
+}
+
+// PayerUserIDGT applies the GT predicate on the "payer_user_id" field.
+func PayerUserIDGT(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldPayerUserID, v))
+}
+
+// PayerUserIDGTE applies the GTE predicate on the "payer_user_id" field.
+func PayerUserIDGTE(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldPayerUserID, v))
+}
+
+// PayerUserIDLT applies the LT predicate on the "payer_user_id" field.
+func PayerUserIDLT(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldPayerUserID, v))
+}
+
+// PayerUserIDLTE applies the LTE predicate on the "payer_user_id" field.
+func PayerUserIDLTE(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldPayerUserID, v))
+}
+
+// PayerUserIDIsNil applies the IsNil predicate on the "payer_user_id" field.
+func PayerUserIDIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldPayerUserID))
+}
+
+// PayerUserIDNotNil applies the NotNil predicate on the "payer_user_id" field.
+func PayerUserIDNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldPayerUserID))
+}
+
+// ParentAccountIDEQ applies the EQ predicate on the "parent_account_id" field.
+func ParentAccountIDEQ(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldParentAccountID, v))
+}
+
+// ParentAccountIDNEQ applies the NEQ predicate on the "parent_account_id" field.
+func ParentAccountIDNEQ(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldParentAccountID, v))
+}
+
+// ParentAccountIDIn applies the In predicate on the "parent_account_id" field.
+func ParentAccountIDIn(vs ...int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldParentAccountID, vs...))
+}
+
+// ParentAccountIDNotIn applies the NotIn predicate on the "parent_account_id" field.
+func ParentAccountIDNotIn(vs ...int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldParentAccountID, vs...))
+}
+
+// ParentAccountIDGT applies the GT predicate on the "parent_account_id" field.
+func ParentAccountIDGT(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldParentAccountID, v))
+}
+
+// ParentAccountIDGTE applies the GTE predicate on the "parent_account_id" field.
+func ParentAccountIDGTE(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldParentAccountID, v))
+}
+
+// ParentAccountIDLT applies the LT predicate on the "parent_account_id" field.
+func ParentAccountIDLT(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldParentAccountID, v))
+}
+
+// ParentAccountIDLTE applies the LTE predicate on the "parent_account_id" field.
+func ParentAccountIDLTE(v int64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldParentAccountID, v))
+}
+
+// ParentAccountIDIsNil applies the IsNil predicate on the "parent_account_id" field.
+func ParentAccountIDIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldParentAccountID))
+}
+
+// ParentAccountIDNotNil applies the NotNil predicate on the "parent_account_id" field.
+func ParentAccountIDNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldParentAccountID))
+}
+
 // InputTokensEQ applies the EQ predicate on the "input_tokens" field.
 func InputTokensEQ(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldInputTokens, v))
@@ -1408,6 +1523,46 @@ func ActualCostLT(v float64) predicate.UsageLog {
 // ActualCostLTE applies the LTE predicate on the "actual_cost" field.
 func ActualCostLTE(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldLTE(FieldActualCost, v))
+}
+
+// ParentQuotaUsedEQ applies the EQ predicate on the "parent_quota_used" field.
+func ParentQuotaUsedEQ(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldParentQuotaUsed, v))
+}
+
+// ParentQuotaUsedNEQ applies the NEQ predicate on the "parent_quota_used" field.
+func ParentQuotaUsedNEQ(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldParentQuotaUsed, v))
+}
+
+// ParentQuotaUsedIn applies the In predicate on the "parent_quota_used" field.
+func ParentQuotaUsedIn(vs ...float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldParentQuotaUsed, vs...))
+}
+
+// ParentQuotaUsedNotIn applies the NotIn predicate on the "parent_quota_used" field.
+func ParentQuotaUsedNotIn(vs ...float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldParentQuotaUsed, vs...))
+}
+
+// ParentQuotaUsedGT applies the GT predicate on the "parent_quota_used" field.
+func ParentQuotaUsedGT(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldParentQuotaUsed, v))
+}
+
+// ParentQuotaUsedGTE applies the GTE predicate on the "parent_quota_used" field.
+func ParentQuotaUsedGTE(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldParentQuotaUsed, v))
+}
+
+// ParentQuotaUsedLT applies the LT predicate on the "parent_quota_used" field.
+func ParentQuotaUsedLT(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldParentQuotaUsed, v))
+}
+
+// ParentQuotaUsedLTE applies the LTE predicate on the "parent_quota_used" field.
+func ParentQuotaUsedLTE(v float64) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldParentQuotaUsed, v))
 }
 
 // RateMultiplierEQ applies the EQ predicate on the "rate_multiplier" field.

@@ -228,6 +228,16 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/sub-accounts',
+    name: 'SubAccounts',
+    component: () => import('@/views/user/SubAccountsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Sub Account Management'
+    }
+  },
+  {
     path: '/usage-ranking',
     name: 'UsageRanking',
     component: () => import('@/views/user/UsageRankingView.vue'),

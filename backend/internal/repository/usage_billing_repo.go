@@ -113,11 +113,24 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.BalanceCost > 0 {
-		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost)
+		payerUserID := cmd.UserID
+		parentQuotaUsed := 0.0
+		if rel, err := incrementUsageBillingParentQuotaIfAvailable(ctx, tx, cmd.UserID, cmd.BalanceCost); err != nil {
+			return err
+		} else if rel != nil {
+			payerUserID = rel.ParentUserID
+			cmd.PayerUserID = &payerUserID
+			cmd.ParentAccountID = &rel.ParentUserID
+			cmd.ParentQuotaUsed = cmd.BalanceCost
+			parentQuotaUsed = cmd.BalanceCost
+		}
+		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, payerUserID, cmd.BalanceCost)
 		if err != nil {
 			return err
 		}
 		result.NewBalance = &newBalance
+		result.BalancePayerUserID = payerUserID
+		result.ParentQuotaUsed = parentQuotaUsed
 		result.BalanceOverdrafted = !sufficient
 	}
 
@@ -172,6 +185,43 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 		return nil
 	}
 	return service.ErrSubscriptionNotFound
+}
+
+func incrementUsageBillingParentQuotaIfAvailable(ctx context.Context, tx *sql.Tx, childUserID int64, amount float64) (*service.SubAccountRelation, error) {
+	if amount <= 0 {
+		return nil, nil
+	}
+	row := tx.QueryRowContext(ctx, `
+		UPDATE parent_child_accounts
+		SET used_quota = used_quota + $1, updated_at = NOW()
+		WHERE id = (
+			SELECT pca.id
+			FROM parent_child_accounts pca
+			JOIN users parent ON parent.id = pca.parent_user_id AND parent.deleted_at IS NULL AND parent.is_parent_account = TRUE
+			WHERE pca.child_user_id = $2
+				AND pca.status = 'active'
+				AND pca.deleted_at IS NULL
+				AND pca.allocated_quota - pca.used_quota >= $1
+				AND parent.balance >= $1
+			ORDER BY pca.id DESC
+			LIMIT 1
+			FOR UPDATE OF pca
+		)
+		RETURNING id, parent_user_id, child_user_id, allocated_quota, used_quota, status, created_at, updated_at, deleted_at
+	`, amount, childUserID)
+	var rel service.SubAccountRelation
+	var deletedAt sql.NullTime
+	err := row.Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if deletedAt.Valid {
+		rel.DeletedAt = &deletedAt.Time
+	}
+	return &rel, nil
 }
 
 func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {

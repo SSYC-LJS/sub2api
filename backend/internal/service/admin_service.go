@@ -142,6 +142,7 @@ type CreateUserInput struct {
 	Balance       *float64
 	Concurrency   int
 	RPMLimit      int
+	IsParentAccount bool
 	AllowedGroups []int64
 }
 
@@ -153,6 +154,7 @@ type UpdateUserInput struct {
 	Balance       *float64 // 使用指针区分"未提供"和"设置为0"
 	Concurrency   *int     // 使用指针区分"未提供"和"设置为0"
 	RPMLimit      *int     // 使用指针区分"未提供"和"设置为0"
+	IsParentAccount *bool
 	Status        string
 	AllowedGroups *[]int64 // 使用指针区分"未提供"和"设置为空数组"
 	// GroupRates 用户专属分组倍率配置
@@ -726,6 +728,7 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 		Balance:       balance,
 		Concurrency:   input.Concurrency,
 		RPMLimit:      input.RPMLimit,
+		IsParentAccount: input.IsParentAccount,
 		Status:        StatusActive,
 		AllowedGroups: input.AllowedGroups,
 	}
@@ -808,6 +811,10 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 
 	if input.RPMLimit != nil {
 		user.RPMLimit = *input.RPMLimit
+	}
+
+	if input.IsParentAccount != nil {
+		user.IsParentAccount = *input.IsParentAccount
 	}
 
 	if input.AllowedGroups != nil {

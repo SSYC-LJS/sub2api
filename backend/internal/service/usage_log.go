@@ -130,6 +130,8 @@ type UsageLog struct {
 
 	GroupID        *int64
 	SubscriptionID *int64
+	PayerUserID    *int64
+	ParentAccountID *int64
 
 	InputTokens         int
 	OutputTokens        int
@@ -148,6 +150,7 @@ type UsageLog struct {
 	CacheReadCost     float64
 	TotalCost         float64
 	ActualCost        float64
+	ParentQuotaUsed   float64
 	RateMultiplier    float64
 	// AccountRateMultiplier 账号计费倍率快照（nil 表示历史数据，按 1.0 处理）
 	AccountRateMultiplier *float64

@@ -106,6 +106,17 @@ func RegisterUserRoutes(
 			usage.GET("/:id", h.Usage.GetByID)
 		}
 
+		// 母账号管理自己的子账号
+		subAccounts := authenticated.Group("/sub-accounts")
+		{
+			subAccounts.GET("", h.Admin.SubAccount.List)
+			subAccounts.GET("/candidates", h.Admin.SubAccount.SearchCandidates)
+			subAccounts.POST("", h.Admin.SubAccount.Add)
+			subAccounts.PUT("/:child_id/quota", h.Admin.SubAccount.UpdateQuota)
+			subAccounts.DELETE("/:child_id", h.Admin.SubAccount.Remove)
+			subAccounts.GET("/usage", h.Admin.SubAccount.Usage)
+		}
+
 		// 公告（用户可见）
 		announcements := authenticated.Group("/announcements")
 		{

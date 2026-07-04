@@ -35394,6 +35394,10 @@ type UsageLogMutation struct {
 	model_mapping_chain         *string
 	billing_tier                *string
 	billing_mode                *string
+	payer_user_id               *int64
+	addpayer_user_id            *int64
+	parent_account_id           *int64
+	addparent_account_id        *int64
 	input_tokens                *int
 	addinput_tokens             *int
 	output_tokens               *int
@@ -35418,6 +35422,8 @@ type UsageLogMutation struct {
 	addtotal_cost               *float64
 	actual_cost                 *float64
 	addactual_cost              *float64
+	parent_quota_used           *float64
+	addparent_quota_used        *float64
 	rate_multiplier             *float64
 	addrate_multiplier          *float64
 	account_rate_multiplier     *float64
@@ -36147,6 +36153,146 @@ func (m *UsageLogMutation) ResetSubscriptionID() {
 	delete(m.clearedFields, usagelog.FieldSubscriptionID)
 }
 
+// SetPayerUserID sets the "payer_user_id" field.
+func (m *UsageLogMutation) SetPayerUserID(i int64) {
+	m.payer_user_id = &i
+	m.addpayer_user_id = nil
+}
+
+// PayerUserID returns the value of the "payer_user_id" field in the mutation.
+func (m *UsageLogMutation) PayerUserID() (r int64, exists bool) {
+	v := m.payer_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPayerUserID returns the old "payer_user_id" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldPayerUserID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPayerUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPayerUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPayerUserID: %w", err)
+	}
+	return oldValue.PayerUserID, nil
+}
+
+// AddPayerUserID adds i to the "payer_user_id" field.
+func (m *UsageLogMutation) AddPayerUserID(i int64) {
+	if m.addpayer_user_id != nil {
+		*m.addpayer_user_id += i
+	} else {
+		m.addpayer_user_id = &i
+	}
+}
+
+// AddedPayerUserID returns the value that was added to the "payer_user_id" field in this mutation.
+func (m *UsageLogMutation) AddedPayerUserID() (r int64, exists bool) {
+	v := m.addpayer_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPayerUserID clears the value of the "payer_user_id" field.
+func (m *UsageLogMutation) ClearPayerUserID() {
+	m.payer_user_id = nil
+	m.addpayer_user_id = nil
+	m.clearedFields[usagelog.FieldPayerUserID] = struct{}{}
+}
+
+// PayerUserIDCleared returns if the "payer_user_id" field was cleared in this mutation.
+func (m *UsageLogMutation) PayerUserIDCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldPayerUserID]
+	return ok
+}
+
+// ResetPayerUserID resets all changes to the "payer_user_id" field.
+func (m *UsageLogMutation) ResetPayerUserID() {
+	m.payer_user_id = nil
+	m.addpayer_user_id = nil
+	delete(m.clearedFields, usagelog.FieldPayerUserID)
+}
+
+// SetParentAccountID sets the "parent_account_id" field.
+func (m *UsageLogMutation) SetParentAccountID(i int64) {
+	m.parent_account_id = &i
+	m.addparent_account_id = nil
+}
+
+// ParentAccountID returns the value of the "parent_account_id" field in the mutation.
+func (m *UsageLogMutation) ParentAccountID() (r int64, exists bool) {
+	v := m.parent_account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParentAccountID returns the old "parent_account_id" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldParentAccountID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParentAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParentAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParentAccountID: %w", err)
+	}
+	return oldValue.ParentAccountID, nil
+}
+
+// AddParentAccountID adds i to the "parent_account_id" field.
+func (m *UsageLogMutation) AddParentAccountID(i int64) {
+	if m.addparent_account_id != nil {
+		*m.addparent_account_id += i
+	} else {
+		m.addparent_account_id = &i
+	}
+}
+
+// AddedParentAccountID returns the value that was added to the "parent_account_id" field in this mutation.
+func (m *UsageLogMutation) AddedParentAccountID() (r int64, exists bool) {
+	v := m.addparent_account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearParentAccountID clears the value of the "parent_account_id" field.
+func (m *UsageLogMutation) ClearParentAccountID() {
+	m.parent_account_id = nil
+	m.addparent_account_id = nil
+	m.clearedFields[usagelog.FieldParentAccountID] = struct{}{}
+}
+
+// ParentAccountIDCleared returns if the "parent_account_id" field was cleared in this mutation.
+func (m *UsageLogMutation) ParentAccountIDCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldParentAccountID]
+	return ok
+}
+
+// ResetParentAccountID resets all changes to the "parent_account_id" field.
+func (m *UsageLogMutation) ResetParentAccountID() {
+	m.parent_account_id = nil
+	m.addparent_account_id = nil
+	delete(m.clearedFields, usagelog.FieldParentAccountID)
+}
+
 // SetInputTokens sets the "input_tokens" field.
 func (m *UsageLogMutation) SetInputTokens(i int) {
 	m.input_tokens = &i
@@ -36817,6 +36963,62 @@ func (m *UsageLogMutation) AddedActualCost() (r float64, exists bool) {
 func (m *UsageLogMutation) ResetActualCost() {
 	m.actual_cost = nil
 	m.addactual_cost = nil
+}
+
+// SetParentQuotaUsed sets the "parent_quota_used" field.
+func (m *UsageLogMutation) SetParentQuotaUsed(f float64) {
+	m.parent_quota_used = &f
+	m.addparent_quota_used = nil
+}
+
+// ParentQuotaUsed returns the value of the "parent_quota_used" field in the mutation.
+func (m *UsageLogMutation) ParentQuotaUsed() (r float64, exists bool) {
+	v := m.parent_quota_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParentQuotaUsed returns the old "parent_quota_used" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldParentQuotaUsed(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParentQuotaUsed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParentQuotaUsed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParentQuotaUsed: %w", err)
+	}
+	return oldValue.ParentQuotaUsed, nil
+}
+
+// AddParentQuotaUsed adds f to the "parent_quota_used" field.
+func (m *UsageLogMutation) AddParentQuotaUsed(f float64) {
+	if m.addparent_quota_used != nil {
+		*m.addparent_quota_used += f
+	} else {
+		m.addparent_quota_used = &f
+	}
+}
+
+// AddedParentQuotaUsed returns the value that was added to the "parent_quota_used" field in this mutation.
+func (m *UsageLogMutation) AddedParentQuotaUsed() (r float64, exists bool) {
+	v := m.addparent_quota_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetParentQuotaUsed resets all changes to the "parent_quota_used" field.
+func (m *UsageLogMutation) ResetParentQuotaUsed() {
+	m.parent_quota_used = nil
+	m.addparent_quota_used = nil
 }
 
 // SetRateMultiplier sets the "rate_multiplier" field.
@@ -37817,7 +38019,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 41)
+	fields := make([]string, 0, 44)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -37857,6 +38059,12 @@ func (m *UsageLogMutation) Fields() []string {
 	if m.subscription != nil {
 		fields = append(fields, usagelog.FieldSubscriptionID)
 	}
+	if m.payer_user_id != nil {
+		fields = append(fields, usagelog.FieldPayerUserID)
+	}
+	if m.parent_account_id != nil {
+		fields = append(fields, usagelog.FieldParentAccountID)
+	}
 	if m.input_tokens != nil {
 		fields = append(fields, usagelog.FieldInputTokens)
 	}
@@ -37892,6 +38100,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.actual_cost != nil {
 		fields = append(fields, usagelog.FieldActualCost)
+	}
+	if m.parent_quota_used != nil {
+		fields = append(fields, usagelog.FieldParentQuotaUsed)
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
@@ -37975,6 +38186,10 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.GroupID()
 	case usagelog.FieldSubscriptionID:
 		return m.SubscriptionID()
+	case usagelog.FieldPayerUserID:
+		return m.PayerUserID()
+	case usagelog.FieldParentAccountID:
+		return m.ParentAccountID()
 	case usagelog.FieldInputTokens:
 		return m.InputTokens()
 	case usagelog.FieldOutputTokens:
@@ -37999,6 +38214,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalCost()
 	case usagelog.FieldActualCost:
 		return m.ActualCost()
+	case usagelog.FieldParentQuotaUsed:
+		return m.ParentQuotaUsed()
 	case usagelog.FieldRateMultiplier:
 		return m.RateMultiplier()
 	case usagelog.FieldAccountRateMultiplier:
@@ -38066,6 +38283,10 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldGroupID(ctx)
 	case usagelog.FieldSubscriptionID:
 		return m.OldSubscriptionID(ctx)
+	case usagelog.FieldPayerUserID:
+		return m.OldPayerUserID(ctx)
+	case usagelog.FieldParentAccountID:
+		return m.OldParentAccountID(ctx)
 	case usagelog.FieldInputTokens:
 		return m.OldInputTokens(ctx)
 	case usagelog.FieldOutputTokens:
@@ -38090,6 +38311,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldTotalCost(ctx)
 	case usagelog.FieldActualCost:
 		return m.OldActualCost(ctx)
+	case usagelog.FieldParentQuotaUsed:
+		return m.OldParentQuotaUsed(ctx)
 	case usagelog.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
 	case usagelog.FieldAccountRateMultiplier:
@@ -38222,6 +38445,20 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetSubscriptionID(v)
 		return nil
+	case usagelog.FieldPayerUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPayerUserID(v)
+		return nil
+	case usagelog.FieldParentAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParentAccountID(v)
+		return nil
 	case usagelog.FieldInputTokens:
 		v, ok := value.(int)
 		if !ok {
@@ -38305,6 +38542,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetActualCost(v)
+		return nil
+	case usagelog.FieldParentQuotaUsed:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParentQuotaUsed(v)
 		return nil
 	case usagelog.FieldRateMultiplier:
 		v, ok := value.(float64)
@@ -38429,6 +38673,12 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addchannel_id != nil {
 		fields = append(fields, usagelog.FieldChannelID)
 	}
+	if m.addpayer_user_id != nil {
+		fields = append(fields, usagelog.FieldPayerUserID)
+	}
+	if m.addparent_account_id != nil {
+		fields = append(fields, usagelog.FieldParentAccountID)
+	}
 	if m.addinput_tokens != nil {
 		fields = append(fields, usagelog.FieldInputTokens)
 	}
@@ -38465,6 +38715,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addactual_cost != nil {
 		fields = append(fields, usagelog.FieldActualCost)
 	}
+	if m.addparent_quota_used != nil {
+		fields = append(fields, usagelog.FieldParentQuotaUsed)
+	}
 	if m.addrate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
 	}
@@ -38493,6 +38746,10 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case usagelog.FieldChannelID:
 		return m.AddedChannelID()
+	case usagelog.FieldPayerUserID:
+		return m.AddedPayerUserID()
+	case usagelog.FieldParentAccountID:
+		return m.AddedParentAccountID()
 	case usagelog.FieldInputTokens:
 		return m.AddedInputTokens()
 	case usagelog.FieldOutputTokens:
@@ -38517,6 +38774,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalCost()
 	case usagelog.FieldActualCost:
 		return m.AddedActualCost()
+	case usagelog.FieldParentQuotaUsed:
+		return m.AddedParentQuotaUsed()
 	case usagelog.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
 	case usagelog.FieldAccountRateMultiplier:
@@ -38544,6 +38803,20 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddChannelID(v)
+		return nil
+	case usagelog.FieldPayerUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPayerUserID(v)
+		return nil
+	case usagelog.FieldParentAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddParentAccountID(v)
 		return nil
 	case usagelog.FieldInputTokens:
 		v, ok := value.(int)
@@ -38629,6 +38902,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddActualCost(v)
 		return nil
+	case usagelog.FieldParentQuotaUsed:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddParentQuotaUsed(v)
+		return nil
 	case usagelog.FieldRateMultiplier:
 		v, ok := value.(float64)
 		if !ok {
@@ -38703,6 +38983,12 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldSubscriptionID) {
 		fields = append(fields, usagelog.FieldSubscriptionID)
 	}
+	if m.FieldCleared(usagelog.FieldPayerUserID) {
+		fields = append(fields, usagelog.FieldPayerUserID)
+	}
+	if m.FieldCleared(usagelog.FieldParentAccountID) {
+		fields = append(fields, usagelog.FieldParentAccountID)
+	}
 	if m.FieldCleared(usagelog.FieldAccountRateMultiplier) {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
 	}
@@ -38770,6 +39056,12 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldSubscriptionID:
 		m.ClearSubscriptionID()
+		return nil
+	case usagelog.FieldPayerUserID:
+		m.ClearPayerUserID()
+		return nil
+	case usagelog.FieldParentAccountID:
+		m.ClearParentAccountID()
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		m.ClearAccountRateMultiplier()
@@ -38848,6 +39140,12 @@ func (m *UsageLogMutation) ResetField(name string) error {
 	case usagelog.FieldSubscriptionID:
 		m.ResetSubscriptionID()
 		return nil
+	case usagelog.FieldPayerUserID:
+		m.ResetPayerUserID()
+		return nil
+	case usagelog.FieldParentAccountID:
+		m.ResetParentAccountID()
+		return nil
 	case usagelog.FieldInputTokens:
 		m.ResetInputTokens()
 		return nil
@@ -38883,6 +39181,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldActualCost:
 		m.ResetActualCost()
+		return nil
+	case usagelog.FieldParentQuotaUsed:
+		m.ResetParentQuotaUsed()
 		return nil
 	case usagelog.FieldRateMultiplier:
 		m.ResetRateMultiplier()
@@ -39116,6 +39417,7 @@ type UserMutation struct {
 	addtotal_recharged            *float64
 	rpm_limit                     *int
 	addrpm_limit                  *int
+	is_parent_account             *bool
 	clearedFields                 map[string]struct{}
 	api_keys                      map[int64]struct{}
 	removedapi_keys               map[int64]struct{}
@@ -40266,6 +40568,42 @@ func (m *UserMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetIsParentAccount sets the "is_parent_account" field.
+func (m *UserMutation) SetIsParentAccount(b bool) {
+	m.is_parent_account = &b
+}
+
+// IsParentAccount returns the value of the "is_parent_account" field in the mutation.
+func (m *UserMutation) IsParentAccount() (r bool, exists bool) {
+	v := m.is_parent_account
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsParentAccount returns the old "is_parent_account" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldIsParentAccount(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsParentAccount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsParentAccount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsParentAccount: %w", err)
+	}
+	return oldValue.IsParentAccount, nil
+}
+
+// ResetIsParentAccount resets all changes to the "is_parent_account" field.
+func (m *UserMutation) ResetIsParentAccount() {
+	m.is_parent_account = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *UserMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -41002,7 +41340,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -41072,6 +41410,9 @@ func (m *UserMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.is_parent_account != nil {
+		fields = append(fields, user.FieldIsParentAccount)
+	}
 	return fields
 }
 
@@ -41126,6 +41467,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalRecharged()
 	case user.FieldRpmLimit:
 		return m.RpmLimit()
+	case user.FieldIsParentAccount:
+		return m.IsParentAccount()
 	}
 	return nil, false
 }
@@ -41181,6 +41524,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTotalRecharged(ctx)
 	case user.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case user.FieldIsParentAccount:
+		return m.OldIsParentAccount(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -41350,6 +41695,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRpmLimit(v)
+		return nil
+	case user.FieldIsParentAccount:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsParentAccount(v)
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
@@ -41570,6 +41922,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldRpmLimit:
 		m.ResetRpmLimit()
+		return nil
+	case user.FieldIsParentAccount:
+		m.ResetIsParentAccount()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

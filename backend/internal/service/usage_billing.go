@@ -22,6 +22,9 @@ type UsageBillingCommand struct {
 	UserID              int64
 	AccountID           int64
 	SubscriptionID      *int64
+	PayerUserID         *int64
+	ParentAccountID     *int64
+	ParentQuotaUsed     float64
 	AccountType         string
 	Model               string
 	ServiceTier         string
@@ -115,6 +118,8 @@ type UsageBillingApplyResult struct {
 	Applied              bool
 	APIKeyQuotaExhausted bool
 	NewBalance           *float64           // post-deduction balance (nil = no balance deduction)
+	BalancePayerUserID    int64              // user whose balance was deducted; 0 means command user
+	ParentQuotaUsed       float64            // amount deducted via parent quota
 	BalanceOverdrafted   bool               // true when the sufficient-balance guard missed and debt was still recorded
 	QuotaState           *AccountQuotaState // post-increment quota state (nil = no quota increment)
 }
