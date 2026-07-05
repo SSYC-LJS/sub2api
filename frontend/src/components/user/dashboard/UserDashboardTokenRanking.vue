@@ -268,13 +268,13 @@ const formatPrimaryMetric = (item: RankingSlot['item']) => {
 }
 
 const formatSecondaryMetric = (item: RankingSlot['item']) => {
-  if (isRedeemItem(item)) return `${formatCompactNumber(item.redeem_count)} 次兑换`
+  if (isRedeemItem(item)) return `${formatCompactNumber(item.redeem_count)} 次到账`
   if (rankType.value === 'cost') return formatCompactNumber(item.tokens)
   return formatCostValue(item.actual_cost)
 }
 
 const formatActivityMetric = (item: RankingSlot['item']) => {
-  if (isRedeemItem(item)) return `${formatCompactNumber(item.redeem_count)} 次兑换`
+  if (isRedeemItem(item)) return `${formatCompactNumber(item.redeem_count)} 次到账`
   return `${formatCompactNumber(item.requests)} ${t('dashboard.requests')}`
 }
 

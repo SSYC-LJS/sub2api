@@ -2623,35 +2623,75 @@ func (r *usageLogRepository) GetUserTokenRanking(ctx context.Context, startTime,
 	}, nil
 }
 
-// GetUserBalanceRedeemRanking returns user balance redeem ranking aggregated within the time range.
+// GetUserBalanceRedeemRanking returns balance-credit ranking aggregated from
+// both manual balance redeem codes and successful in-site balance recharge orders.
 func (r *usageLogRepository) GetUserBalanceRedeemRanking(ctx context.Context, startTime, endTime time.Time, limit int) (result *usagestats.UserRedeemRankingResponse, err error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
-	whereClause := "rc.used_at < $1"
-	args := []any{endTime}
+	// Keep redeem-code and payment-order time filters separate so the query can
+	// use each table's timestamp/index. Payment orders are de-duplicated against
+	// redeem_codes by recharge_code: the normal fulfillment path may create and
+	// redeem an internal recharge code for a paid order, and that should count once.
+	redeemWhere := "rc.used_at < $1"
+	paymentWhere := "COALESCE(po.completed_at, po.paid_at, po.updated_at) < $2"
+	args := []any{endTime, endTime}
 	if !startTime.IsZero() {
-		whereClause = "rc.used_at >= $1 AND rc.used_at < $2"
-		args = []any{startTime, endTime}
+		redeemWhere = "rc.used_at >= $1 AND rc.used_at < $2"
+		paymentWhere = "COALESCE(po.completed_at, po.paid_at, po.updated_at) >= $3 AND COALESCE(po.completed_at, po.paid_at, po.updated_at) < $4"
+		args = []any{startTime, endTime, startTime, endTime}
 	}
-	args = append(args, service.RedeemTypeBalance, service.StatusUsed, limit)
+	args = append(args, service.RedeemTypeBalance, service.StatusUsed, service.OrderStatusCompleted, "balance", limit)
+	redeemTypeArg := len(args) - 4
+	redeemStatusArg := len(args) - 3
+	paymentStatusArg := len(args) - 2
+	paymentOrderTypeArg := len(args) - 1
+	limitArg := len(args)
 
 	query := fmt.Sprintf(`
-		WITH user_redeems AS (
+		WITH balance_events AS (
 			SELECT
 				rc.used_by AS user_id,
-				COALESCE(us.email, '') as email,
-				COALESCE(us.username, '') as username,
-				COALESCE(SUM(rc.value), 0) as amount,
-				COUNT(*) as redeem_count
+				rc.value AS amount,
+				1::bigint AS event_count
 			FROM redeem_codes rc
-			LEFT JOIN users us ON rc.used_by = us.id
 			WHERE %s
 			  AND rc.type = $%d
 			  AND rc.status = $%d
 			  AND rc.used_by IS NOT NULL
-			GROUP BY rc.used_by, us.email, us.username
+
+			UNION ALL
+
+			SELECT
+				po.user_id AS user_id,
+				po.amount AS amount,
+				1::bigint AS event_count
+			FROM payment_orders po
+			WHERE %s
+			  AND po.status = $%d
+			  AND po.order_type = $%d
+			  AND po.user_id IS NOT NULL
+			  AND po.amount > 0
+			  AND NOT EXISTS (
+				SELECT 1
+				FROM redeem_codes rc2
+				WHERE rc2.code = po.recharge_code
+				  AND rc2.type = $%d
+				  AND rc2.status = $%d
+				  AND rc2.used_by = po.user_id
+			  )
+		),
+		user_redeems AS (
+			SELECT
+				be.user_id,
+				COALESCE(us.email, '') as email,
+				COALESCE(us.username, '') as username,
+				COALESCE(SUM(be.amount), 0) as amount,
+				COALESCE(SUM(be.event_count), 0) as redeem_count
+			FROM balance_events be
+			LEFT JOIN users us ON be.user_id = us.id
+			GROUP BY be.user_id, us.email, us.username
 		),
 		ranked AS (
 			SELECT
@@ -2676,7 +2716,7 @@ func (r *usageLogRepository) GetUserBalanceRedeemRanking(ctx context.Context, st
 			total_redeem_count
 		FROM ranked
 		ORDER BY amount DESC, redeem_count DESC, user_id ASC
-	`, whereClause, len(args)-2, len(args)-1, len(args))
+	`, redeemWhere, redeemTypeArg, redeemStatusArg, paymentWhere, paymentStatusArg, paymentOrderTypeArg, redeemTypeArg, redeemStatusArg, limitArg)
 
 	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {

@@ -705,7 +705,7 @@ func TestUsageLogRepositoryGetUserTokenRanking(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUsageLogRepositoryGetUserBalanceRedeemRanking(t *testing.T) {
+func TestUsageLogRepositoryGetUserBalanceRedeemRankingIncludesPaymentOrders(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}
 
@@ -715,8 +715,8 @@ func TestUsageLogRepositoryGetUserBalanceRedeemRanking(t *testing.T) {
 		AddRow(int64(9), "nine@example.com", "Nine", 88.8, int64(2), 100.0, int64(3)).
 		AddRow(int64(8), "eight@example.com", "", 11.2, int64(1), 100.0, int64(3))
 
-	mock.ExpectQuery("WITH user_redeems AS \\(").
-		WithArgs(start, end, service.RedeemTypeBalance, service.StatusUsed, 10).
+	mock.ExpectQuery("WITH balance_events AS \\(").
+		WithArgs(start, end, start, end, service.RedeemTypeBalance, service.StatusUsed, service.OrderStatusCompleted, "balance", 10).
 		WillReturnRows(rows)
 
 	got, err := repo.GetUserBalanceRedeemRanking(context.Background(), start, end, 10)

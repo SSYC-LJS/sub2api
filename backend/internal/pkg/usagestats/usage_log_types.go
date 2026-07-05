@@ -163,20 +163,20 @@ type UserSpendingRankingResponse struct {
 	TotalTokens     int64                     `json:"total_tokens"`
 }
 
-// UserRedeemRankingItem represents a user balance redeem ranking row.
+// UserRedeemRankingItem represents a user balance top-up ranking row.
 type UserRedeemRankingItem struct {
 	UserID      int64   `json:"user_id"`
 	Email       string  `json:"email"`
 	Username    string  `json:"username"`
 	Amount      float64 `json:"amount"`
-	RedeemCount int64   `json:"redeem_count"`
+	RedeemCount int64   `json:"redeem_count"` // 余额到账次数，包含兑换码和站内余额充值订单
 }
 
-// UserRedeemRankingResponse represents balance redeem ranking rows plus totals for the time range.
+// UserRedeemRankingResponse represents balance top-up ranking rows plus totals for the time range.
 type UserRedeemRankingResponse struct {
 	Ranking          []UserRedeemRankingItem `json:"ranking"`
 	TotalAmount      float64                 `json:"total_amount"`
-	TotalRedeemCount int64                   `json:"total_redeem_count"`
+	TotalRedeemCount int64                   `json:"total_redeem_count"` // 余额到账总次数，包含兑换码和站内余额充值订单
 }
 
 // UserBreakdownItem represents per-user usage breakdown within a dimension (group, model, endpoint).
