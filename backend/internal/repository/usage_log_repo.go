@@ -1532,7 +1532,7 @@ func (r *usageLogRepository) GetSubAccountUsageSummary(ctx context.Context, pare
 	if end.IsZero() || !end.After(start) {
 		end = time.Now()
 	}
-	conditions := []string{"ul.parent_account_id = $1", "ul.created_at >= $2", "ul.created_at < $3"}
+	conditions := []string{"ul.parent_account_id = $1", "ul.parent_quota_used > 0", "ul.created_at >= $2", "ul.created_at < $3"}
 	args := []any{parentUserID, start, end}
 	if childUserID > 0 {
 		conditions = append(conditions, fmt.Sprintf("ul.user_id = $%d", len(args)+1))

@@ -8,7 +8,7 @@
             母账号额度管理
           </div>
           <h1 class="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">子账号管理</h1>
-          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">在 Sub2API 页面框架内管理子账号额度，周额度优先，其次无期限额度，最后回退子账号自有余额。</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">在 Sub2API 页面框架内管理子账号额度，周额度优先，其次无期限可用额度，最后回退子账号自有余额。</p>
         </div>
         <button class="btn btn-secondary" type="button" @click="refreshAll" :disabled="loading || summaryLoading">
           <Icon name="refresh" size="sm" :class="loading || summaryLoading ? 'animate-spin' : ''" />
@@ -28,7 +28,7 @@
           <p class="mt-1 text-xs text-gray-400 dark:text-dark-500">优先扣除，每周自动刷新</p>
         </div>
         <div class="card p-5">
-          <p class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-dark-400"><Icon name="dollar" size="sm" class="text-emerald-500" />无期限剩余</p>
+          <p class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-dark-400"><Icon name="dollar" size="sm" class="text-emerald-500" />无期限可用</p>
           <p class="mt-2 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{{ formatMoney(totalPermanentRemainingQuota) }}</p>
           <p class="mt-1 text-xs text-gray-400 dark:text-dark-500">周额度不足后使用</p>
         </div>
@@ -48,7 +48,7 @@
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h2 class="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white"><Icon name="userPlus" size="sm" class="text-primary-500" />添加子账号</h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">搜索已注册账号，分别设置每周额度和无期限额度。</p>
+            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">搜索已注册账号，分别设置每周额度和无期限当前可用额度。</p>
           </div>
           <div class="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-700 dark:border-primary-900/40 dark:bg-primary-900/20 dark:text-primary-300">
             扣费顺序：周额度 → 无期限额度 → 子账号自有余额
@@ -81,7 +81,7 @@
             <p v-if="candidateSearch.trim().length === 1" class="mt-1 text-xs text-gray-500 dark:text-dark-400">继续输入 1 个字符后开始搜索。</p>
           </div>
           <QuotaInput v-model="newWeeklyQuota" label="每周额度" />
-          <QuotaInput v-model="newQuota" label="无期限额度" />
+          <QuotaInput v-model="newQuota" label="无期限可用额度" />
           <div class="flex items-end">
             <button class="btn btn-primary w-full xl:w-auto" type="button" :disabled="!selectedCandidate || submitting" @click="addSelectedSubAccount">
               <Icon v-if="submitting" name="refresh" size="sm" class="animate-spin" />
@@ -110,7 +110,7 @@
         <div class="flex flex-col gap-3 border-b border-gray-200 p-6 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 class="text-base font-semibold text-gray-900 dark:text-white">我的子账号</h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">周额度会按自然周懒刷新；无期限额度保持历史单独额度配置。</p>
+            <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">周额度会按自然周懒刷新；无期限额度只展示和调整当前可用额度，不展示历史总额度。</p>
           </div>
           <span class="inline-flex w-fit items-center rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700 dark:bg-dark-700 dark:text-dark-300">{{ relations.length }} 个</span>
         </div>
@@ -128,8 +128,8 @@
               <tr class="border-b border-gray-200 text-gray-500 dark:border-dark-700 dark:text-dark-400">
                 <th class="px-5 py-4 font-medium">账号</th>
                 <th class="px-5 py-4 text-right font-medium">周额度</th>
-                <th class="px-5 py-4 text-right font-medium">无期限额度</th>
-                <th class="px-5 py-4 text-right font-medium">总剩余</th>
+                <th class="px-5 py-4 text-right font-medium">无期限可用</th>
+                <th class="px-5 py-4 text-right font-medium">子账号余额</th>
                 <th class="px-5 py-4 font-medium">额度进度</th>
                 <th class="px-5 py-4 text-right font-medium">操作</th>
               </tr>
@@ -156,10 +156,13 @@
                   <div v-if="editingChildUserId === relation.child_user_id" class="flex justify-end"><QuotaInput v-model="inlineQuota" compact /></div>
                   <div v-else>
                     <div class="font-medium text-emerald-600 dark:text-emerald-400">{{ formatMoney(permanentRemainingQuota(relation)) }}</div>
-                    <div class="text-xs text-gray-500 dark:text-dark-400">{{ formatMoney(relation.used_quota || 0) }} / {{ formatMoney(relation.allocated_quota || 0) }}</div>
+                    <div class="text-xs text-gray-500 dark:text-dark-400">当前可用额度</div>
                   </div>
                 </td>
-                <td class="px-5 py-4 text-right font-semibold text-blue-600 dark:text-blue-400">{{ formatMoney(totalRelationRemainingQuota(relation)) }}</td>
+                <td class="px-5 py-4 text-right">
+                  <div class="font-semibold text-blue-600 dark:text-blue-400">{{ formatMoney(relation.child?.balance || 0) }}</div>
+                  <div class="text-xs text-gray-500 dark:text-dark-400">母账号剩余 {{ formatMoney(totalRelationRemainingQuota(relation)) }}</div>
+                </td>
                 <td class="px-5 py-4">
                   <div class="w-48">
                     <div class="mb-1 flex items-center justify-between text-xs text-gray-500 dark:text-dark-400"><span>{{ quotaUsagePercent(relation) }}%</span><span>{{ quotaStatusLabel(relation) }}</span></div>
@@ -188,7 +191,7 @@
           <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <h2 class="text-base font-semibold text-gray-900 dark:text-white">子账号使用分析</h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">不再逐条展示流水，按时间和子账号筛选查看模型分布、分组使用分布。</p>
+              <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">仅统计当前母账号下子账号使用母账号额度的请求，按时间和子账号筛选查看模型分布、分组使用分布。</p>
             </div>
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
@@ -224,8 +227,8 @@
             <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">调整时间范围或选择其他子账号后重试。</p>
           </div>
           <div v-else class="grid gap-6 xl:grid-cols-2">
-            <ModelDistributionChart :model-stats="usageSummary.models" title="模型分布" subtitle="按 Token 统计子账号模型使用情况" />
-            <GroupDistributionChart :group-stats="usageSummary.groups" title="分组使用分布" subtitle="按 Token 统计子账号分组消耗情况" />
+            <ModelDistributionChart :model-stats="usageSummary.models" title="模型分布" subtitle="按 Token 统计使用母账号额度的子账号模型分布" />
+            <GroupDistributionChart :group-stats="usageSummary.groups" title="分组使用分布" subtitle="按 Token 统计使用母账号额度的子账号分组分布" />
           </div>
         </div>
       </section>
@@ -322,7 +325,7 @@ async function loadRelations(): Promise<void> { loading.value = true; try { cons
 async function searchCandidatesNow(query: string): Promise<void> { const search = query.trim(); if (search.length < 2) { candidates.value = []; highlightedCandidateIndex.value = -1; return } const seq = candidateSearchSeq.value + 1; candidateSearchSeq.value = seq; candidateLoading.value = true; try { const data = await subAccountsAPI.searchCandidates(search); if (seq !== candidateSearchSeq.value) return; candidates.value = data.items || []; highlightedCandidateIndex.value = candidates.value.length ? 0 : -1 } catch (error: any) { if (seq !== candidateSearchSeq.value) return; candidates.value = []; highlightedCandidateIndex.value = -1; appStore.showError(error.response?.data?.detail || '搜索账号失败') } finally { if (seq === candidateSearchSeq.value) candidateLoading.value = false } }
 async function addSelectedSubAccount(): Promise<void> { if (!selectedCandidate.value) { appStore.showError('请先选择要添加的账号'); return } await addSubAccount(selectedCandidate.value.id) }
 async function addSubAccount(childUserId: number): Promise<void> { if (newQuota.value < 0 || newWeeklyQuota.value < 0) { appStore.showError('额度不能小于 0'); return } submitting.value = true; try { await subAccountsAPI.add(childUserId, Number(newQuota.value || 0), Number(newWeeklyQuota.value || 0)); appStore.showSuccess('子账号已添加'); clearSelectedCandidate(); newQuota.value = 0; newWeeklyQuota.value = 0; await refreshAll() } catch (error: any) { appStore.showError(error.response?.data?.detail || '添加子账号失败') } finally { submitting.value = false } }
-function startInlineQuotaEdit(relation: SubAccountRelation): void { editingChildUserId.value = relation.child_user_id; inlineQuota.value = Number(relation.allocated_quota || 0); inlineWeeklyQuota.value = Number(relation.weekly_allocated_quota || 0) }
+function startInlineQuotaEdit(relation: SubAccountRelation): void { editingChildUserId.value = relation.child_user_id; inlineQuota.value = permanentRemainingQuota(relation); inlineWeeklyQuota.value = Number(relation.weekly_allocated_quota || 0) }
 function cancelInlineQuota(): void { editingChildUserId.value = null; inlineQuota.value = 0; inlineWeeklyQuota.value = 0 }
 async function saveInlineQuota(relation: SubAccountRelation): Promise<void> { if (inlineQuota.value < 0 || inlineWeeklyQuota.value < 0) { appStore.showError('额度不能小于 0'); return } submitting.value = true; try { await subAccountsAPI.updateQuota(relation.child_user_id, Number(inlineQuota.value || 0), Number(inlineWeeklyQuota.value || 0)); appStore.showSuccess('额度已更新'); cancelInlineQuota(); await refreshAll() } catch (error: any) { appStore.showError(error.response?.data?.detail || '更新额度失败') } finally { submitting.value = false } }
 async function removeSubAccount(childUserId: number): Promise<void> { if (!window.confirm('确定要解绑这个子账号吗？')) return; submitting.value = true; try { await subAccountsAPI.remove(childUserId); appStore.showSuccess('子账号已解绑'); if (usageChildId.value === childUserId) usageChildId.value = 0; await refreshAll() } catch (error: any) { appStore.showError(error.response?.data?.detail || '解绑子账号失败') } finally { submitting.value = false } }

@@ -142,7 +142,7 @@ func (r *subAccountRepository) UpdateQuota(ctx context.Context, parentUserID, ch
 	var id int64
 	err := r.db.QueryRowContext(ctx, `
 		UPDATE parent_child_accounts
-		SET allocated_quota=$1,
+		SET allocated_quota=used_quota + $1,
 			weekly_allocated_quota=$2,
 			weekly_used_quota=CASE WHEN weekly_window_start IS NULL OR weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE weekly_used_quota END,
 			weekly_window_start=COALESCE(weekly_window_start, date_trunc('week', NOW())),
