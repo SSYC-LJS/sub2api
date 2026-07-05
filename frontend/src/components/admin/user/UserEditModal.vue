@@ -73,6 +73,7 @@
 import { ref, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { useClipboard } from '@/composables/useClipboard'
 import { adminAPI } from '@/api/admin'
 import type { AdminUser, UserAttributeValuesMap } from '@/types'
@@ -82,7 +83,7 @@ import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{ show: boolean, user: AdminUser | null }>()
 const emit = defineEmits(['close', 'success'])
-const { t } = useI18n(); const appStore = useAppStore(); const { copyToClipboard } = useClipboard()
+const { t } = useI18n(); const appStore = useAppStore(); const authStore = useAuthStore(); const { copyToClipboard } = useClipboard()
 
 const submitting = ref(false); const passwordCopied = ref(false)
 const form = reactive({ email: '', password: '', username: '', notes: '', concurrency: 1, rpm_limit: 0, is_parent_account: false, customAttributes: {} as UserAttributeValuesMap })
@@ -120,6 +121,9 @@ const handleUpdateUser = async () => {
     if (form.password.trim()) data.password = form.password.trim()
     await adminAPI.users.update(props.user.id, data)
     if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(props.user.id, form.customAttributes)
+    if (authStore.user?.id === props.user.id) {
+      await authStore.refreshUser()
+    }
     appStore.showSuccess(t('admin.users.userUpdated'))
     emit('success'); emit('close')
   } catch (e: any) {

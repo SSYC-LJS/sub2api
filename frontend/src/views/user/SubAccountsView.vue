@@ -146,6 +146,7 @@ import { computed, onMounted, ref } from 'vue'
 import { subAccountsAPI, type SubAccountCandidate, type SubAccountRelation } from '@/api/subAccounts'
 import { useAppStore } from '@/stores/app'
 import type { UsageLog } from '@/types'
+import { formatCurrency, formatDateTime } from '@/utils/format'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 
 const appStore = useAppStore()
@@ -174,12 +175,11 @@ const childMap = computed(() => {
 })
 
 function formatMoney(value: number): string {
-  return `$${Number(value || 0).toFixed(6)}`
+  return formatCurrency(Number(value || 0))
 }
 
 function formatDate(value: string): string {
-  if (!value) return '-'
-  return new Date(value).toLocaleString()
+  return formatDateTime(value) || '-'
 }
 
 function childLabel(userId: number): string {

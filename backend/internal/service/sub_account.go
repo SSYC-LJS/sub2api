@@ -145,6 +145,11 @@ func (s *SubAccountService) Add(ctx context.Context, parentUserID int64, input S
 	if child.Role == RoleAdmin {
 		return nil, errors.New("admin user cannot be added as sub account")
 	}
+	if rel, err := s.repo.GetActiveByChild(ctx, input.ChildUserID); err == nil && rel != nil {
+		return nil, ErrSubAccountAlreadyLinked
+	} else if err != nil && !errors.Is(err, ErrSubAccountNotFound) {
+		return nil, err
+	}
 	return s.repo.Upsert(ctx, parentUserID, input)
 }
 

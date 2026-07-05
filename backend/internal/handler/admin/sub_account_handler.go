@@ -81,6 +81,8 @@ func (h *SubAccountHandler) handleError(c *gin.Context, err error) {
 		response.Error(c, http.StatusNotFound, "子账号关系不存在")
 	case errors.Is(err, service.ErrSubAccountSelfLink):
 		response.Error(c, http.StatusBadRequest, "不能将自己添加为子账号")
+	case errors.Is(err, service.ErrSubAccountAlreadyLinked):
+		response.Error(c, http.StatusConflict, "该账号已绑定母账号")
 	default:
 		response.InternalError(c, err.Error())
 	}

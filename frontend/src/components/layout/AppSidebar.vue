@@ -790,7 +790,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/image-canvas', label: '生图画布', icon: ImageCanvasIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
-    ...(isParentAccount.value ? [{ path: '/sub-accounts', label: '子账号管理', icon: UsersIcon, hideInSimpleMode: true }] : []),
+    ...(isParentAccount.value ? [{ path: '/sub-accounts', label: '子账号管理', icon: UsersIcon }] : []),
     { path: '/usage-ranking', label: t('nav.ranking'), icon: ChartIcon },
     { path: '/model-market', label: t('nav.modelMarket'), icon: ChannelIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
