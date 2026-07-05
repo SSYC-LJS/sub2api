@@ -1520,6 +1520,107 @@ func (r *usageLogRepository) ListByParentAccount(ctx context.Context, parentUser
 	return r.listUsageLogsWithPagination(ctx, where, args, params)
 }
 
+func (r *usageLogRepository) GetSubAccountUsageSummary(ctx context.Context, parentUserID int64, childUserID int64, filters service.UsageSummaryFilters) (*service.SubAccountUsageSummary, error) {
+	if parentUserID <= 0 {
+		return &service.SubAccountUsageSummary{Models: []service.ModelStat{}, Groups: []service.GroupStat{}}, nil
+	}
+	start := filters.StartTime
+	end := filters.EndTime
+	if start.IsZero() {
+		start = time.Now().AddDate(0, 0, -7)
+	}
+	if end.IsZero() || !end.After(start) {
+		end = time.Now()
+	}
+	conditions := []string{"ul.parent_account_id = $1", "ul.created_at >= $2", "ul.created_at < $3"}
+	args := []any{parentUserID, start, end}
+	if childUserID > 0 {
+		conditions = append(conditions, fmt.Sprintf("ul.user_id = $%d", len(args)+1))
+		args = append(args, childUserID)
+	}
+	where := "WHERE " + strings.Join(conditions, " AND ")
+
+	summary := &service.SubAccountUsageSummary{Models: []service.ModelStat{}, Groups: []service.GroupStat{}}
+	if err := scanSingleRow(ctx, r.sql, fmt.Sprintf(`
+		SELECT
+			COUNT(*) AS total_requests,
+			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS total_tokens,
+			COALESCE(SUM(actual_cost), 0) AS total_actual_cost,
+			COALESCE(SUM(parent_quota_used), 0) AS total_parent_quota_used
+		FROM usage_logs ul
+		%s
+	`, where), args, &summary.TotalRequests, &summary.TotalTokens, &summary.TotalActualCost, &summary.TotalParentQuotaUsed); err != nil {
+		return nil, err
+	}
+
+	modelRows, err := r.sql.QueryContext(ctx, fmt.Sprintf(`
+		SELECT
+			COALESCE(NULLIF(ul.requested_model, ''), NULLIF(ul.model, ''), 'unknown') AS model,
+			COUNT(*) AS requests,
+			COALESCE(SUM(ul.input_tokens + ul.output_tokens + ul.cache_creation_tokens + ul.cache_read_tokens), 0) AS total_tokens,
+			COALESCE(SUM(ul.total_cost), 0) AS cost,
+			COALESCE(SUM(ul.actual_cost), 0) AS actual_cost
+		FROM usage_logs ul
+		%s
+		GROUP BY COALESCE(NULLIF(ul.requested_model, ''), NULLIF(ul.model, ''), 'unknown')
+		ORDER BY total_tokens DESC
+		LIMIT 20
+	`, where), args...)
+	if err != nil {
+		return nil, err
+	}
+	for modelRows.Next() {
+		var item service.ModelStat
+		if err := modelRows.Scan(&item.Model, &item.Requests, &item.TotalTokens, &item.Cost, &item.ActualCost); err != nil {
+			_ = modelRows.Close()
+			return nil, err
+		}
+		summary.Models = append(summary.Models, item)
+	}
+	if err := modelRows.Err(); err != nil {
+		_ = modelRows.Close()
+		return nil, err
+	}
+	if err := modelRows.Close(); err != nil {
+		return nil, err
+	}
+
+	groupRows, err := r.sql.QueryContext(ctx, fmt.Sprintf(`
+		SELECT
+			COALESCE(ul.group_id, 0) AS group_id,
+			COALESCE(g.name, '') AS group_name,
+			COUNT(*) AS requests,
+			COALESCE(SUM(ul.input_tokens + ul.output_tokens + ul.cache_creation_tokens + ul.cache_read_tokens), 0) AS total_tokens,
+			COALESCE(SUM(ul.total_cost), 0) AS cost,
+			COALESCE(SUM(ul.actual_cost), 0) AS actual_cost
+		FROM usage_logs ul
+		LEFT JOIN groups g ON g.id = ul.group_id
+		%s
+		GROUP BY ul.group_id, g.name
+		ORDER BY total_tokens DESC
+		LIMIT 20
+	`, where), args...)
+	if err != nil {
+		return nil, err
+	}
+	for groupRows.Next() {
+		var item service.GroupStat
+		if err := groupRows.Scan(&item.GroupID, &item.GroupName, &item.Requests, &item.TotalTokens, &item.Cost, &item.ActualCost); err != nil {
+			_ = groupRows.Close()
+			return nil, err
+		}
+		summary.Groups = append(summary.Groups, item)
+	}
+	if err := groupRows.Err(); err != nil {
+		_ = groupRows.Close()
+		return nil, err
+	}
+	if err := groupRows.Close(); err != nil {
+		return nil, err
+	}
+	return summary, nil
+}
+
 func (r *usageLogRepository) ListByAPIKey(ctx context.Context, apiKeyID int64, params pagination.PaginationParams) ([]service.UsageLog, *pagination.PaginationResult, error) {
 	return r.listUsageLogsWithPagination(ctx, "WHERE api_key_id = $1", []any{apiKeyID}, params)
 }

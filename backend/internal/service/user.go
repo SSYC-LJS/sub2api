@@ -60,6 +60,8 @@ type User struct {
 	IsChildAccount bool
 	// ParentAccountID 为该用户当前活跃母账号 ID；仅管理员/内部链路使用。
 	ParentAccountID *int64
+	// ParentQuotaRemaining 为该用户作为子账号时，母账号分配额度剩余合计（周额度 + 无期限额度）。
+	ParentQuotaRemaining float64
 
 	// UserGroupRPMOverride 来自 auth cache snapshot 的 (user, group) RPM 覆盖值。
 	// nil = 该 API Key 对应的 (user, group) 无 override；非 nil 时 checkRPM 直接使用，

@@ -20,15 +20,18 @@ var ErrSubAccountSelfLink = errors.New("parent and child account cannot be the s
 // SubAccountRelation describes an active parent-child user relation and the quota
 // allocated by the parent account to the child account.
 type SubAccountRelation struct {
-	ID             int64
-	ParentUserID   int64
-	ChildUserID    int64
-	AllocatedQuota float64
-	UsedQuota      float64
-	Status         string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      *time.Time
+	ID                   int64
+	ParentUserID         int64
+	ChildUserID          int64
+	AllocatedQuota       float64
+	UsedQuota            float64
+	WeeklyAllocatedQuota float64
+	WeeklyUsedQuota      float64
+	WeeklyWindowStart    *time.Time
+	Status               string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	DeletedAt            *time.Time
 
 	ParentUser *User
 	ChildUser  *User
@@ -45,9 +48,28 @@ func (r *SubAccountRelation) RemainingQuota() float64 {
 	return remaining
 }
 
+func (r *SubAccountRelation) WeeklyRemainingQuota() float64 {
+	if r == nil {
+		return 0
+	}
+	remaining := r.WeeklyAllocatedQuota - r.WeeklyUsedQuota
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+func (r *SubAccountRelation) TotalRemainingQuota() float64 {
+	if r == nil {
+		return 0
+	}
+	return r.WeeklyRemainingQuota() + r.RemainingQuota()
+}
+
 type SubAccountUpsertInput struct {
-	ChildUserID    int64
-	AllocatedQuota float64
+	ChildUserID          int64
+	AllocatedQuota       float64
+	WeeklyAllocatedQuota float64
 }
 
 type SubAccountRepository interface {
@@ -55,7 +77,7 @@ type SubAccountRepository interface {
 	GetActiveByParentAndChild(ctx context.Context, parentUserID, childUserID int64) (*SubAccountRelation, error)
 	GetActiveByChild(ctx context.Context, childUserID int64) (*SubAccountRelation, error)
 	Upsert(ctx context.Context, parentUserID int64, input SubAccountUpsertInput) (*SubAccountRelation, error)
-	UpdateQuota(ctx context.Context, parentUserID, childUserID int64, allocatedQuota float64) (*SubAccountRelation, error)
+	UpdateQuota(ctx context.Context, parentUserID, childUserID int64, allocatedQuota, weeklyAllocatedQuota float64) (*SubAccountRelation, error)
 	Remove(ctx context.Context, parentUserID, childUserID int64) error
 }
 
@@ -138,6 +160,9 @@ func (s *SubAccountService) Add(ctx context.Context, parentUserID int64, input S
 	if input.AllocatedQuota < 0 {
 		input.AllocatedQuota = 0
 	}
+	if input.WeeklyAllocatedQuota < 0 {
+		input.WeeklyAllocatedQuota = 0
+	}
 	child, err := s.userRepo.GetByID(ctx, input.ChildUserID)
 	if err != nil {
 		return nil, err
@@ -153,14 +178,17 @@ func (s *SubAccountService) Add(ctx context.Context, parentUserID int64, input S
 	return s.repo.Upsert(ctx, parentUserID, input)
 }
 
-func (s *SubAccountService) UpdateQuota(ctx context.Context, parentUserID, childUserID int64, allocatedQuota float64) (*SubAccountRelation, error) {
+func (s *SubAccountService) UpdateQuota(ctx context.Context, parentUserID, childUserID int64, allocatedQuota, weeklyAllocatedQuota float64) (*SubAccountRelation, error) {
 	if _, err := s.ensureParent(ctx, parentUserID); err != nil {
 		return nil, err
 	}
 	if allocatedQuota < 0 {
 		allocatedQuota = 0
 	}
-	return s.repo.UpdateQuota(ctx, parentUserID, childUserID, allocatedQuota)
+	if weeklyAllocatedQuota < 0 {
+		weeklyAllocatedQuota = 0
+	}
+	return s.repo.UpdateQuota(ctx, parentUserID, childUserID, allocatedQuota, weeklyAllocatedQuota)
 }
 
 func (s *SubAccountService) Remove(ctx context.Context, parentUserID, childUserID int64) error {
@@ -185,6 +213,54 @@ func (s *SubAccountService) ListUsage(ctx context.Context, parentUserID int64, c
 		return repo.ListByParentAccount(ctx, parentUserID, childUserID, params)
 	}
 	return nil, nil, errors.New("usage repository does not support parent account usage listing")
+}
+
+func (s *SubAccountService) UsageSummary(ctx context.Context, parentUserID int64, childUserID int64, filters UsageSummaryFilters) (*SubAccountUsageSummary, error) {
+	if _, err := s.ensureParent(ctx, parentUserID); err != nil {
+		return nil, err
+	}
+	if childUserID > 0 {
+		if _, err := s.repo.GetActiveByParentAndChild(ctx, parentUserID, childUserID); err != nil {
+			return nil, err
+		}
+	}
+	if repo, ok := s.usageRepo.(interface {
+		GetSubAccountUsageSummary(context.Context, int64, int64, UsageSummaryFilters) (*SubAccountUsageSummary, error)
+	}); ok {
+		return repo.GetSubAccountUsageSummary(ctx, parentUserID, childUserID, filters)
+	}
+	return nil, errors.New("usage repository does not support parent account usage summary")
+}
+
+type UsageSummaryFilters struct {
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+type SubAccountUsageSummary struct {
+	TotalRequests        int64       `json:"total_requests"`
+	TotalTokens          int64       `json:"total_tokens"`
+	TotalActualCost      float64     `json:"total_actual_cost"`
+	TotalParentQuotaUsed float64     `json:"total_parent_quota_used"`
+	Models               []ModelStat `json:"models"`
+	Groups               []GroupStat `json:"groups"`
+}
+
+type ModelStat struct {
+	Model       string  `json:"model"`
+	Requests    int64   `json:"requests"`
+	TotalTokens int64   `json:"total_tokens"`
+	Cost        float64 `json:"cost"`
+	ActualCost  float64 `json:"actual_cost"`
+}
+
+type GroupStat struct {
+	GroupID     int64   `json:"group_id"`
+	GroupName   string  `json:"group_name"`
+	Requests    int64   `json:"requests"`
+	TotalTokens int64   `json:"total_tokens"`
+	Cost        float64 `json:"cost"`
+	ActualCost  float64 `json:"actual_cost"`
 }
 
 func NormalizeSubAccountStatus(status string) string {

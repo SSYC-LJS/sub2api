@@ -33,7 +33,7 @@ func (s *subAccountRepoStub) Upsert(context.Context, int64, SubAccountUpsertInpu
 	return &SubAccountRelation{}, nil
 }
 
-func (s *subAccountRepoStub) UpdateQuota(context.Context, int64, int64, float64) (*SubAccountRelation, error) {
+func (s *subAccountRepoStub) UpdateQuota(context.Context, int64, int64, float64, float64) (*SubAccountRelation, error) {
 	return nil, nil
 }
 

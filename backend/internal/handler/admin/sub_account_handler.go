@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -22,23 +23,30 @@ func NewSubAccountHandler(s *service.SubAccountService) *SubAccountHandler {
 }
 
 type subAccountUpsertRequest struct {
-	ChildUserID    int64   `json:"child_user_id" binding:"required"`
-	AllocatedQuota float64 `json:"allocated_quota"`
+	ChildUserID          int64   `json:"child_user_id" binding:"required"`
+	AllocatedQuota       float64 `json:"allocated_quota"`
+	WeeklyAllocatedQuota float64 `json:"weekly_allocated_quota"`
 }
 
 type subAccountQuotaRequest struct {
-	AllocatedQuota float64 `json:"allocated_quota"`
+	AllocatedQuota       float64 `json:"allocated_quota"`
+	WeeklyAllocatedQuota float64 `json:"weekly_allocated_quota"`
 }
 
 type subAccountResponse struct {
-	ID             int64     `json:"id"`
-	ParentUserID   int64     `json:"parent_user_id"`
-	ChildUserID    int64     `json:"child_user_id"`
-	AllocatedQuota float64   `json:"allocated_quota"`
-	UsedQuota      float64   `json:"used_quota"`
-	RemainingQuota float64   `json:"remaining_quota"`
-	Status         string    `json:"status"`
-	ChildUser      *dto.User `json:"child,omitempty"`
+	ID                   int64      `json:"id"`
+	ParentUserID         int64      `json:"parent_user_id"`
+	ChildUserID          int64      `json:"child_user_id"`
+	AllocatedQuota       float64    `json:"allocated_quota"`
+	UsedQuota            float64    `json:"used_quota"`
+	RemainingQuota       float64    `json:"remaining_quota"`
+	WeeklyAllocatedQuota float64    `json:"weekly_allocated_quota"`
+	WeeklyUsedQuota      float64    `json:"weekly_used_quota"`
+	WeeklyRemainingQuota float64    `json:"weekly_remaining_quota"`
+	WeeklyWindowStart    *time.Time `json:"weekly_window_start,omitempty"`
+	TotalRemainingQuota  float64    `json:"total_remaining_quota"`
+	Status               string     `json:"status"`
+	ChildUser            *dto.User  `json:"child,omitempty"`
 }
 
 func parseSubAccountPagination(c *gin.Context) pagination.PaginationParams {
@@ -58,7 +66,7 @@ func parseSubAccountPagination(c *gin.Context) pagination.PaginationParams {
 }
 
 func subAccountFromService(rel service.SubAccountRelation) subAccountResponse {
-	resp := subAccountResponse{ID: rel.ID, ParentUserID: rel.ParentUserID, ChildUserID: rel.ChildUserID, AllocatedQuota: rel.AllocatedQuota, UsedQuota: rel.UsedQuota, RemainingQuota: rel.RemainingQuota(), Status: rel.Status}
+	resp := subAccountResponse{ID: rel.ID, ParentUserID: rel.ParentUserID, ChildUserID: rel.ChildUserID, AllocatedQuota: rel.AllocatedQuota, UsedQuota: rel.UsedQuota, RemainingQuota: rel.RemainingQuota(), WeeklyAllocatedQuota: rel.WeeklyAllocatedQuota, WeeklyUsedQuota: rel.WeeklyUsedQuota, WeeklyRemainingQuota: rel.WeeklyRemainingQuota(), WeeklyWindowStart: rel.WeeklyWindowStart, TotalRemainingQuota: rel.TotalRemainingQuota(), Status: rel.Status}
 	if rel.ChildUser != nil {
 		resp.ChildUser = dto.UserFromService(rel.ChildUser)
 	}
@@ -118,7 +126,7 @@ func (h *SubAccountHandler) Add(c *gin.Context) {
 		response.BadRequest(c, "请求参数无效")
 		return
 	}
-	rel, err := h.service.Add(c.Request.Context(), parentID, service.SubAccountUpsertInput{ChildUserID: req.ChildUserID, AllocatedQuota: req.AllocatedQuota})
+	rel, err := h.service.Add(c.Request.Context(), parentID, service.SubAccountUpsertInput{ChildUserID: req.ChildUserID, AllocatedQuota: req.AllocatedQuota, WeeklyAllocatedQuota: req.WeeklyAllocatedQuota})
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -160,7 +168,7 @@ func (h *SubAccountHandler) UpdateQuota(c *gin.Context) {
 		response.BadRequest(c, "请求参数无效")
 		return
 	}
-	rel, err := h.service.UpdateQuota(c.Request.Context(), parentID, childID, req.AllocatedQuota)
+	rel, err := h.service.UpdateQuota(c.Request.Context(), parentID, childID, req.AllocatedQuota, req.WeeklyAllocatedQuota)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -184,6 +192,60 @@ func (h *SubAccountHandler) Remove(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"success": true})
+}
+
+func parseSubAccountUsageTimeRange(c *gin.Context) (service.UsageSummaryFilters, bool) {
+	layout := "2006-01-02"
+	end := time.Now().UTC()
+	start := end.AddDate(0, 0, -7)
+	if raw := c.Query("start_date"); raw != "" {
+		parsed, err := time.ParseInLocation(layout, raw, time.Local)
+		if err != nil {
+			response.BadRequest(c, "开始日期无效")
+			return service.UsageSummaryFilters{}, false
+		}
+		start = parsed
+	}
+	if raw := c.Query("end_date"); raw != "" {
+		parsed, err := time.ParseInLocation(layout, raw, time.Local)
+		if err != nil {
+			response.BadRequest(c, "结束日期无效")
+			return service.UsageSummaryFilters{}, false
+		}
+		end = parsed.Add(24 * time.Hour)
+	}
+	if !end.After(start) {
+		response.BadRequest(c, "结束日期必须晚于开始日期")
+		return service.UsageSummaryFilters{}, false
+	}
+	return service.UsageSummaryFilters{StartTime: start, EndTime: end}, true
+}
+
+func (h *SubAccountHandler) UsageSummary(c *gin.Context) {
+	parentID, ok := h.currentUserID(c)
+	if !ok {
+		response.Unauthorized(c, "未登录")
+		return
+	}
+	var childID int64
+	if raw := c.Query("child_user_id"); raw != "" {
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			response.BadRequest(c, "子账号ID无效")
+			return
+		}
+		childID = v
+	}
+	filters, ok := parseSubAccountUsageTimeRange(c)
+	if !ok {
+		return
+	}
+	summary, err := h.service.UsageSummary(c.Request.Context(), parentID, childID, filters)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	response.Success(c, summary)
 }
 
 func (h *SubAccountHandler) Usage(c *gin.Context) {

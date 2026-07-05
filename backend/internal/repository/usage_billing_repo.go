@@ -192,31 +192,45 @@ func incrementUsageBillingParentQuotaIfAvailable(ctx context.Context, tx *sql.Tx
 		return nil, nil
 	}
 	row := tx.QueryRowContext(ctx, `
-		UPDATE parent_child_accounts
-		SET used_quota = used_quota + $1, updated_at = NOW()
-		WHERE id = (
-			SELECT pca.id
+		WITH locked AS (
+			SELECT pca.id,
+				GREATEST(pca.weekly_allocated_quota - CASE WHEN pca.weekly_window_start IS NULL OR pca.weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE pca.weekly_used_quota END, 0) AS weekly_remaining,
+				GREATEST(pca.allocated_quota - pca.used_quota, 0) AS permanent_remaining
 			FROM parent_child_accounts pca
 			JOIN users parent ON parent.id = pca.parent_user_id AND parent.deleted_at IS NULL AND parent.is_parent_account = TRUE
 			WHERE pca.child_user_id = $2
 				AND pca.status = 'active'
 				AND pca.deleted_at IS NULL
-				AND pca.allocated_quota - pca.used_quota >= $1
 				AND parent.balance >= $1
+				AND (GREATEST(pca.weekly_allocated_quota - CASE WHEN pca.weekly_window_start IS NULL OR pca.weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE pca.weekly_used_quota END, 0) + GREATEST(pca.allocated_quota - pca.used_quota, 0)) >= $1
 			ORDER BY pca.id DESC
 			LIMIT 1
 			FOR UPDATE OF pca
+		), applied AS (
+			SELECT id, LEAST(weekly_remaining, $1::numeric) AS weekly_delta, $1::numeric - LEAST(weekly_remaining, $1::numeric) AS permanent_delta
+			FROM locked
 		)
-		RETURNING id, parent_user_id, child_user_id, allocated_quota, used_quota, status, created_at, updated_at, deleted_at
+		UPDATE parent_child_accounts pca
+		SET weekly_used_quota = CASE WHEN pca.weekly_window_start IS NULL OR pca.weekly_window_start < date_trunc('week', NOW()) THEN applied.weekly_delta ELSE pca.weekly_used_quota + applied.weekly_delta END,
+			weekly_window_start = date_trunc('week', NOW()),
+			used_quota = pca.used_quota + applied.permanent_delta,
+			updated_at = NOW()
+		FROM applied
+		WHERE pca.id = applied.id
+		RETURNING pca.id, pca.parent_user_id, pca.child_user_id, pca.allocated_quota, pca.used_quota, pca.weekly_allocated_quota, pca.weekly_used_quota, pca.weekly_window_start, pca.status, pca.created_at, pca.updated_at, pca.deleted_at
 	`, amount, childUserID)
 	var rel service.SubAccountRelation
 	var deletedAt sql.NullTime
-	err := row.Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt)
+	var weeklyWindowStart sql.NullTime
+	err := row.Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.WeeklyAllocatedQuota, &rel.WeeklyUsedQuota, &weeklyWindowStart, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if weeklyWindowStart.Valid {
+		rel.WeeklyWindowStart = &weeklyWindowStart.Time
 	}
 	if deletedAt.Valid {
 		rel.DeletedAt = &deletedAt.Time

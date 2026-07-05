@@ -38,6 +38,8 @@ type User struct {
 	IsChildAccount bool `json:"is_child_account"`
 	// ParentAccountID 表示该用户当前活跃母账号 ID；普通用户接口不会额外暴露母账号详情。
 	ParentAccountID *int64 `json:"parent_account_id,omitempty"`
+	// ParentQuotaRemaining 表示该用户当前可用的母账号分配额度剩余合计。
+	ParentQuotaRemaining float64 `json:"parent_quota_remaining,omitempty"`
 
 	APIKeys       []APIKey           `json:"api_keys,omitempty"`
 	Subscriptions []UserSubscription `json:"subscriptions,omitempty"`

@@ -33,6 +33,7 @@ func UserFromServiceShallow(u *service.User) *User {
 		IsParentAccount:            u.IsParentAccount,
 		IsChildAccount:             u.IsChildAccount,
 		ParentAccountID:            u.ParentAccountID,
+		ParentQuotaRemaining:       u.ParentQuotaRemaining,
 		DeletedAt:                  u.DeletedAt,
 	}
 }

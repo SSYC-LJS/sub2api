@@ -114,6 +114,7 @@ func RegisterUserRoutes(
 			subAccounts.POST("", h.Admin.SubAccount.Add)
 			subAccounts.PUT("/:child_id/quota", h.Admin.SubAccount.UpdateQuota)
 			subAccounts.DELETE("/:child_id", h.Admin.SubAccount.Remove)
+			subAccounts.GET("/usage/summary", h.Admin.SubAccount.UsageSummary)
 			subAccounts.GET("/usage", h.Admin.SubAccount.Usage)
 		}
 

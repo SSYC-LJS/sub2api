@@ -36,7 +36,12 @@ func (r *subAccountRepository) ListByParent(ctx context.Context, parentUserID in
 		return nil, nil, err
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT pca.id, pca.parent_user_id, pca.child_user_id, pca.allocated_quota, pca.used_quota, pca.status, pca.created_at, pca.updated_at, pca.deleted_at,
+		SELECT pca.id, pca.parent_user_id, pca.child_user_id,
+		       pca.allocated_quota, pca.used_quota,
+		       pca.weekly_allocated_quota,
+		       CASE WHEN pca.weekly_window_start IS NULL OR pca.weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE pca.weekly_used_quota END AS weekly_used_quota,
+		       COALESCE(pca.weekly_window_start, date_trunc('week', NOW())) AS weekly_window_start,
+		       pca.status, pca.created_at, pca.updated_at, pca.deleted_at,
 		       u.email, u.username, u.role, u.balance, u.concurrency, u.status, u.rpm_limit, u.is_parent_account, u.created_at, u.updated_at, u.deleted_at
 		FROM parent_child_accounts pca
 		JOIN users u ON u.id = pca.child_user_id AND u.deleted_at IS NULL
@@ -52,13 +57,17 @@ func (r *subAccountRepository) ListByParent(ctx context.Context, parentUserID in
 	for rows.Next() {
 		var rel service.SubAccountRelation
 		var deletedAt sql.NullTime
+		var weeklyWindowStart sql.NullTime
 		var child service.User
 		var childDeletedAt sql.NullTime
-		if err := rows.Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt,
+		if err := rows.Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.WeeklyAllocatedQuota, &rel.WeeklyUsedQuota, &weeklyWindowStart, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt,
 			&child.Email, &child.Username, &child.Role, &child.Balance, &child.Concurrency, &child.Status, &child.RPMLimit, &child.IsParentAccount, &child.CreatedAt, &child.UpdatedAt, &childDeletedAt); err != nil {
 			return nil, nil, err
 		}
 		child.ID = rel.ChildUserID
+		if weeklyWindowStart.Valid {
+			rel.WeeklyWindowStart = &weeklyWindowStart.Time
+		}
 		if deletedAt.Valid {
 			rel.DeletedAt = &deletedAt.Time
 		}
@@ -75,22 +84,26 @@ func (r *subAccountRepository) ListByParent(ctx context.Context, parentUserID in
 }
 
 func (r *subAccountRepository) GetActiveByParentAndChild(ctx context.Context, parentUserID, childUserID int64) (*service.SubAccountRelation, error) {
-	return r.scanOne(ctx, `SELECT id, parent_user_id, child_user_id, allocated_quota, used_quota, status, created_at, updated_at, deleted_at FROM parent_child_accounts WHERE parent_user_id=$1 AND child_user_id=$2 AND status='active' AND deleted_at IS NULL`, parentUserID, childUserID)
+	return r.scanOne(ctx, `SELECT id, parent_user_id, child_user_id, allocated_quota, used_quota, weekly_allocated_quota, CASE WHEN weekly_window_start IS NULL OR weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE weekly_used_quota END, COALESCE(weekly_window_start, date_trunc('week', NOW())), status, created_at, updated_at, deleted_at FROM parent_child_accounts WHERE parent_user_id=$1 AND child_user_id=$2 AND status='active' AND deleted_at IS NULL`, parentUserID, childUserID)
 }
 
 func (r *subAccountRepository) GetActiveByChild(ctx context.Context, childUserID int64) (*service.SubAccountRelation, error) {
-	return r.scanOne(ctx, `SELECT id, parent_user_id, child_user_id, allocated_quota, used_quota, status, created_at, updated_at, deleted_at FROM parent_child_accounts WHERE child_user_id=$1 AND status='active' AND deleted_at IS NULL`, childUserID)
+	return r.scanOne(ctx, `SELECT id, parent_user_id, child_user_id, allocated_quota, used_quota, weekly_allocated_quota, CASE WHEN weekly_window_start IS NULL OR weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE weekly_used_quota END, COALESCE(weekly_window_start, date_trunc('week', NOW())), status, created_at, updated_at, deleted_at FROM parent_child_accounts WHERE child_user_id=$1 AND status='active' AND deleted_at IS NULL`, childUserID)
 }
 
 func (r *subAccountRepository) scanOne(ctx context.Context, query string, args ...any) (*service.SubAccountRelation, error) {
 	var rel service.SubAccountRelation
 	var deletedAt sql.NullTime
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt)
+	var weeklyWindowStart sql.NullTime
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.WeeklyAllocatedQuota, &rel.WeeklyUsedQuota, &weeklyWindowStart, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, service.ErrSubAccountNotFound
 	}
 	if err != nil {
 		return nil, err
+	}
+	if weeklyWindowStart.Valid {
+		rel.WeeklyWindowStart = &weeklyWindowStart.Time
 	}
 	if deletedAt.Valid {
 		rel.DeletedAt = &deletedAt.Time
@@ -104,10 +117,10 @@ func (r *subAccountRepository) Upsert(ctx context.Context, parentUserID int64, i
 	}
 	var id int64
 	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO parent_child_accounts(parent_user_id, child_user_id, allocated_quota, used_quota, status)
-		VALUES($1,$2,$3,0,'active')
+		INSERT INTO parent_child_accounts(parent_user_id, child_user_id, allocated_quota, used_quota, weekly_allocated_quota, weekly_used_quota, weekly_window_start, status)
+		VALUES($1,$2,$3,0,$4,0,date_trunc('week', NOW()),'active')
 		RETURNING id
-	`, parentUserID, input.ChildUserID, input.AllocatedQuota).Scan(&id)
+	`, parentUserID, input.ChildUserID, input.AllocatedQuota, input.WeeklyAllocatedQuota).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "chk_parent_child_accounts_different_users") {
 			return nil, service.ErrSubAccountSelfLink
@@ -122,12 +135,20 @@ func (r *subAccountRepository) Upsert(ctx context.Context, parentUserID int64, i
 }
 
 func (r *subAccountRepository) GetByID(ctx context.Context, id int64) (*service.SubAccountRelation, error) {
-	return r.scanOne(ctx, `SELECT id, parent_user_id, child_user_id, allocated_quota, used_quota, status, created_at, updated_at, deleted_at FROM parent_child_accounts WHERE id=$1 AND deleted_at IS NULL`, id)
+	return r.scanOne(ctx, `SELECT id, parent_user_id, child_user_id, allocated_quota, used_quota, weekly_allocated_quota, CASE WHEN weekly_window_start IS NULL OR weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE weekly_used_quota END, COALESCE(weekly_window_start, date_trunc('week', NOW())), status, created_at, updated_at, deleted_at FROM parent_child_accounts WHERE id=$1 AND deleted_at IS NULL`, id)
 }
 
-func (r *subAccountRepository) UpdateQuota(ctx context.Context, parentUserID, childUserID int64, allocatedQuota float64) (*service.SubAccountRelation, error) {
+func (r *subAccountRepository) UpdateQuota(ctx context.Context, parentUserID, childUserID int64, allocatedQuota, weeklyAllocatedQuota float64) (*service.SubAccountRelation, error) {
 	var id int64
-	err := r.db.QueryRowContext(ctx, `UPDATE parent_child_accounts SET allocated_quota=$1, updated_at=NOW() WHERE parent_user_id=$2 AND child_user_id=$3 AND status='active' AND deleted_at IS NULL RETURNING id`, allocatedQuota, parentUserID, childUserID).Scan(&id)
+	err := r.db.QueryRowContext(ctx, `
+		UPDATE parent_child_accounts
+		SET allocated_quota=$1,
+			weekly_allocated_quota=$2,
+			weekly_used_quota=CASE WHEN weekly_window_start IS NULL OR weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE weekly_used_quota END,
+			weekly_window_start=COALESCE(weekly_window_start, date_trunc('week', NOW())),
+			updated_at=NOW()
+		WHERE parent_user_id=$3 AND child_user_id=$4 AND status='active' AND deleted_at IS NULL
+		RETURNING id`, allocatedQuota, weeklyAllocatedQuota, parentUserID, childUserID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, service.ErrSubAccountNotFound
 	}
@@ -157,23 +178,39 @@ func (r *subAccountRepository) IncrementUsageIfAvailable(ctx context.Context, tx
 		return nil, nil
 	}
 	row := tx.QueryRowContext(ctx, `
-		UPDATE parent_child_accounts
-		SET used_quota = used_quota + $1, updated_at = NOW()
-		WHERE id = (
-			SELECT id FROM parent_child_accounts
-			WHERE child_user_id=$2 AND status='active' AND deleted_at IS NULL AND allocated_quota - used_quota >= $1
-			ORDER BY id DESC LIMIT 1 FOR UPDATE
+		WITH locked AS (
+			SELECT pca.id,
+				GREATEST(pca.weekly_allocated_quota - CASE WHEN pca.weekly_window_start IS NULL OR pca.weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE pca.weekly_used_quota END, 0) AS weekly_remaining,
+				GREATEST(pca.allocated_quota - pca.used_quota, 0) AS permanent_remaining
+			FROM parent_child_accounts pca
+			WHERE pca.child_user_id=$2 AND pca.status='active' AND pca.deleted_at IS NULL
+			  AND (GREATEST(pca.weekly_allocated_quota - CASE WHEN pca.weekly_window_start IS NULL OR pca.weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE pca.weekly_used_quota END, 0) + GREATEST(pca.allocated_quota - pca.used_quota, 0)) >= $1
+			ORDER BY pca.id DESC LIMIT 1 FOR UPDATE
+		), applied AS (
+			SELECT id, LEAST(weekly_remaining, $1::numeric) AS weekly_delta, $1::numeric - LEAST(weekly_remaining, $1::numeric) AS permanent_delta
+			FROM locked
 		)
-		RETURNING id, parent_user_id, child_user_id, allocated_quota, used_quota, status, created_at, updated_at, deleted_at
+		UPDATE parent_child_accounts pca
+		SET weekly_used_quota = CASE WHEN pca.weekly_window_start IS NULL OR pca.weekly_window_start < date_trunc('week', NOW()) THEN applied.weekly_delta ELSE pca.weekly_used_quota + applied.weekly_delta END,
+			weekly_window_start = date_trunc('week', NOW()),
+			used_quota = pca.used_quota + applied.permanent_delta,
+			updated_at = NOW()
+		FROM applied
+		WHERE pca.id = applied.id
+		RETURNING pca.id, pca.parent_user_id, pca.child_user_id, pca.allocated_quota, pca.used_quota, pca.weekly_allocated_quota, pca.weekly_used_quota, pca.weekly_window_start, pca.status, pca.created_at, pca.updated_at, pca.deleted_at
 	`, amount, childUserID)
 	var rel service.SubAccountRelation
 	var deletedAt sql.NullTime
-	err := row.Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt)
+	var weeklyWindowStart sql.NullTime
+	err := row.Scan(&rel.ID, &rel.ParentUserID, &rel.ChildUserID, &rel.AllocatedQuota, &rel.UsedQuota, &rel.WeeklyAllocatedQuota, &rel.WeeklyUsedQuota, &weeklyWindowStart, &rel.Status, &rel.CreatedAt, &rel.UpdatedAt, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("increment parent quota: %w", err)
+	}
+	if weeklyWindowStart.Valid {
+		rel.WeeklyWindowStart = &weeklyWindowStart.Time
 	}
 	if deletedAt.Valid {
 		rel.DeletedAt = &deletedAt.Time

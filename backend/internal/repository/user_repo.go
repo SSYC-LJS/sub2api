@@ -954,8 +954,48 @@ func (r *userRepository) decorateUserAccountRelation(ctx context.Context, user *
 		user.IsChildAccount = true
 		pid := parentID
 		user.ParentAccountID = &pid
+		remaining, err := r.loadActiveChildParentQuotaRemaining(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+		user.ParentQuotaRemaining = remaining
 	}
 	return nil
+}
+
+func (r *userRepository) loadActiveChildParentQuotaRemaining(ctx context.Context, childUserID int64) (float64, error) {
+	if childUserID <= 0 || r.sql == nil {
+		return 0, nil
+	}
+	var remaining float64
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT COALESCE(SUM(
+			GREATEST(allocated_quota - used_quota, 0)
+			+ GREATEST(weekly_allocated_quota - CASE WHEN weekly_window_start IS NULL OR weekly_window_start < date_trunc('week', NOW()) THEN 0 ELSE weekly_used_quota END, 0)
+		), 0)
+		FROM parent_child_accounts
+		WHERE child_user_id=$1 AND status='active' AND deleted_at IS NULL
+	`, childUserID)
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "parent_child_accounts") && (strings.Contains(msg, "no such table") || strings.Contains(msg, "does not exist")) {
+			return 0, nil
+		}
+		if strings.Contains(msg, "weekly_allocated_quota") || strings.Contains(msg, "weekly_used_quota") || strings.Contains(msg, "weekly_window_start") {
+			return 0, nil
+		}
+		return 0, err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.Scan(&remaining); err != nil {
+			return 0, err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	return remaining, nil
 }
 
 func (r *userRepository) loadActiveChildParents(ctx context.Context, userIDs []int64) (map[int64]int64, error) {
