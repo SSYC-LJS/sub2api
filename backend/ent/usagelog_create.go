@@ -169,34 +169,6 @@ func (_c *UsageLogCreate) SetNillableSubscriptionID(v *int64) *UsageLogCreate {
 	return _c
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (_c *UsageLogCreate) SetPayerUserID(v int64) *UsageLogCreate {
-	_c.mutation.SetPayerUserID(v)
-	return _c
-}
-
-// SetNillablePayerUserID sets the "payer_user_id" field if the given value is not nil.
-func (_c *UsageLogCreate) SetNillablePayerUserID(v *int64) *UsageLogCreate {
-	if v != nil {
-		_c.SetPayerUserID(*v)
-	}
-	return _c
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (_c *UsageLogCreate) SetParentAccountID(v int64) *UsageLogCreate {
-	_c.mutation.SetParentAccountID(v)
-	return _c
-}
-
-// SetNillableParentAccountID sets the "parent_account_id" field if the given value is not nil.
-func (_c *UsageLogCreate) SetNillableParentAccountID(v *int64) *UsageLogCreate {
-	if v != nil {
-		_c.SetParentAccountID(*v)
-	}
-	return _c
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (_c *UsageLogCreate) SetInputTokens(v int) *UsageLogCreate {
 	_c.mutation.SetInputTokens(v)
@@ -361,20 +333,6 @@ func (_c *UsageLogCreate) SetActualCost(v float64) *UsageLogCreate {
 func (_c *UsageLogCreate) SetNillableActualCost(v *float64) *UsageLogCreate {
 	if v != nil {
 		_c.SetActualCost(*v)
-	}
-	return _c
-}
-
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (_c *UsageLogCreate) SetParentQuotaUsed(v float64) *UsageLogCreate {
-	_c.mutation.SetParentQuotaUsed(v)
-	return _c
-}
-
-// SetNillableParentQuotaUsed sets the "parent_quota_used" field if the given value is not nil.
-func (_c *UsageLogCreate) SetNillableParentQuotaUsed(v *float64) *UsageLogCreate {
-	if v != nil {
-		_c.SetParentQuotaUsed(*v)
 	}
 	return _c
 }
@@ -567,6 +525,48 @@ func (_c *UsageLogCreate) SetImageSizeBreakdown(v map[string]int) *UsageLogCreat
 	return _c
 }
 
+// SetVideoCount sets the "video_count" field.
+func (_c *UsageLogCreate) SetVideoCount(v int) *UsageLogCreate {
+	_c.mutation.SetVideoCount(v)
+	return _c
+}
+
+// SetNillableVideoCount sets the "video_count" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableVideoCount(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetVideoCount(*v)
+	}
+	return _c
+}
+
+// SetVideoResolution sets the "video_resolution" field.
+func (_c *UsageLogCreate) SetVideoResolution(v string) *UsageLogCreate {
+	_c.mutation.SetVideoResolution(v)
+	return _c
+}
+
+// SetNillableVideoResolution sets the "video_resolution" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableVideoResolution(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetVideoResolution(*v)
+	}
+	return _c
+}
+
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (_c *UsageLogCreate) SetVideoDurationSeconds(v int) *UsageLogCreate {
+	_c.mutation.SetVideoDurationSeconds(v)
+	return _c
+}
+
+// SetNillableVideoDurationSeconds sets the "video_duration_seconds" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableVideoDurationSeconds(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetVideoDurationSeconds(*v)
+	}
+	return _c
+}
+
 // SetCacheTTLOverridden sets the "cache_ttl_overridden" field.
 func (_c *UsageLogCreate) SetCacheTTLOverridden(v bool) *UsageLogCreate {
 	_c.mutation.SetCacheTTLOverridden(v)
@@ -703,10 +703,6 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultActualCost
 		_c.mutation.SetActualCost(v)
 	}
-	if _, ok := _c.mutation.ParentQuotaUsed(); !ok {
-		v := usagelog.DefaultParentQuotaUsed
-		_c.mutation.SetParentQuotaUsed(v)
-	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		v := usagelog.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
@@ -722,6 +718,10 @@ func (_c *UsageLogCreate) defaults() {
 	if _, ok := _c.mutation.ImageCount(); !ok {
 		v := usagelog.DefaultImageCount
 		_c.mutation.SetImageCount(v)
+	}
+	if _, ok := _c.mutation.VideoCount(); !ok {
+		v := usagelog.DefaultVideoCount
+		_c.mutation.SetVideoCount(v)
 	}
 	if _, ok := _c.mutation.CacheTTLOverridden(); !ok {
 		v := usagelog.DefaultCacheTTLOverridden
@@ -821,9 +821,6 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.ActualCost(); !ok {
 		return &ValidationError{Name: "actual_cost", err: errors.New(`ent: missing required field "UsageLog.actual_cost"`)}
 	}
-	if _, ok := _c.mutation.ParentQuotaUsed(); !ok {
-		return &ValidationError{Name: "parent_quota_used", err: errors.New(`ent: missing required field "UsageLog.parent_quota_used"`)}
-	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "UsageLog.rate_multiplier"`)}
 	}
@@ -864,6 +861,14 @@ func (_c *UsageLogCreate) check() error {
 	if v, ok := _c.mutation.ImageSizeSource(); ok {
 		if err := usagelog.ImageSizeSourceValidator(v); err != nil {
 			return &ValidationError{Name: "image_size_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.image_size_source": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.VideoCount(); !ok {
+		return &ValidationError{Name: "video_count", err: errors.New(`ent: missing required field "UsageLog.video_count"`)}
+	}
+	if v, ok := _c.mutation.VideoResolution(); ok {
+		if err := usagelog.VideoResolutionValidator(v); err != nil {
+			return &ValidationError{Name: "video_resolution", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_resolution": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.CacheTTLOverridden(); !ok {
@@ -940,14 +945,6 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec.SetField(usagelog.FieldBillingMode, field.TypeString, value)
 		_node.BillingMode = &value
 	}
-	if value, ok := _c.mutation.PayerUserID(); ok {
-		_spec.SetField(usagelog.FieldPayerUserID, field.TypeInt64, value)
-		_node.PayerUserID = &value
-	}
-	if value, ok := _c.mutation.ParentAccountID(); ok {
-		_spec.SetField(usagelog.FieldParentAccountID, field.TypeInt64, value)
-		_node.ParentAccountID = &value
-	}
 	if value, ok := _c.mutation.InputTokens(); ok {
 		_spec.SetField(usagelog.FieldInputTokens, field.TypeInt, value)
 		_node.InputTokens = value
@@ -995,10 +992,6 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ActualCost(); ok {
 		_spec.SetField(usagelog.FieldActualCost, field.TypeFloat64, value)
 		_node.ActualCost = value
-	}
-	if value, ok := _c.mutation.ParentQuotaUsed(); ok {
-		_spec.SetField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
-		_node.ParentQuotaUsed = value
 	}
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
@@ -1055,6 +1048,18 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ImageSizeBreakdown(); ok {
 		_spec.SetField(usagelog.FieldImageSizeBreakdown, field.TypeJSON, value)
 		_node.ImageSizeBreakdown = value
+	}
+	if value, ok := _c.mutation.VideoCount(); ok {
+		_spec.SetField(usagelog.FieldVideoCount, field.TypeInt, value)
+		_node.VideoCount = value
+	}
+	if value, ok := _c.mutation.VideoResolution(); ok {
+		_spec.SetField(usagelog.FieldVideoResolution, field.TypeString, value)
+		_node.VideoResolution = &value
+	}
+	if value, ok := _c.mutation.VideoDurationSeconds(); ok {
+		_spec.SetField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+		_node.VideoDurationSeconds = &value
 	}
 	if value, ok := _c.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
@@ -1411,54 +1416,6 @@ func (u *UsageLogUpsert) ClearSubscriptionID() *UsageLogUpsert {
 	return u
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (u *UsageLogUpsert) SetPayerUserID(v int64) *UsageLogUpsert {
-	u.Set(usagelog.FieldPayerUserID, v)
-	return u
-}
-
-// UpdatePayerUserID sets the "payer_user_id" field to the value that was provided on create.
-func (u *UsageLogUpsert) UpdatePayerUserID() *UsageLogUpsert {
-	u.SetExcluded(usagelog.FieldPayerUserID)
-	return u
-}
-
-// AddPayerUserID adds v to the "payer_user_id" field.
-func (u *UsageLogUpsert) AddPayerUserID(v int64) *UsageLogUpsert {
-	u.Add(usagelog.FieldPayerUserID, v)
-	return u
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (u *UsageLogUpsert) ClearPayerUserID() *UsageLogUpsert {
-	u.SetNull(usagelog.FieldPayerUserID)
-	return u
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (u *UsageLogUpsert) SetParentAccountID(v int64) *UsageLogUpsert {
-	u.Set(usagelog.FieldParentAccountID, v)
-	return u
-}
-
-// UpdateParentAccountID sets the "parent_account_id" field to the value that was provided on create.
-func (u *UsageLogUpsert) UpdateParentAccountID() *UsageLogUpsert {
-	u.SetExcluded(usagelog.FieldParentAccountID)
-	return u
-}
-
-// AddParentAccountID adds v to the "parent_account_id" field.
-func (u *UsageLogUpsert) AddParentAccountID(v int64) *UsageLogUpsert {
-	u.Add(usagelog.FieldParentAccountID, v)
-	return u
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (u *UsageLogUpsert) ClearParentAccountID() *UsageLogUpsert {
-	u.SetNull(usagelog.FieldParentAccountID)
-	return u
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (u *UsageLogUpsert) SetInputTokens(v int) *UsageLogUpsert {
 	u.Set(usagelog.FieldInputTokens, v)
@@ -1672,24 +1629,6 @@ func (u *UsageLogUpsert) UpdateActualCost() *UsageLogUpsert {
 // AddActualCost adds v to the "actual_cost" field.
 func (u *UsageLogUpsert) AddActualCost(v float64) *UsageLogUpsert {
 	u.Add(usagelog.FieldActualCost, v)
-	return u
-}
-
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (u *UsageLogUpsert) SetParentQuotaUsed(v float64) *UsageLogUpsert {
-	u.Set(usagelog.FieldParentQuotaUsed, v)
-	return u
-}
-
-// UpdateParentQuotaUsed sets the "parent_quota_used" field to the value that was provided on create.
-func (u *UsageLogUpsert) UpdateParentQuotaUsed() *UsageLogUpsert {
-	u.SetExcluded(usagelog.FieldParentQuotaUsed)
-	return u
-}
-
-// AddParentQuotaUsed adds v to the "parent_quota_used" field.
-func (u *UsageLogUpsert) AddParentQuotaUsed(v float64) *UsageLogUpsert {
-	u.Add(usagelog.FieldParentQuotaUsed, v)
 	return u
 }
 
@@ -1954,6 +1893,66 @@ func (u *UsageLogUpsert) UpdateImageSizeBreakdown() *UsageLogUpsert {
 // ClearImageSizeBreakdown clears the value of the "image_size_breakdown" field.
 func (u *UsageLogUpsert) ClearImageSizeBreakdown() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldImageSizeBreakdown)
+	return u
+}
+
+// SetVideoCount sets the "video_count" field.
+func (u *UsageLogUpsert) SetVideoCount(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldVideoCount, v)
+	return u
+}
+
+// UpdateVideoCount sets the "video_count" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateVideoCount() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldVideoCount)
+	return u
+}
+
+// AddVideoCount adds v to the "video_count" field.
+func (u *UsageLogUpsert) AddVideoCount(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldVideoCount, v)
+	return u
+}
+
+// SetVideoResolution sets the "video_resolution" field.
+func (u *UsageLogUpsert) SetVideoResolution(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldVideoResolution, v)
+	return u
+}
+
+// UpdateVideoResolution sets the "video_resolution" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateVideoResolution() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldVideoResolution)
+	return u
+}
+
+// ClearVideoResolution clears the value of the "video_resolution" field.
+func (u *UsageLogUpsert) ClearVideoResolution() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldVideoResolution)
+	return u
+}
+
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (u *UsageLogUpsert) SetVideoDurationSeconds(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldVideoDurationSeconds, v)
+	return u
+}
+
+// UpdateVideoDurationSeconds sets the "video_duration_seconds" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateVideoDurationSeconds() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldVideoDurationSeconds)
+	return u
+}
+
+// AddVideoDurationSeconds adds v to the "video_duration_seconds" field.
+func (u *UsageLogUpsert) AddVideoDurationSeconds(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldVideoDurationSeconds, v)
+	return u
+}
+
+// ClearVideoDurationSeconds clears the value of the "video_duration_seconds" field.
+func (u *UsageLogUpsert) ClearVideoDurationSeconds() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldVideoDurationSeconds)
 	return u
 }
 
@@ -2259,62 +2258,6 @@ func (u *UsageLogUpsertOne) ClearSubscriptionID() *UsageLogUpsertOne {
 	})
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (u *UsageLogUpsertOne) SetPayerUserID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetPayerUserID(v)
-	})
-}
-
-// AddPayerUserID adds v to the "payer_user_id" field.
-func (u *UsageLogUpsertOne) AddPayerUserID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddPayerUserID(v)
-	})
-}
-
-// UpdatePayerUserID sets the "payer_user_id" field to the value that was provided on create.
-func (u *UsageLogUpsertOne) UpdatePayerUserID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdatePayerUserID()
-	})
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (u *UsageLogUpsertOne) ClearPayerUserID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearPayerUserID()
-	})
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (u *UsageLogUpsertOne) SetParentAccountID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentAccountID(v)
-	})
-}
-
-// AddParentAccountID adds v to the "parent_account_id" field.
-func (u *UsageLogUpsertOne) AddParentAccountID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentAccountID(v)
-	})
-}
-
-// UpdateParentAccountID sets the "parent_account_id" field to the value that was provided on create.
-func (u *UsageLogUpsertOne) UpdateParentAccountID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentAccountID()
-	})
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (u *UsageLogUpsertOne) ClearParentAccountID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearParentAccountID()
-	})
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (u *UsageLogUpsertOne) SetInputTokens(v int) *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -2564,27 +2507,6 @@ func (u *UsageLogUpsertOne) AddActualCost(v float64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateActualCost() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateActualCost()
-	})
-}
-
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (u *UsageLogUpsertOne) SetParentQuotaUsed(v float64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentQuotaUsed(v)
-	})
-}
-
-// AddParentQuotaUsed adds v to the "parent_quota_used" field.
-func (u *UsageLogUpsertOne) AddParentQuotaUsed(v float64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentQuotaUsed(v)
-	})
-}
-
-// UpdateParentQuotaUsed sets the "parent_quota_used" field to the value that was provided on create.
-func (u *UsageLogUpsertOne) UpdateParentQuotaUsed() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentQuotaUsed()
 	})
 }
 
@@ -2893,6 +2815,76 @@ func (u *UsageLogUpsertOne) UpdateImageSizeBreakdown() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearImageSizeBreakdown() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearImageSizeBreakdown()
+	})
+}
+
+// SetVideoCount sets the "video_count" field.
+func (u *UsageLogUpsertOne) SetVideoCount(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetVideoCount(v)
+	})
+}
+
+// AddVideoCount adds v to the "video_count" field.
+func (u *UsageLogUpsertOne) AddVideoCount(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddVideoCount(v)
+	})
+}
+
+// UpdateVideoCount sets the "video_count" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateVideoCount() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateVideoCount()
+	})
+}
+
+// SetVideoResolution sets the "video_resolution" field.
+func (u *UsageLogUpsertOne) SetVideoResolution(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetVideoResolution(v)
+	})
+}
+
+// UpdateVideoResolution sets the "video_resolution" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateVideoResolution() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateVideoResolution()
+	})
+}
+
+// ClearVideoResolution clears the value of the "video_resolution" field.
+func (u *UsageLogUpsertOne) ClearVideoResolution() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearVideoResolution()
+	})
+}
+
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (u *UsageLogUpsertOne) SetVideoDurationSeconds(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetVideoDurationSeconds(v)
+	})
+}
+
+// AddVideoDurationSeconds adds v to the "video_duration_seconds" field.
+func (u *UsageLogUpsertOne) AddVideoDurationSeconds(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddVideoDurationSeconds(v)
+	})
+}
+
+// UpdateVideoDurationSeconds sets the "video_duration_seconds" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateVideoDurationSeconds() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateVideoDurationSeconds()
+	})
+}
+
+// ClearVideoDurationSeconds clears the value of the "video_duration_seconds" field.
+func (u *UsageLogUpsertOne) ClearVideoDurationSeconds() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearVideoDurationSeconds()
 	})
 }
 
@@ -3366,62 +3358,6 @@ func (u *UsageLogUpsertBulk) ClearSubscriptionID() *UsageLogUpsertBulk {
 	})
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (u *UsageLogUpsertBulk) SetPayerUserID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetPayerUserID(v)
-	})
-}
-
-// AddPayerUserID adds v to the "payer_user_id" field.
-func (u *UsageLogUpsertBulk) AddPayerUserID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddPayerUserID(v)
-	})
-}
-
-// UpdatePayerUserID sets the "payer_user_id" field to the value that was provided on create.
-func (u *UsageLogUpsertBulk) UpdatePayerUserID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdatePayerUserID()
-	})
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (u *UsageLogUpsertBulk) ClearPayerUserID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearPayerUserID()
-	})
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (u *UsageLogUpsertBulk) SetParentAccountID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentAccountID(v)
-	})
-}
-
-// AddParentAccountID adds v to the "parent_account_id" field.
-func (u *UsageLogUpsertBulk) AddParentAccountID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentAccountID(v)
-	})
-}
-
-// UpdateParentAccountID sets the "parent_account_id" field to the value that was provided on create.
-func (u *UsageLogUpsertBulk) UpdateParentAccountID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentAccountID()
-	})
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (u *UsageLogUpsertBulk) ClearParentAccountID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearParentAccountID()
-	})
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (u *UsageLogUpsertBulk) SetInputTokens(v int) *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -3671,27 +3607,6 @@ func (u *UsageLogUpsertBulk) AddActualCost(v float64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateActualCost() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateActualCost()
-	})
-}
-
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (u *UsageLogUpsertBulk) SetParentQuotaUsed(v float64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentQuotaUsed(v)
-	})
-}
-
-// AddParentQuotaUsed adds v to the "parent_quota_used" field.
-func (u *UsageLogUpsertBulk) AddParentQuotaUsed(v float64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentQuotaUsed(v)
-	})
-}
-
-// UpdateParentQuotaUsed sets the "parent_quota_used" field to the value that was provided on create.
-func (u *UsageLogUpsertBulk) UpdateParentQuotaUsed() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentQuotaUsed()
 	})
 }
 
@@ -4000,6 +3915,76 @@ func (u *UsageLogUpsertBulk) UpdateImageSizeBreakdown() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearImageSizeBreakdown() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearImageSizeBreakdown()
+	})
+}
+
+// SetVideoCount sets the "video_count" field.
+func (u *UsageLogUpsertBulk) SetVideoCount(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetVideoCount(v)
+	})
+}
+
+// AddVideoCount adds v to the "video_count" field.
+func (u *UsageLogUpsertBulk) AddVideoCount(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddVideoCount(v)
+	})
+}
+
+// UpdateVideoCount sets the "video_count" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateVideoCount() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateVideoCount()
+	})
+}
+
+// SetVideoResolution sets the "video_resolution" field.
+func (u *UsageLogUpsertBulk) SetVideoResolution(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetVideoResolution(v)
+	})
+}
+
+// UpdateVideoResolution sets the "video_resolution" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateVideoResolution() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateVideoResolution()
+	})
+}
+
+// ClearVideoResolution clears the value of the "video_resolution" field.
+func (u *UsageLogUpsertBulk) ClearVideoResolution() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearVideoResolution()
+	})
+}
+
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (u *UsageLogUpsertBulk) SetVideoDurationSeconds(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetVideoDurationSeconds(v)
+	})
+}
+
+// AddVideoDurationSeconds adds v to the "video_duration_seconds" field.
+func (u *UsageLogUpsertBulk) AddVideoDurationSeconds(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddVideoDurationSeconds(v)
+	})
+}
+
+// UpdateVideoDurationSeconds sets the "video_duration_seconds" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateVideoDurationSeconds() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateVideoDurationSeconds()
+	})
+}
+
+// ClearVideoDurationSeconds clears the value of the "video_duration_seconds" field.
+func (u *UsageLogUpsertBulk) ClearVideoDurationSeconds() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearVideoDurationSeconds()
 	})
 }
 

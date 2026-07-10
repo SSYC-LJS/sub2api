@@ -63,14 +63,6 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("subscription_id").
 			Optional().
 			Nillable(),
-		// payer_user_id 表示实际余额扣费用户；空值兼容历史数据，等同 user_id。
-		field.Int64("payer_user_id").
-			Optional().
-			Nillable(),
-		// parent_account_id 表示该记录使用了哪个母账号额度。
-		field.Int64("parent_account_id").
-			Optional().
-			Nillable(),
 
 		// Token 计数字段
 		field.Int("input_tokens").
@@ -103,10 +95,6 @@ func (UsageLog) Fields() []ent.Field {
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.Float("actual_cost").
-			Default(0).
-			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
-		// parent_quota_used 为本次请求从母账号分配额度中扣除的金额；0 表示未使用母账号额度。
-		field.Float("parent_quota_used").
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.Float("rate_multiplier").
@@ -161,6 +149,20 @@ func (UsageLog) Fields() []ent.Field {
 		field.JSON("image_size_breakdown", map[string]int{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+
+		// 视频生成字段（Grok 视频按秒计费；billing_mode 走 token/其他模式时这些列仍标记视频用量）
+		field.Int("video_count").
+			Default(0).
+			Comment("视频生成数量；>0 表示本行是视频生成用量"),
+		field.String("video_resolution").
+			MaxLen(10).
+			Optional().
+			Nillable().
+			Comment("计费用视频分辨率 480p/720p/1080p"),
+		field.Int("video_duration_seconds").
+			Optional().
+			Nillable().
+			Comment("提交时请求的视频时长（秒），按秒计费的乘数"),
 		// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 		field.Bool("cache_ttl_overridden").
 			Default(false),
@@ -210,8 +212,6 @@ func (UsageLog) Indexes() []ent.Index {
 		index.Fields("account_id"),
 		index.Fields("group_id"),
 		index.Fields("subscription_id"),
-		index.Fields("payer_user_id"),
-		index.Fields("parent_account_id"),
 		index.Fields("created_at"),
 		index.Fields("model"),
 		index.Fields("requested_model"),

@@ -269,60 +269,6 @@ func (_u *UsageLogUpdate) ClearSubscriptionID() *UsageLogUpdate {
 	return _u
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (_u *UsageLogUpdate) SetPayerUserID(v int64) *UsageLogUpdate {
-	_u.mutation.ResetPayerUserID()
-	_u.mutation.SetPayerUserID(v)
-	return _u
-}
-
-// SetNillablePayerUserID sets the "payer_user_id" field if the given value is not nil.
-func (_u *UsageLogUpdate) SetNillablePayerUserID(v *int64) *UsageLogUpdate {
-	if v != nil {
-		_u.SetPayerUserID(*v)
-	}
-	return _u
-}
-
-// AddPayerUserID adds value to the "payer_user_id" field.
-func (_u *UsageLogUpdate) AddPayerUserID(v int64) *UsageLogUpdate {
-	_u.mutation.AddPayerUserID(v)
-	return _u
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (_u *UsageLogUpdate) ClearPayerUserID() *UsageLogUpdate {
-	_u.mutation.ClearPayerUserID()
-	return _u
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (_u *UsageLogUpdate) SetParentAccountID(v int64) *UsageLogUpdate {
-	_u.mutation.ResetParentAccountID()
-	_u.mutation.SetParentAccountID(v)
-	return _u
-}
-
-// SetNillableParentAccountID sets the "parent_account_id" field if the given value is not nil.
-func (_u *UsageLogUpdate) SetNillableParentAccountID(v *int64) *UsageLogUpdate {
-	if v != nil {
-		_u.SetParentAccountID(*v)
-	}
-	return _u
-}
-
-// AddParentAccountID adds value to the "parent_account_id" field.
-func (_u *UsageLogUpdate) AddParentAccountID(v int64) *UsageLogUpdate {
-	_u.mutation.AddParentAccountID(v)
-	return _u
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (_u *UsageLogUpdate) ClearParentAccountID() *UsageLogUpdate {
-	_u.mutation.ClearParentAccountID()
-	return _u
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (_u *UsageLogUpdate) SetInputTokens(v int) *UsageLogUpdate {
 	_u.mutation.ResetInputTokens()
@@ -572,27 +518,6 @@ func (_u *UsageLogUpdate) SetNillableActualCost(v *float64) *UsageLogUpdate {
 // AddActualCost adds value to the "actual_cost" field.
 func (_u *UsageLogUpdate) AddActualCost(v float64) *UsageLogUpdate {
 	_u.mutation.AddActualCost(v)
-	return _u
-}
-
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (_u *UsageLogUpdate) SetParentQuotaUsed(v float64) *UsageLogUpdate {
-	_u.mutation.ResetParentQuotaUsed()
-	_u.mutation.SetParentQuotaUsed(v)
-	return _u
-}
-
-// SetNillableParentQuotaUsed sets the "parent_quota_used" field if the given value is not nil.
-func (_u *UsageLogUpdate) SetNillableParentQuotaUsed(v *float64) *UsageLogUpdate {
-	if v != nil {
-		_u.SetParentQuotaUsed(*v)
-	}
-	return _u
-}
-
-// AddParentQuotaUsed adds value to the "parent_quota_used" field.
-func (_u *UsageLogUpdate) AddParentQuotaUsed(v float64) *UsageLogUpdate {
-	_u.mutation.AddParentQuotaUsed(v)
 	return _u
 }
 
@@ -886,6 +811,74 @@ func (_u *UsageLogUpdate) ClearImageSizeBreakdown() *UsageLogUpdate {
 	return _u
 }
 
+// SetVideoCount sets the "video_count" field.
+func (_u *UsageLogUpdate) SetVideoCount(v int) *UsageLogUpdate {
+	_u.mutation.ResetVideoCount()
+	_u.mutation.SetVideoCount(v)
+	return _u
+}
+
+// SetNillableVideoCount sets the "video_count" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableVideoCount(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetVideoCount(*v)
+	}
+	return _u
+}
+
+// AddVideoCount adds value to the "video_count" field.
+func (_u *UsageLogUpdate) AddVideoCount(v int) *UsageLogUpdate {
+	_u.mutation.AddVideoCount(v)
+	return _u
+}
+
+// SetVideoResolution sets the "video_resolution" field.
+func (_u *UsageLogUpdate) SetVideoResolution(v string) *UsageLogUpdate {
+	_u.mutation.SetVideoResolution(v)
+	return _u
+}
+
+// SetNillableVideoResolution sets the "video_resolution" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableVideoResolution(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetVideoResolution(*v)
+	}
+	return _u
+}
+
+// ClearVideoResolution clears the value of the "video_resolution" field.
+func (_u *UsageLogUpdate) ClearVideoResolution() *UsageLogUpdate {
+	_u.mutation.ClearVideoResolution()
+	return _u
+}
+
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (_u *UsageLogUpdate) SetVideoDurationSeconds(v int) *UsageLogUpdate {
+	_u.mutation.ResetVideoDurationSeconds()
+	_u.mutation.SetVideoDurationSeconds(v)
+	return _u
+}
+
+// SetNillableVideoDurationSeconds sets the "video_duration_seconds" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableVideoDurationSeconds(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetVideoDurationSeconds(*v)
+	}
+	return _u
+}
+
+// AddVideoDurationSeconds adds value to the "video_duration_seconds" field.
+func (_u *UsageLogUpdate) AddVideoDurationSeconds(v int) *UsageLogUpdate {
+	_u.mutation.AddVideoDurationSeconds(v)
+	return _u
+}
+
+// ClearVideoDurationSeconds clears the value of the "video_duration_seconds" field.
+func (_u *UsageLogUpdate) ClearVideoDurationSeconds() *UsageLogUpdate {
+	_u.mutation.ClearVideoDurationSeconds()
+	return _u
+}
+
 // SetCacheTTLOverridden sets the "cache_ttl_overridden" field.
 func (_u *UsageLogUpdate) SetCacheTTLOverridden(v bool) *UsageLogUpdate {
 	_u.mutation.SetCacheTTLOverridden(v)
@@ -1054,6 +1047,11 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "image_size_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.image_size_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.VideoResolution(); ok {
+		if err := usagelog.VideoResolutionValidator(v); err != nil {
+			return &ValidationError{Name: "video_resolution", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_resolution": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UsageLog.user"`)
 	}
@@ -1122,24 +1120,6 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.BillingModeCleared() {
 		_spec.ClearField(usagelog.FieldBillingMode, field.TypeString)
-	}
-	if value, ok := _u.mutation.PayerUserID(); ok {
-		_spec.SetField(usagelog.FieldPayerUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedPayerUserID(); ok {
-		_spec.AddField(usagelog.FieldPayerUserID, field.TypeInt64, value)
-	}
-	if _u.mutation.PayerUserIDCleared() {
-		_spec.ClearField(usagelog.FieldPayerUserID, field.TypeInt64)
-	}
-	if value, ok := _u.mutation.ParentAccountID(); ok {
-		_spec.SetField(usagelog.FieldParentAccountID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedParentAccountID(); ok {
-		_spec.AddField(usagelog.FieldParentAccountID, field.TypeInt64, value)
-	}
-	if _u.mutation.ParentAccountIDCleared() {
-		_spec.ClearField(usagelog.FieldParentAccountID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.InputTokens(); ok {
 		_spec.SetField(usagelog.FieldInputTokens, field.TypeInt, value)
@@ -1212,12 +1192,6 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedActualCost(); ok {
 		_spec.AddField(usagelog.FieldActualCost, field.TypeFloat64, value)
-	}
-	if value, ok := _u.mutation.ParentQuotaUsed(); ok {
-		_spec.SetField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
-	}
-	if value, ok := _u.mutation.AddedParentQuotaUsed(); ok {
-		_spec.AddField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
@@ -1308,6 +1282,27 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ImageSizeBreakdownCleared() {
 		_spec.ClearField(usagelog.FieldImageSizeBreakdown, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.VideoCount(); ok {
+		_spec.SetField(usagelog.FieldVideoCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedVideoCount(); ok {
+		_spec.AddField(usagelog.FieldVideoCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.VideoResolution(); ok {
+		_spec.SetField(usagelog.FieldVideoResolution, field.TypeString, value)
+	}
+	if _u.mutation.VideoResolutionCleared() {
+		_spec.ClearField(usagelog.FieldVideoResolution, field.TypeString)
+	}
+	if value, ok := _u.mutation.VideoDurationSeconds(); ok {
+		_spec.SetField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedVideoDurationSeconds(); ok {
+		_spec.AddField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if _u.mutation.VideoDurationSecondsCleared() {
+		_spec.ClearField(usagelog.FieldVideoDurationSeconds, field.TypeInt)
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
@@ -1714,60 +1709,6 @@ func (_u *UsageLogUpdateOne) ClearSubscriptionID() *UsageLogUpdateOne {
 	return _u
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (_u *UsageLogUpdateOne) SetPayerUserID(v int64) *UsageLogUpdateOne {
-	_u.mutation.ResetPayerUserID()
-	_u.mutation.SetPayerUserID(v)
-	return _u
-}
-
-// SetNillablePayerUserID sets the "payer_user_id" field if the given value is not nil.
-func (_u *UsageLogUpdateOne) SetNillablePayerUserID(v *int64) *UsageLogUpdateOne {
-	if v != nil {
-		_u.SetPayerUserID(*v)
-	}
-	return _u
-}
-
-// AddPayerUserID adds value to the "payer_user_id" field.
-func (_u *UsageLogUpdateOne) AddPayerUserID(v int64) *UsageLogUpdateOne {
-	_u.mutation.AddPayerUserID(v)
-	return _u
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (_u *UsageLogUpdateOne) ClearPayerUserID() *UsageLogUpdateOne {
-	_u.mutation.ClearPayerUserID()
-	return _u
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (_u *UsageLogUpdateOne) SetParentAccountID(v int64) *UsageLogUpdateOne {
-	_u.mutation.ResetParentAccountID()
-	_u.mutation.SetParentAccountID(v)
-	return _u
-}
-
-// SetNillableParentAccountID sets the "parent_account_id" field if the given value is not nil.
-func (_u *UsageLogUpdateOne) SetNillableParentAccountID(v *int64) *UsageLogUpdateOne {
-	if v != nil {
-		_u.SetParentAccountID(*v)
-	}
-	return _u
-}
-
-// AddParentAccountID adds value to the "parent_account_id" field.
-func (_u *UsageLogUpdateOne) AddParentAccountID(v int64) *UsageLogUpdateOne {
-	_u.mutation.AddParentAccountID(v)
-	return _u
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (_u *UsageLogUpdateOne) ClearParentAccountID() *UsageLogUpdateOne {
-	_u.mutation.ClearParentAccountID()
-	return _u
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (_u *UsageLogUpdateOne) SetInputTokens(v int) *UsageLogUpdateOne {
 	_u.mutation.ResetInputTokens()
@@ -2017,27 +1958,6 @@ func (_u *UsageLogUpdateOne) SetNillableActualCost(v *float64) *UsageLogUpdateOn
 // AddActualCost adds value to the "actual_cost" field.
 func (_u *UsageLogUpdateOne) AddActualCost(v float64) *UsageLogUpdateOne {
 	_u.mutation.AddActualCost(v)
-	return _u
-}
-
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (_u *UsageLogUpdateOne) SetParentQuotaUsed(v float64) *UsageLogUpdateOne {
-	_u.mutation.ResetParentQuotaUsed()
-	_u.mutation.SetParentQuotaUsed(v)
-	return _u
-}
-
-// SetNillableParentQuotaUsed sets the "parent_quota_used" field if the given value is not nil.
-func (_u *UsageLogUpdateOne) SetNillableParentQuotaUsed(v *float64) *UsageLogUpdateOne {
-	if v != nil {
-		_u.SetParentQuotaUsed(*v)
-	}
-	return _u
-}
-
-// AddParentQuotaUsed adds value to the "parent_quota_used" field.
-func (_u *UsageLogUpdateOne) AddParentQuotaUsed(v float64) *UsageLogUpdateOne {
-	_u.mutation.AddParentQuotaUsed(v)
 	return _u
 }
 
@@ -2331,6 +2251,74 @@ func (_u *UsageLogUpdateOne) ClearImageSizeBreakdown() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetVideoCount sets the "video_count" field.
+func (_u *UsageLogUpdateOne) SetVideoCount(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetVideoCount()
+	_u.mutation.SetVideoCount(v)
+	return _u
+}
+
+// SetNillableVideoCount sets the "video_count" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableVideoCount(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetVideoCount(*v)
+	}
+	return _u
+}
+
+// AddVideoCount adds value to the "video_count" field.
+func (_u *UsageLogUpdateOne) AddVideoCount(v int) *UsageLogUpdateOne {
+	_u.mutation.AddVideoCount(v)
+	return _u
+}
+
+// SetVideoResolution sets the "video_resolution" field.
+func (_u *UsageLogUpdateOne) SetVideoResolution(v string) *UsageLogUpdateOne {
+	_u.mutation.SetVideoResolution(v)
+	return _u
+}
+
+// SetNillableVideoResolution sets the "video_resolution" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableVideoResolution(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetVideoResolution(*v)
+	}
+	return _u
+}
+
+// ClearVideoResolution clears the value of the "video_resolution" field.
+func (_u *UsageLogUpdateOne) ClearVideoResolution() *UsageLogUpdateOne {
+	_u.mutation.ClearVideoResolution()
+	return _u
+}
+
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (_u *UsageLogUpdateOne) SetVideoDurationSeconds(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetVideoDurationSeconds()
+	_u.mutation.SetVideoDurationSeconds(v)
+	return _u
+}
+
+// SetNillableVideoDurationSeconds sets the "video_duration_seconds" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableVideoDurationSeconds(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetVideoDurationSeconds(*v)
+	}
+	return _u
+}
+
+// AddVideoDurationSeconds adds value to the "video_duration_seconds" field.
+func (_u *UsageLogUpdateOne) AddVideoDurationSeconds(v int) *UsageLogUpdateOne {
+	_u.mutation.AddVideoDurationSeconds(v)
+	return _u
+}
+
+// ClearVideoDurationSeconds clears the value of the "video_duration_seconds" field.
+func (_u *UsageLogUpdateOne) ClearVideoDurationSeconds() *UsageLogUpdateOne {
+	_u.mutation.ClearVideoDurationSeconds()
+	return _u
+}
+
 // SetCacheTTLOverridden sets the "cache_ttl_overridden" field.
 func (_u *UsageLogUpdateOne) SetCacheTTLOverridden(v bool) *UsageLogUpdateOne {
 	_u.mutation.SetCacheTTLOverridden(v)
@@ -2512,6 +2500,11 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "image_size_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.image_size_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.VideoResolution(); ok {
+		if err := usagelog.VideoResolutionValidator(v); err != nil {
+			return &ValidationError{Name: "video_resolution", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_resolution": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UsageLog.user"`)
 	}
@@ -2598,24 +2591,6 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	if _u.mutation.BillingModeCleared() {
 		_spec.ClearField(usagelog.FieldBillingMode, field.TypeString)
 	}
-	if value, ok := _u.mutation.PayerUserID(); ok {
-		_spec.SetField(usagelog.FieldPayerUserID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedPayerUserID(); ok {
-		_spec.AddField(usagelog.FieldPayerUserID, field.TypeInt64, value)
-	}
-	if _u.mutation.PayerUserIDCleared() {
-		_spec.ClearField(usagelog.FieldPayerUserID, field.TypeInt64)
-	}
-	if value, ok := _u.mutation.ParentAccountID(); ok {
-		_spec.SetField(usagelog.FieldParentAccountID, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedParentAccountID(); ok {
-		_spec.AddField(usagelog.FieldParentAccountID, field.TypeInt64, value)
-	}
-	if _u.mutation.ParentAccountIDCleared() {
-		_spec.ClearField(usagelog.FieldParentAccountID, field.TypeInt64)
-	}
 	if value, ok := _u.mutation.InputTokens(); ok {
 		_spec.SetField(usagelog.FieldInputTokens, field.TypeInt, value)
 	}
@@ -2687,12 +2662,6 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedActualCost(); ok {
 		_spec.AddField(usagelog.FieldActualCost, field.TypeFloat64, value)
-	}
-	if value, ok := _u.mutation.ParentQuotaUsed(); ok {
-		_spec.SetField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
-	}
-	if value, ok := _u.mutation.AddedParentQuotaUsed(); ok {
-		_spec.AddField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
@@ -2783,6 +2752,27 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.ImageSizeBreakdownCleared() {
 		_spec.ClearField(usagelog.FieldImageSizeBreakdown, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.VideoCount(); ok {
+		_spec.SetField(usagelog.FieldVideoCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedVideoCount(); ok {
+		_spec.AddField(usagelog.FieldVideoCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.VideoResolution(); ok {
+		_spec.SetField(usagelog.FieldVideoResolution, field.TypeString, value)
+	}
+	if _u.mutation.VideoResolutionCleared() {
+		_spec.ClearField(usagelog.FieldVideoResolution, field.TypeString)
+	}
+	if value, ok := _u.mutation.VideoDurationSeconds(); ok {
+		_spec.SetField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedVideoDurationSeconds(); ok {
+		_spec.AddField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if _u.mutation.VideoDurationSecondsCleared() {
+		_spec.ClearField(usagelog.FieldVideoDurationSeconds, field.TypeInt)
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
