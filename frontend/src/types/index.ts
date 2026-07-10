@@ -240,6 +240,7 @@ export interface PublicSettings {
   balance_low_notify_threshold: number
   channel_monitor_enabled: boolean
   channel_monitor_default_interval_seconds: number
+  server_utc_offset?: string
   available_channels_enabled: boolean
   service_quota_enabled: boolean
   affiliate_enabled: boolean
@@ -521,13 +522,26 @@ export interface Group {
   daily_limit_usd: number | null
   weekly_limit_usd: number | null
   monthly_limit_usd: number | null
-  // 图片生成计费配置
+  // 图片/视频生成计费配置
   allow_image_generation: boolean
+  allow_batch_image_generation?: boolean
   image_rate_independent: boolean
   image_rate_multiplier: number
   image_price_1k: number | null
   image_price_2k: number | null
   image_price_4k: number | null
+  batch_image_discount_multiplier?: number | null
+  batch_image_hold_multiplier?: number | null
+  video_rate_independent?: boolean
+  video_rate_multiplier?: number | null
+  video_price_480p?: number | null
+  video_price_720p?: number | null
+  video_price_1080p?: number | null
+  // 高峰期倍率配置
+  peak_rate_enabled?: boolean
+  peak_start?: string | null
+  peak_end?: string | null
+  peak_rate_multiplier?: number | null
   // Claude Code 客户端限制
   claude_code_only: boolean
   fallback_group_id: number | null
@@ -643,11 +657,23 @@ export interface CreateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   allow_image_generation?: boolean
+  allow_batch_image_generation?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number
   image_price_1k?: number | null
   image_price_2k?: number | null
   image_price_4k?: number | null
+  batch_image_discount_multiplier?: number | null
+  batch_image_hold_multiplier?: number | null
+  video_rate_independent?: boolean
+  video_rate_multiplier?: number | null
+  video_price_480p?: number | null
+  video_price_720p?: number | null
+  video_price_1080p?: number | null
+  peak_rate_enabled?: boolean
+  peak_start?: string | null
+  peak_end?: string | null
+  peak_rate_multiplier?: number | null
   claude_code_only?: boolean
   fallback_group_id?: number | null
   fallback_group_id_on_invalid_request?: number | null
@@ -680,11 +706,23 @@ export interface UpdateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   allow_image_generation?: boolean
+  allow_batch_image_generation?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number
   image_price_1k?: number | null
   image_price_2k?: number | null
   image_price_4k?: number | null
+  batch_image_discount_multiplier?: number | null
+  batch_image_hold_multiplier?: number | null
+  video_rate_independent?: boolean
+  video_rate_multiplier?: number | null
+  video_price_480p?: number | null
+  video_price_720p?: number | null
+  video_price_1080p?: number | null
+  peak_rate_enabled?: boolean
+  peak_start?: string | null
+  peak_end?: string | null
+  peak_rate_multiplier?: number | null
   claude_code_only?: boolean
   fallback_group_id?: number | null
   fallback_group_id_on_invalid_request?: number | null
@@ -831,6 +869,18 @@ export interface TempUnschedulableStatus {
   state?: TempUnschedulableState
 }
 
+export interface AccountSchedulerScore {
+  base_score?: number | null
+  sticky_score?: number | null
+  sticky_weighted_enabled?: boolean
+  [key: string]: unknown
+}
+
+export interface AccountSchedulerGroupScore extends AccountSchedulerScore {
+  group_id: number | null
+  group_name?: string
+}
+
 export interface Account {
   id: number
   name: string
@@ -854,6 +904,8 @@ export interface Account {
   concurrency: number
   load_factor?: number | null
   current_concurrency?: number // Real-time concurrency count from Redis
+  scheduler_score?: AccountSchedulerScore | null
+  scheduler_scores?: AccountSchedulerGroupScore[] | null
   priority: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   status: 'active' | 'inactive' | 'error'
@@ -981,6 +1033,7 @@ export interface AccountUsageInfo {
   five_hour: UsageProgress | null
   seven_day: UsageProgress | null
   seven_day_sonnet: UsageProgress | null
+  seven_day_fable?: UsageProgress | null
   gemini_shared_daily?: UsageProgress | null
   gemini_pro_daily?: UsageProgress | null
   gemini_flash_daily?: UsageProgress | null
@@ -1549,6 +1602,11 @@ export interface UserBreakdownItem {
   user_id: number
   email: string
   requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_tokens: number
+  cache_creation_tokens?: number
+  cache_read_tokens?: number
   total_tokens: number
   cost: number
   actual_cost: number
@@ -1683,12 +1741,15 @@ export interface UserErrorRequest {
   created_at: string
   model: string
   inbound_endpoint: string
+  request_type?: number | null
+  stream?: boolean | null
   status_code: number
   category: string
   platform: string
   message: string
   key_name: string
   key_deleted: boolean
+  client_ip?: string | null
 }
 
 export interface UserErrorRequestDetail extends UserErrorRequest {
@@ -1706,6 +1767,8 @@ export interface UserErrorListParams {
   status_code?: number
   category?: string
   api_key_id?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
 }
 
 export interface UsageQueryParams {

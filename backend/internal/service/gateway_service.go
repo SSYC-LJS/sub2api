@@ -413,6 +413,39 @@ var (
 	}
 )
 
+func claudeCodeNeedsNoopDeltaKeepalive(userAgent string) bool {
+	userAgent = strings.TrimSpace(userAgent)
+	if !claudeCliUserAgentRe.MatchString(userAgent) {
+		return false
+	}
+	fields := strings.Fields(userAgent)
+	if len(fields) == 0 {
+		return false
+	}
+	version := strings.TrimPrefix(fields[0], "claude-cli/")
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	major, err1 := strconv.Atoi(parts[0])
+	minor, err2 := strconv.Atoi(parts[1])
+	patch, err3 := strconv.Atoi(parts[2])
+	if err1 != nil || err2 != nil || err3 != nil {
+		return false
+	}
+	if major != 2 || minor != 1 {
+		return major > 2 || (major == 2 && minor > 1)
+	}
+	return patch >= 198
+}
+
+func anthropicNoopDeltaKeepaliveEvent(index int, blockType string) string {
+	if blockType == "tool_use" {
+		return fmt.Sprintf("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":%d,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}\n\n", index)
+	}
+	return fmt.Sprintf("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":%d,\"delta\":{\"type\":\"text_delta\",\"text\":\"\"}}\n\n", index)
+}
+
 // ErrNoAvailableAccounts 表示没有可用的账号
 var ErrNoAvailableAccounts = errors.New("no available accounts")
 
@@ -5884,7 +5917,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Del("cookie")
-	setHeaderRaw(req.Header, "x-api-key", token)
+	setAnthropicAPIKeyAuthHeader(req.Header, account, token)
 
 	if getHeaderRaw(req.Header, "content-type") == "" {
 		setHeaderRaw(req.Header, "content-type", "application/json")
@@ -8248,6 +8281,12 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 	needModelReplace := originalModel != mappedModel
 	clientDisconnected := false // 客户端断开标志，断开后继续读取上游以获取完整usage
 	sawTerminalEvent := false
+	noopDeltaKeepalive := false
+	if c != nil && c.Request != nil {
+		noopDeltaKeepalive = claudeCodeNeedsNoopDeltaKeepalive(c.Request.UserAgent())
+	}
+	activeContentBlockIndex := -1
+	activeContentBlockType := ""
 
 	pendingEventLines := make([]string, 0, 4)
 
@@ -8301,6 +8340,21 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 		eventType, _ := event["type"].(string)
 		if eventName == "" {
 			eventName = eventType
+		}
+		if eventType == "content_block_start" {
+			if index, ok := event["index"].(float64); ok {
+				activeContentBlockIndex = int(index)
+			}
+			activeContentBlockType = "text"
+			if block, ok := event["content_block"].(map[string]any); ok {
+				if blockType, ok := block["type"].(string); ok && blockType != "" {
+					activeContentBlockType = blockType
+				}
+			}
+		}
+		if eventType == "content_block_stop" {
+			activeContentBlockIndex = -1
+			activeContentBlockType = ""
 		}
 		eventChanged := false
 
@@ -8495,9 +8549,11 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if time.Since(lastDataAt) < keepaliveInterval {
 				continue
 			}
-			// SSE ping 事件：Anthropic 原生格式，客户端会正确处理，
-			// 同时保持连接活跃防止 Cloudflare Tunnel 等代理断开
-			if _, werr := fmt.Fprint(w, "event: ping\ndata: {\"type\": \"ping\"}\n\n"); werr != nil {
+			keepaliveEvent := "event: ping\ndata: {\"type\": \"ping\"}\n\n"
+			if noopDeltaKeepalive && activeContentBlockIndex >= 0 {
+				keepaliveEvent = anthropicNoopDeltaKeepaliveEvent(activeContentBlockIndex, activeContentBlockType)
+			}
+			if _, werr := fmt.Fprint(w, keepaliveEvent); werr != nil {
 				clientDisconnected = true
 				logger.LegacyPrintf("service.gateway", "Client disconnected during keepalive ping, continuing to drain upstream for billing")
 				continue
@@ -9622,6 +9678,17 @@ func (s *GatewayService) calculateImageCost(
 	multiplier float64,
 ) *CostBreakdown {
 	sizeTier := NormalizeImageBillingTierOrDefault(result.ImageSize)
+	var groupConfig *ImagePriceConfig
+	if apiKey.Group != nil {
+		groupConfig = &ImagePriceConfig{
+			Price1K: apiKey.Group.ImagePrice1K,
+			Price2K: apiKey.Group.ImagePrice2K,
+			Price4K: apiKey.Group.ImagePrice4K,
+		}
+		if groupImagePriceConfiguredForTier(groupConfig, sizeTier) {
+			return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
+		}
+	}
 	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil {
 		tokens := UsageTokens{
 			InputTokens:       result.Usage.InputTokens,
@@ -9646,16 +9713,21 @@ func (s *GatewayService) calculateImageCost(
 		}
 		return cost
 	}
-
-	var groupConfig *ImagePriceConfig
-	if apiKey.Group != nil {
-		groupConfig = &ImagePriceConfig{
-			Price1K: apiKey.Group.ImagePrice1K,
-			Price2K: apiKey.Group.ImagePrice2K,
-			Price4K: apiKey.Group.ImagePrice4K,
-		}
-	}
 	return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
+}
+
+func groupImagePriceConfiguredForTier(cfg *ImagePriceConfig, sizeTier string) bool {
+	if cfg == nil {
+		return false
+	}
+	switch NormalizeImageBillingTierOrDefault(sizeTier) {
+	case ImageBillingSize1K:
+		return cfg.Price1K != nil
+	case ImageBillingSize4K:
+		return cfg.Price4K != nil
+	default:
+		return cfg.Price2K != nil
+	}
 }
 
 // calculateTokenCost 计算 Token 计费：根据 opts 决定走普通/长上下文/渠道统一计费。
@@ -10309,7 +10381,7 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Del("cookie")
-	req.Header.Set("x-api-key", token)
+	setAnthropicAPIKeyAuthHeader(req.Header, account, token)
 
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")

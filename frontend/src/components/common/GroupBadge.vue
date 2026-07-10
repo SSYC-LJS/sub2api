@@ -41,9 +41,9 @@ interface Props {
   rateMultiplier?: number
   userRateMultiplier?: number | null // 用户专属倍率
   peakRateEnabled?: boolean
-  peakStart?: string
-  peakEnd?: string
-  peakRateMultiplier?: number
+  peakStart?: string | null
+  peakEnd?: string | null
+  peakRateMultiplier?: number | null
   showRate?: boolean
   daysRemaining?: number | null // 剩余天数（订阅类型时使用）
   /**

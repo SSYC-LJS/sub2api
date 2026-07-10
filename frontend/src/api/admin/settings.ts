@@ -653,6 +653,7 @@ export interface SystemSettings {
   // Channel Monitor feature switch
   channel_monitor_enabled: boolean;
   channel_monitor_default_interval_seconds: number;
+  server_utc_offset?: string;
 
   // Available Channels feature switch
   available_channels_enabled: boolean;

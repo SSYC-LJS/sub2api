@@ -75,9 +75,9 @@ interface Props {
   rateMultiplier?: number
   userRateMultiplier?: number | null
   peakRateEnabled?: boolean
-  peakStart?: string
-  peakEnd?: string
-  peakRateMultiplier?: number
+  peakStart?: string | null
+  peakEnd?: string | null
+  peakRateMultiplier?: number | null
   description?: string | null
   selected?: boolean
   showCheckmark?: boolean

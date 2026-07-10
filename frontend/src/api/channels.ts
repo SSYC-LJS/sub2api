@@ -19,6 +19,11 @@ export interface UserAvailableGroup {
   recommendation_label?: string
   /** 模型广场推荐星级，范围 3-5。 */
   recommendation_stars?: number
+  /** 高峰期倍率配置。 */
+  peak_rate_enabled?: boolean
+  peak_start?: string | null
+  peak_end?: string | null
+  peak_rate_multiplier?: number | null
   /** true = 专属分组（小范围授权）；false = 公开分组。 */
   is_exclusive: boolean
 }

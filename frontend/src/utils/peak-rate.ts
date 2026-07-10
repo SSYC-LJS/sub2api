@@ -8,9 +8,9 @@
 
 export interface PeakRateFields {
   peak_rate_enabled?: boolean
-  peak_start?: string
-  peak_end?: string
-  peak_rate_multiplier?: number
+  peak_start?: string | null
+  peak_end?: string | null
+  peak_rate_multiplier?: number | null
 }
 
 export function hasPeakRate(fields?: PeakRateFields | null): boolean {

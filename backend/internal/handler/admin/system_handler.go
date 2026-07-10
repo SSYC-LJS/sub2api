@@ -45,6 +45,8 @@ type systemUpdateJob struct {
 type systemUpdateService interface {
 	CheckUpdate(ctx context.Context, force bool) (*service.UpdateInfo, error)
 	PerformUpdate(ctx context.Context) error
+	ListRollbackVersions(ctx context.Context) ([]service.RollbackVersion, error)
+	RollbackToVersion(ctx context.Context, version string) error
 	Rollback() error
 }
 
@@ -143,6 +145,19 @@ func (h *SystemHandler) runUpdateJob(lock *service.SystemOperationLock, release 
 	}
 	succeeded = true
 	h.updateJobs.completeNeedRestart(operationID)
+}
+
+// GetRollbackVersions lists versions available for rollback.
+// GET /api/v1/admin/system/rollback-versions
+func (h *SystemHandler) GetRollbackVersions(c *gin.Context) {
+	versions, err := h.updateSvc.ListRollbackVersions(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, gin.H{
+		"versions": versions,
+	})
 }
 
 // Rollback restores the previous version
