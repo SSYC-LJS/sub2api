@@ -169,34 +169,6 @@ func (_c *UsageLogCreate) SetNillableSubscriptionID(v *int64) *UsageLogCreate {
 	return _c
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (_c *UsageLogCreate) SetPayerUserID(v int64) *UsageLogCreate {
-	_c.mutation.SetPayerUserID(v)
-	return _c
-}
-
-// SetNillablePayerUserID sets the "payer_user_id" field if the given value is not nil.
-func (_c *UsageLogCreate) SetNillablePayerUserID(v *int64) *UsageLogCreate {
-	if v != nil {
-		_c.SetPayerUserID(*v)
-	}
-	return _c
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (_c *UsageLogCreate) SetParentAccountID(v int64) *UsageLogCreate {
-	_c.mutation.SetParentAccountID(v)
-	return _c
-}
-
-// SetNillableParentAccountID sets the "parent_account_id" field if the given value is not nil.
-func (_c *UsageLogCreate) SetNillableParentAccountID(v *int64) *UsageLogCreate {
-	if v != nil {
-		_c.SetParentAccountID(*v)
-	}
-	return _c
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (_c *UsageLogCreate) SetInputTokens(v int) *UsageLogCreate {
 	_c.mutation.SetInputTokens(v)
@@ -365,20 +337,6 @@ func (_c *UsageLogCreate) SetNillableActualCost(v *float64) *UsageLogCreate {
 	return _c
 }
 
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (_c *UsageLogCreate) SetParentQuotaUsed(v float64) *UsageLogCreate {
-	_c.mutation.SetParentQuotaUsed(v)
-	return _c
-}
-
-// SetNillableParentQuotaUsed sets the "parent_quota_used" field if the given value is not nil.
-func (_c *UsageLogCreate) SetNillableParentQuotaUsed(v *float64) *UsageLogCreate {
-	if v != nil {
-		_c.SetParentQuotaUsed(*v)
-	}
-	return _c
-}
-
 // SetRateMultiplier sets the "rate_multiplier" field.
 func (_c *UsageLogCreate) SetRateMultiplier(v float64) *UsageLogCreate {
 	_c.mutation.SetRateMultiplier(v)
@@ -389,6 +347,20 @@ func (_c *UsageLogCreate) SetRateMultiplier(v float64) *UsageLogCreate {
 func (_c *UsageLogCreate) SetNillableRateMultiplier(v *float64) *UsageLogCreate {
 	if v != nil {
 		_c.SetRateMultiplier(*v)
+	}
+	return _c
+}
+
+// SetLongContextBillingApplied sets the "long_context_billing_applied" field.
+func (_c *UsageLogCreate) SetLongContextBillingApplied(v bool) *UsageLogCreate {
+	_c.mutation.SetLongContextBillingApplied(v)
+	return _c
+}
+
+// SetNillableLongContextBillingApplied sets the "long_context_billing_applied" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableLongContextBillingApplied(v *bool) *UsageLogCreate {
+	if v != nil {
+		_c.SetLongContextBillingApplied(*v)
 	}
 	return _c
 }
@@ -745,13 +717,13 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultActualCost
 		_c.mutation.SetActualCost(v)
 	}
-	if _, ok := _c.mutation.ParentQuotaUsed(); !ok {
-		v := usagelog.DefaultParentQuotaUsed
-		_c.mutation.SetParentQuotaUsed(v)
-	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		v := usagelog.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
+	}
+	if _, ok := _c.mutation.LongContextBillingApplied(); !ok {
+		v := usagelog.DefaultLongContextBillingApplied
+		_c.mutation.SetLongContextBillingApplied(v)
 	}
 	if _, ok := _c.mutation.BillingType(); !ok {
 		v := usagelog.DefaultBillingType
@@ -867,11 +839,11 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.ActualCost(); !ok {
 		return &ValidationError{Name: "actual_cost", err: errors.New(`ent: missing required field "UsageLog.actual_cost"`)}
 	}
-	if _, ok := _c.mutation.ParentQuotaUsed(); !ok {
-		return &ValidationError{Name: "parent_quota_used", err: errors.New(`ent: missing required field "UsageLog.parent_quota_used"`)}
-	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "UsageLog.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.LongContextBillingApplied(); !ok {
+		return &ValidationError{Name: "long_context_billing_applied", err: errors.New(`ent: missing required field "UsageLog.long_context_billing_applied"`)}
 	}
 	if _, ok := _c.mutation.BillingType(); !ok {
 		return &ValidationError{Name: "billing_type", err: errors.New(`ent: missing required field "UsageLog.billing_type"`)}
@@ -994,14 +966,6 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec.SetField(usagelog.FieldBillingMode, field.TypeString, value)
 		_node.BillingMode = &value
 	}
-	if value, ok := _c.mutation.PayerUserID(); ok {
-		_spec.SetField(usagelog.FieldPayerUserID, field.TypeInt64, value)
-		_node.PayerUserID = &value
-	}
-	if value, ok := _c.mutation.ParentAccountID(); ok {
-		_spec.SetField(usagelog.FieldParentAccountID, field.TypeInt64, value)
-		_node.ParentAccountID = &value
-	}
 	if value, ok := _c.mutation.InputTokens(); ok {
 		_spec.SetField(usagelog.FieldInputTokens, field.TypeInt, value)
 		_node.InputTokens = value
@@ -1050,13 +1014,13 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec.SetField(usagelog.FieldActualCost, field.TypeFloat64, value)
 		_node.ActualCost = value
 	}
-	if value, ok := _c.mutation.ParentQuotaUsed(); ok {
-		_spec.SetField(usagelog.FieldParentQuotaUsed, field.TypeFloat64, value)
-		_node.ParentQuotaUsed = value
-	}
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.LongContextBillingApplied(); ok {
+		_spec.SetField(usagelog.FieldLongContextBillingApplied, field.TypeBool, value)
+		_node.LongContextBillingApplied = value
 	}
 	if value, ok := _c.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)
@@ -1477,54 +1441,6 @@ func (u *UsageLogUpsert) ClearSubscriptionID() *UsageLogUpsert {
 	return u
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (u *UsageLogUpsert) SetPayerUserID(v int64) *UsageLogUpsert {
-	u.Set(usagelog.FieldPayerUserID, v)
-	return u
-}
-
-// UpdatePayerUserID sets the "payer_user_id" field to the value that was provided on create.
-func (u *UsageLogUpsert) UpdatePayerUserID() *UsageLogUpsert {
-	u.SetExcluded(usagelog.FieldPayerUserID)
-	return u
-}
-
-// AddPayerUserID adds v to the "payer_user_id" field.
-func (u *UsageLogUpsert) AddPayerUserID(v int64) *UsageLogUpsert {
-	u.Add(usagelog.FieldPayerUserID, v)
-	return u
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (u *UsageLogUpsert) ClearPayerUserID() *UsageLogUpsert {
-	u.SetNull(usagelog.FieldPayerUserID)
-	return u
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (u *UsageLogUpsert) SetParentAccountID(v int64) *UsageLogUpsert {
-	u.Set(usagelog.FieldParentAccountID, v)
-	return u
-}
-
-// UpdateParentAccountID sets the "parent_account_id" field to the value that was provided on create.
-func (u *UsageLogUpsert) UpdateParentAccountID() *UsageLogUpsert {
-	u.SetExcluded(usagelog.FieldParentAccountID)
-	return u
-}
-
-// AddParentAccountID adds v to the "parent_account_id" field.
-func (u *UsageLogUpsert) AddParentAccountID(v int64) *UsageLogUpsert {
-	u.Add(usagelog.FieldParentAccountID, v)
-	return u
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (u *UsageLogUpsert) ClearParentAccountID() *UsageLogUpsert {
-	u.SetNull(usagelog.FieldParentAccountID)
-	return u
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (u *UsageLogUpsert) SetInputTokens(v int) *UsageLogUpsert {
 	u.Set(usagelog.FieldInputTokens, v)
@@ -1741,24 +1657,6 @@ func (u *UsageLogUpsert) AddActualCost(v float64) *UsageLogUpsert {
 	return u
 }
 
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (u *UsageLogUpsert) SetParentQuotaUsed(v float64) *UsageLogUpsert {
-	u.Set(usagelog.FieldParentQuotaUsed, v)
-	return u
-}
-
-// UpdateParentQuotaUsed sets the "parent_quota_used" field to the value that was provided on create.
-func (u *UsageLogUpsert) UpdateParentQuotaUsed() *UsageLogUpsert {
-	u.SetExcluded(usagelog.FieldParentQuotaUsed)
-	return u
-}
-
-// AddParentQuotaUsed adds v to the "parent_quota_used" field.
-func (u *UsageLogUpsert) AddParentQuotaUsed(v float64) *UsageLogUpsert {
-	u.Add(usagelog.FieldParentQuotaUsed, v)
-	return u
-}
-
 // SetRateMultiplier sets the "rate_multiplier" field.
 func (u *UsageLogUpsert) SetRateMultiplier(v float64) *UsageLogUpsert {
 	u.Set(usagelog.FieldRateMultiplier, v)
@@ -1774,6 +1672,18 @@ func (u *UsageLogUpsert) UpdateRateMultiplier() *UsageLogUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *UsageLogUpsert) AddRateMultiplier(v float64) *UsageLogUpsert {
 	u.Add(usagelog.FieldRateMultiplier, v)
+	return u
+}
+
+// SetLongContextBillingApplied sets the "long_context_billing_applied" field.
+func (u *UsageLogUpsert) SetLongContextBillingApplied(v bool) *UsageLogUpsert {
+	u.Set(usagelog.FieldLongContextBillingApplied, v)
+	return u
+}
+
+// UpdateLongContextBillingApplied sets the "long_context_billing_applied" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateLongContextBillingApplied() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldLongContextBillingApplied)
 	return u
 }
 
@@ -2385,62 +2295,6 @@ func (u *UsageLogUpsertOne) ClearSubscriptionID() *UsageLogUpsertOne {
 	})
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (u *UsageLogUpsertOne) SetPayerUserID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetPayerUserID(v)
-	})
-}
-
-// AddPayerUserID adds v to the "payer_user_id" field.
-func (u *UsageLogUpsertOne) AddPayerUserID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddPayerUserID(v)
-	})
-}
-
-// UpdatePayerUserID sets the "payer_user_id" field to the value that was provided on create.
-func (u *UsageLogUpsertOne) UpdatePayerUserID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdatePayerUserID()
-	})
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (u *UsageLogUpsertOne) ClearPayerUserID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearPayerUserID()
-	})
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (u *UsageLogUpsertOne) SetParentAccountID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentAccountID(v)
-	})
-}
-
-// AddParentAccountID adds v to the "parent_account_id" field.
-func (u *UsageLogUpsertOne) AddParentAccountID(v int64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentAccountID(v)
-	})
-}
-
-// UpdateParentAccountID sets the "parent_account_id" field to the value that was provided on create.
-func (u *UsageLogUpsertOne) UpdateParentAccountID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentAccountID()
-	})
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (u *UsageLogUpsertOne) ClearParentAccountID() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearParentAccountID()
-	})
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (u *UsageLogUpsertOne) SetInputTokens(v int) *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -2693,27 +2547,6 @@ func (u *UsageLogUpsertOne) UpdateActualCost() *UsageLogUpsertOne {
 	})
 }
 
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (u *UsageLogUpsertOne) SetParentQuotaUsed(v float64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentQuotaUsed(v)
-	})
-}
-
-// AddParentQuotaUsed adds v to the "parent_quota_used" field.
-func (u *UsageLogUpsertOne) AddParentQuotaUsed(v float64) *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentQuotaUsed(v)
-	})
-}
-
-// UpdateParentQuotaUsed sets the "parent_quota_used" field to the value that was provided on create.
-func (u *UsageLogUpsertOne) UpdateParentQuotaUsed() *UsageLogUpsertOne {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentQuotaUsed()
-	})
-}
-
 // SetRateMultiplier sets the "rate_multiplier" field.
 func (u *UsageLogUpsertOne) SetRateMultiplier(v float64) *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -2732,6 +2565,20 @@ func (u *UsageLogUpsertOne) AddRateMultiplier(v float64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateRateMultiplier() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetLongContextBillingApplied sets the "long_context_billing_applied" field.
+func (u *UsageLogUpsertOne) SetLongContextBillingApplied(v bool) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetLongContextBillingApplied(v)
+	})
+}
+
+// UpdateLongContextBillingApplied sets the "long_context_billing_applied" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateLongContextBillingApplied() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateLongContextBillingApplied()
 	})
 }
 
@@ -3562,62 +3409,6 @@ func (u *UsageLogUpsertBulk) ClearSubscriptionID() *UsageLogUpsertBulk {
 	})
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (u *UsageLogUpsertBulk) SetPayerUserID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetPayerUserID(v)
-	})
-}
-
-// AddPayerUserID adds v to the "payer_user_id" field.
-func (u *UsageLogUpsertBulk) AddPayerUserID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddPayerUserID(v)
-	})
-}
-
-// UpdatePayerUserID sets the "payer_user_id" field to the value that was provided on create.
-func (u *UsageLogUpsertBulk) UpdatePayerUserID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdatePayerUserID()
-	})
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (u *UsageLogUpsertBulk) ClearPayerUserID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearPayerUserID()
-	})
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (u *UsageLogUpsertBulk) SetParentAccountID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentAccountID(v)
-	})
-}
-
-// AddParentAccountID adds v to the "parent_account_id" field.
-func (u *UsageLogUpsertBulk) AddParentAccountID(v int64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentAccountID(v)
-	})
-}
-
-// UpdateParentAccountID sets the "parent_account_id" field to the value that was provided on create.
-func (u *UsageLogUpsertBulk) UpdateParentAccountID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentAccountID()
-	})
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (u *UsageLogUpsertBulk) ClearParentAccountID() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.ClearParentAccountID()
-	})
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (u *UsageLogUpsertBulk) SetInputTokens(v int) *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -3870,27 +3661,6 @@ func (u *UsageLogUpsertBulk) UpdateActualCost() *UsageLogUpsertBulk {
 	})
 }
 
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (u *UsageLogUpsertBulk) SetParentQuotaUsed(v float64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.SetParentQuotaUsed(v)
-	})
-}
-
-// AddParentQuotaUsed adds v to the "parent_quota_used" field.
-func (u *UsageLogUpsertBulk) AddParentQuotaUsed(v float64) *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.AddParentQuotaUsed(v)
-	})
-}
-
-// UpdateParentQuotaUsed sets the "parent_quota_used" field to the value that was provided on create.
-func (u *UsageLogUpsertBulk) UpdateParentQuotaUsed() *UsageLogUpsertBulk {
-	return u.Update(func(s *UsageLogUpsert) {
-		s.UpdateParentQuotaUsed()
-	})
-}
-
 // SetRateMultiplier sets the "rate_multiplier" field.
 func (u *UsageLogUpsertBulk) SetRateMultiplier(v float64) *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -3909,6 +3679,20 @@ func (u *UsageLogUpsertBulk) AddRateMultiplier(v float64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateRateMultiplier() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetLongContextBillingApplied sets the "long_context_billing_applied" field.
+func (u *UsageLogUpsertBulk) SetLongContextBillingApplied(v bool) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetLongContextBillingApplied(v)
+	})
+}
+
+// UpdateLongContextBillingApplied sets the "long_context_billing_applied" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateLongContextBillingApplied() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateLongContextBillingApplied()
 	})
 }
 

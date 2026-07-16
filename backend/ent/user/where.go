@@ -175,11 +175,6 @@ func RpmLimit(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRpmLimit, v))
 }
 
-// IsParentAccount applies equality check predicate on the "is_parent_account" field. It's identical to IsParentAccountEQ.
-func IsParentAccount(v bool) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldIsParentAccount, v))
-}
-
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -1388,16 +1383,6 @@ func RpmLimitLT(v int) predicate.User {
 // RpmLimitLTE applies the LTE predicate on the "rpm_limit" field.
 func RpmLimitLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldRpmLimit, v))
-}
-
-// IsParentAccountEQ applies the EQ predicate on the "is_parent_account" field.
-func IsParentAccountEQ(v bool) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldIsParentAccount, v))
-}
-
-// IsParentAccountNEQ applies the NEQ predicate on the "is_parent_account" field.
-func IsParentAccountNEQ(v bool) predicate.User {
-	return predicate.User(sql.FieldNEQ(FieldIsParentAccount, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

@@ -117,41 +117,6 @@ func (_u *GroupUpdate) AddRateMultiplier(v float64) *GroupUpdate {
 	return _u
 }
 
-// SetRecommendationLabel sets the "recommendation_label" field.
-func (_u *GroupUpdate) SetRecommendationLabel(v string) *GroupUpdate {
-	_u.mutation.SetRecommendationLabel(v)
-	return _u
-}
-
-// SetNillableRecommendationLabel sets the "recommendation_label" field if the given value is not nil.
-func (_u *GroupUpdate) SetNillableRecommendationLabel(v *string) *GroupUpdate {
-	if v != nil {
-		_u.SetRecommendationLabel(*v)
-	}
-	return _u
-}
-
-// SetRecommendationStars sets the "recommendation_stars" field.
-func (_u *GroupUpdate) SetRecommendationStars(v int) *GroupUpdate {
-	_u.mutation.ResetRecommendationStars()
-	_u.mutation.SetRecommendationStars(v)
-	return _u
-}
-
-// SetNillableRecommendationStars sets the "recommendation_stars" field if the given value is not nil.
-func (_u *GroupUpdate) SetNillableRecommendationStars(v *int) *GroupUpdate {
-	if v != nil {
-		_u.SetRecommendationStars(*v)
-	}
-	return _u
-}
-
-// AddRecommendationStars adds value to the "recommendation_stars" field.
-func (_u *GroupUpdate) AddRecommendationStars(v int) *GroupUpdate {
-	_u.mutation.AddRecommendationStars(v)
-	return _u
-}
-
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_u *GroupUpdate) SetPeakRateEnabled(v bool) *GroupUpdate {
 	_u.mutation.SetPeakRateEnabled(v)
@@ -675,6 +640,33 @@ func (_u *GroupUpdate) ClearVideoPrice1080p() *GroupUpdate {
 	return _u
 }
 
+// SetWebSearchPricePerCall sets the "web_search_price_per_call" field.
+func (_u *GroupUpdate) SetWebSearchPricePerCall(v float64) *GroupUpdate {
+	_u.mutation.ResetWebSearchPricePerCall()
+	_u.mutation.SetWebSearchPricePerCall(v)
+	return _u
+}
+
+// SetNillableWebSearchPricePerCall sets the "web_search_price_per_call" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableWebSearchPricePerCall(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetWebSearchPricePerCall(*v)
+	}
+	return _u
+}
+
+// AddWebSearchPricePerCall adds value to the "web_search_price_per_call" field.
+func (_u *GroupUpdate) AddWebSearchPricePerCall(v float64) *GroupUpdate {
+	_u.mutation.AddWebSearchPricePerCall(v)
+	return _u
+}
+
+// ClearWebSearchPricePerCall clears the value of the "web_search_price_per_call" field.
+func (_u *GroupUpdate) ClearWebSearchPricePerCall() *GroupUpdate {
+	_u.mutation.ClearWebSearchPricePerCall()
+	return _u
+}
+
 // SetClaudeCodeOnly sets the "claude_code_only" field.
 func (_u *GroupUpdate) SetClaudeCodeOnly(v bool) *GroupUpdate {
 	_u.mutation.SetClaudeCodeOnly(v)
@@ -1191,11 +1183,6 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.RecommendationLabel(); ok {
-		if err := group.RecommendationLabelValidator(v); err != nil {
-			return &ValidationError{Name: "recommendation_label", err: fmt.Errorf(`ent: validator failed for field "Group.recommendation_label": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -1264,15 +1251,6 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
-	}
-	if value, ok := _u.mutation.RecommendationLabel(); ok {
-		_spec.SetField(group.FieldRecommendationLabel, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.RecommendationStars(); ok {
-		_spec.SetField(group.FieldRecommendationStars, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedRecommendationStars(); ok {
-		_spec.AddField(group.FieldRecommendationStars, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
@@ -1423,6 +1401,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.VideoPrice1080pCleared() {
 		_spec.ClearField(group.FieldVideoPrice1080p, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.WebSearchPricePerCall(); ok {
+		_spec.SetField(group.FieldWebSearchPricePerCall, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedWebSearchPricePerCall(); ok {
+		_spec.AddField(group.FieldWebSearchPricePerCall, field.TypeFloat64, value)
+	}
+	if _u.mutation.WebSearchPricePerCallCleared() {
+		_spec.ClearField(group.FieldWebSearchPricePerCall, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.ClaudeCodeOnly(); ok {
 		_spec.SetField(group.FieldClaudeCodeOnly, field.TypeBool, value)
@@ -1887,41 +1874,6 @@ func (_u *GroupUpdateOne) SetNillableRateMultiplier(v *float64) *GroupUpdateOne 
 // AddRateMultiplier adds value to the "rate_multiplier" field.
 func (_u *GroupUpdateOne) AddRateMultiplier(v float64) *GroupUpdateOne {
 	_u.mutation.AddRateMultiplier(v)
-	return _u
-}
-
-// SetRecommendationLabel sets the "recommendation_label" field.
-func (_u *GroupUpdateOne) SetRecommendationLabel(v string) *GroupUpdateOne {
-	_u.mutation.SetRecommendationLabel(v)
-	return _u
-}
-
-// SetNillableRecommendationLabel sets the "recommendation_label" field if the given value is not nil.
-func (_u *GroupUpdateOne) SetNillableRecommendationLabel(v *string) *GroupUpdateOne {
-	if v != nil {
-		_u.SetRecommendationLabel(*v)
-	}
-	return _u
-}
-
-// SetRecommendationStars sets the "recommendation_stars" field.
-func (_u *GroupUpdateOne) SetRecommendationStars(v int) *GroupUpdateOne {
-	_u.mutation.ResetRecommendationStars()
-	_u.mutation.SetRecommendationStars(v)
-	return _u
-}
-
-// SetNillableRecommendationStars sets the "recommendation_stars" field if the given value is not nil.
-func (_u *GroupUpdateOne) SetNillableRecommendationStars(v *int) *GroupUpdateOne {
-	if v != nil {
-		_u.SetRecommendationStars(*v)
-	}
-	return _u
-}
-
-// AddRecommendationStars adds value to the "recommendation_stars" field.
-func (_u *GroupUpdateOne) AddRecommendationStars(v int) *GroupUpdateOne {
-	_u.mutation.AddRecommendationStars(v)
 	return _u
 }
 
@@ -2445,6 +2397,33 @@ func (_u *GroupUpdateOne) AddVideoPrice1080p(v float64) *GroupUpdateOne {
 // ClearVideoPrice1080p clears the value of the "video_price_1080p" field.
 func (_u *GroupUpdateOne) ClearVideoPrice1080p() *GroupUpdateOne {
 	_u.mutation.ClearVideoPrice1080p()
+	return _u
+}
+
+// SetWebSearchPricePerCall sets the "web_search_price_per_call" field.
+func (_u *GroupUpdateOne) SetWebSearchPricePerCall(v float64) *GroupUpdateOne {
+	_u.mutation.ResetWebSearchPricePerCall()
+	_u.mutation.SetWebSearchPricePerCall(v)
+	return _u
+}
+
+// SetNillableWebSearchPricePerCall sets the "web_search_price_per_call" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableWebSearchPricePerCall(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetWebSearchPricePerCall(*v)
+	}
+	return _u
+}
+
+// AddWebSearchPricePerCall adds value to the "web_search_price_per_call" field.
+func (_u *GroupUpdateOne) AddWebSearchPricePerCall(v float64) *GroupUpdateOne {
+	_u.mutation.AddWebSearchPricePerCall(v)
+	return _u
+}
+
+// ClearWebSearchPricePerCall clears the value of the "web_search_price_per_call" field.
+func (_u *GroupUpdateOne) ClearWebSearchPricePerCall() *GroupUpdateOne {
+	_u.mutation.ClearWebSearchPricePerCall()
 	return _u
 }
 
@@ -2977,11 +2956,6 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.RecommendationLabel(); ok {
-		if err := group.RecommendationLabelValidator(v); err != nil {
-			return &ValidationError{Name: "recommendation_label", err: fmt.Errorf(`ent: validator failed for field "Group.recommendation_label": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -3067,15 +3041,6 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
-	}
-	if value, ok := _u.mutation.RecommendationLabel(); ok {
-		_spec.SetField(group.FieldRecommendationLabel, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.RecommendationStars(); ok {
-		_spec.SetField(group.FieldRecommendationStars, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedRecommendationStars(); ok {
-		_spec.AddField(group.FieldRecommendationStars, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
@@ -3226,6 +3191,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if _u.mutation.VideoPrice1080pCleared() {
 		_spec.ClearField(group.FieldVideoPrice1080p, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.WebSearchPricePerCall(); ok {
+		_spec.SetField(group.FieldWebSearchPricePerCall, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedWebSearchPricePerCall(); ok {
+		_spec.AddField(group.FieldWebSearchPricePerCall, field.TypeFloat64, value)
+	}
+	if _u.mutation.WebSearchPricePerCallCleared() {
+		_spec.ClearField(group.FieldWebSearchPricePerCall, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.ClaudeCodeOnly(); ok {
 		_spec.SetField(group.FieldClaudeCodeOnly, field.TypeBool, value)

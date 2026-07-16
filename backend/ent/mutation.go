@@ -20801,9 +20801,6 @@ type GroupMutation struct {
 	description                             *string
 	rate_multiplier                         *float64
 	addrate_multiplier                      *float64
-	recommendation_label                    *string
-	recommendation_stars                    *int
-	addrecommendation_stars                 *int
 	peak_rate_enabled                       *bool
 	peak_start                              *string
 	peak_end                                *string
@@ -20845,6 +20842,8 @@ type GroupMutation struct {
 	addvideo_price_720p                     *float64
 	video_price_1080p                       *float64
 	addvideo_price_1080p                    *float64
+	web_search_price_per_call               *float64
+	addweb_search_price_per_call            *float64
 	claude_code_only                        *bool
 	fallback_group_id                       *int64
 	addfallback_group_id                    *int64
@@ -21247,98 +21246,6 @@ func (m *GroupMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *GroupMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
-}
-
-// SetRecommendationLabel sets the "recommendation_label" field.
-func (m *GroupMutation) SetRecommendationLabel(s string) {
-	m.recommendation_label = &s
-}
-
-// RecommendationLabel returns the value of the "recommendation_label" field in the mutation.
-func (m *GroupMutation) RecommendationLabel() (r string, exists bool) {
-	v := m.recommendation_label
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldRecommendationLabel returns the old "recommendation_label" field's value of the Group entity.
-// If the Group object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GroupMutation) OldRecommendationLabel(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldRecommendationLabel is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldRecommendationLabel requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldRecommendationLabel: %w", err)
-	}
-	return oldValue.RecommendationLabel, nil
-}
-
-// ResetRecommendationLabel resets all changes to the "recommendation_label" field.
-func (m *GroupMutation) ResetRecommendationLabel() {
-	m.recommendation_label = nil
-}
-
-// SetRecommendationStars sets the "recommendation_stars" field.
-func (m *GroupMutation) SetRecommendationStars(i int) {
-	m.recommendation_stars = &i
-	m.addrecommendation_stars = nil
-}
-
-// RecommendationStars returns the value of the "recommendation_stars" field in the mutation.
-func (m *GroupMutation) RecommendationStars() (r int, exists bool) {
-	v := m.recommendation_stars
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldRecommendationStars returns the old "recommendation_stars" field's value of the Group entity.
-// If the Group object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GroupMutation) OldRecommendationStars(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldRecommendationStars is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldRecommendationStars requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldRecommendationStars: %w", err)
-	}
-	return oldValue.RecommendationStars, nil
-}
-
-// AddRecommendationStars adds i to the "recommendation_stars" field.
-func (m *GroupMutation) AddRecommendationStars(i int) {
-	if m.addrecommendation_stars != nil {
-		*m.addrecommendation_stars += i
-	} else {
-		m.addrecommendation_stars = &i
-	}
-}
-
-// AddedRecommendationStars returns the value that was added to the "recommendation_stars" field in this mutation.
-func (m *GroupMutation) AddedRecommendationStars() (r int, exists bool) {
-	v := m.addrecommendation_stars
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetRecommendationStars resets all changes to the "recommendation_stars" field.
-func (m *GroupMutation) ResetRecommendationStars() {
-	m.recommendation_stars = nil
-	m.addrecommendation_stars = nil
 }
 
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
@@ -22703,6 +22610,76 @@ func (m *GroupMutation) ResetVideoPrice1080p() {
 	delete(m.clearedFields, group.FieldVideoPrice1080p)
 }
 
+// SetWebSearchPricePerCall sets the "web_search_price_per_call" field.
+func (m *GroupMutation) SetWebSearchPricePerCall(f float64) {
+	m.web_search_price_per_call = &f
+	m.addweb_search_price_per_call = nil
+}
+
+// WebSearchPricePerCall returns the value of the "web_search_price_per_call" field in the mutation.
+func (m *GroupMutation) WebSearchPricePerCall() (r float64, exists bool) {
+	v := m.web_search_price_per_call
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWebSearchPricePerCall returns the old "web_search_price_per_call" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldWebSearchPricePerCall(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWebSearchPricePerCall is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWebSearchPricePerCall requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWebSearchPricePerCall: %w", err)
+	}
+	return oldValue.WebSearchPricePerCall, nil
+}
+
+// AddWebSearchPricePerCall adds f to the "web_search_price_per_call" field.
+func (m *GroupMutation) AddWebSearchPricePerCall(f float64) {
+	if m.addweb_search_price_per_call != nil {
+		*m.addweb_search_price_per_call += f
+	} else {
+		m.addweb_search_price_per_call = &f
+	}
+}
+
+// AddedWebSearchPricePerCall returns the value that was added to the "web_search_price_per_call" field in this mutation.
+func (m *GroupMutation) AddedWebSearchPricePerCall() (r float64, exists bool) {
+	v := m.addweb_search_price_per_call
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWebSearchPricePerCall clears the value of the "web_search_price_per_call" field.
+func (m *GroupMutation) ClearWebSearchPricePerCall() {
+	m.web_search_price_per_call = nil
+	m.addweb_search_price_per_call = nil
+	m.clearedFields[group.FieldWebSearchPricePerCall] = struct{}{}
+}
+
+// WebSearchPricePerCallCleared returns if the "web_search_price_per_call" field was cleared in this mutation.
+func (m *GroupMutation) WebSearchPricePerCallCleared() bool {
+	_, ok := m.clearedFields[group.FieldWebSearchPricePerCall]
+	return ok
+}
+
+// ResetWebSearchPricePerCall resets all changes to the "web_search_price_per_call" field.
+func (m *GroupMutation) ResetWebSearchPricePerCall() {
+	m.web_search_price_per_call = nil
+	m.addweb_search_price_per_call = nil
+	delete(m.clearedFields, group.FieldWebSearchPricePerCall)
+}
+
 // SetClaudeCodeOnly sets the "claude_code_only" field.
 func (m *GroupMutation) SetClaudeCodeOnly(b bool) {
 	m.claude_code_only = &b
@@ -23737,7 +23714,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 49)
+	fields := make([]string, 0, 48)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -23755,12 +23732,6 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
-	}
-	if m.recommendation_label != nil {
-		fields = append(fields, group.FieldRecommendationLabel)
-	}
-	if m.recommendation_stars != nil {
-		fields = append(fields, group.FieldRecommendationStars)
 	}
 	if m.peak_rate_enabled != nil {
 		fields = append(fields, group.FieldPeakRateEnabled)
@@ -23840,6 +23811,9 @@ func (m *GroupMutation) Fields() []string {
 	if m.video_price_1080p != nil {
 		fields = append(fields, group.FieldVideoPrice1080p)
 	}
+	if m.web_search_price_per_call != nil {
+		fields = append(fields, group.FieldWebSearchPricePerCall)
+	}
 	if m.claude_code_only != nil {
 		fields = append(fields, group.FieldClaudeCodeOnly)
 	}
@@ -23905,10 +23879,6 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.Description()
 	case group.FieldRateMultiplier:
 		return m.RateMultiplier()
-	case group.FieldRecommendationLabel:
-		return m.RecommendationLabel()
-	case group.FieldRecommendationStars:
-		return m.RecommendationStars()
 	case group.FieldPeakRateEnabled:
 		return m.PeakRateEnabled()
 	case group.FieldPeakStart:
@@ -23961,6 +23931,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.VideoPrice720p()
 	case group.FieldVideoPrice1080p:
 		return m.VideoPrice1080p()
+	case group.FieldWebSearchPricePerCall:
+		return m.WebSearchPricePerCall()
 	case group.FieldClaudeCodeOnly:
 		return m.ClaudeCodeOnly()
 	case group.FieldFallbackGroupID:
@@ -24012,10 +23984,6 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDescription(ctx)
 	case group.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
-	case group.FieldRecommendationLabel:
-		return m.OldRecommendationLabel(ctx)
-	case group.FieldRecommendationStars:
-		return m.OldRecommendationStars(ctx)
 	case group.FieldPeakRateEnabled:
 		return m.OldPeakRateEnabled(ctx)
 	case group.FieldPeakStart:
@@ -24068,6 +24036,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldVideoPrice720p(ctx)
 	case group.FieldVideoPrice1080p:
 		return m.OldVideoPrice1080p(ctx)
+	case group.FieldWebSearchPricePerCall:
+		return m.OldWebSearchPricePerCall(ctx)
 	case group.FieldClaudeCodeOnly:
 		return m.OldClaudeCodeOnly(ctx)
 	case group.FieldFallbackGroupID:
@@ -24148,20 +24118,6 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRateMultiplier(v)
-		return nil
-	case group.FieldRecommendationLabel:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetRecommendationLabel(v)
-		return nil
-	case group.FieldRecommendationStars:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetRecommendationStars(v)
 		return nil
 	case group.FieldPeakRateEnabled:
 		v, ok := value.(bool)
@@ -24345,6 +24301,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetVideoPrice1080p(v)
 		return nil
+	case group.FieldWebSearchPricePerCall:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWebSearchPricePerCall(v)
+		return nil
 	case group.FieldClaudeCodeOnly:
 		v, ok := value.(bool)
 		if !ok {
@@ -24461,9 +24424,6 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
 	}
-	if m.addrecommendation_stars != nil {
-		fields = append(fields, group.FieldRecommendationStars)
-	}
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
@@ -24509,6 +24469,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addvideo_price_1080p != nil {
 		fields = append(fields, group.FieldVideoPrice1080p)
 	}
+	if m.addweb_search_price_per_call != nil {
+		fields = append(fields, group.FieldWebSearchPricePerCall)
+	}
 	if m.addfallback_group_id != nil {
 		fields = append(fields, group.FieldFallbackGroupID)
 	}
@@ -24531,8 +24494,6 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case group.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
-	case group.FieldRecommendationStars:
-		return m.AddedRecommendationStars()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
 	case group.FieldDailyLimitUsd:
@@ -24563,6 +24524,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedVideoPrice720p()
 	case group.FieldVideoPrice1080p:
 		return m.AddedVideoPrice1080p()
+	case group.FieldWebSearchPricePerCall:
+		return m.AddedWebSearchPricePerCall()
 	case group.FieldFallbackGroupID:
 		return m.AddedFallbackGroupID()
 	case group.FieldFallbackGroupIDOnInvalidRequest:
@@ -24586,13 +24549,6 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
-		return nil
-	case group.FieldRecommendationStars:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddRecommendationStars(v)
 		return nil
 	case group.FieldPeakRateMultiplier:
 		v, ok := value.(float64)
@@ -24699,6 +24655,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddVideoPrice1080p(v)
 		return nil
+	case group.FieldWebSearchPricePerCall:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWebSearchPricePerCall(v)
+		return nil
 	case group.FieldFallbackGroupID:
 		v, ok := value.(int64)
 		if !ok {
@@ -24768,6 +24731,9 @@ func (m *GroupMutation) ClearedFields() []string {
 	if m.FieldCleared(group.FieldVideoPrice1080p) {
 		fields = append(fields, group.FieldVideoPrice1080p)
 	}
+	if m.FieldCleared(group.FieldWebSearchPricePerCall) {
+		fields = append(fields, group.FieldWebSearchPricePerCall)
+	}
 	if m.FieldCleared(group.FieldFallbackGroupID) {
 		fields = append(fields, group.FieldFallbackGroupID)
 	}
@@ -24824,6 +24790,9 @@ func (m *GroupMutation) ClearField(name string) error {
 	case group.FieldVideoPrice1080p:
 		m.ClearVideoPrice1080p()
 		return nil
+	case group.FieldWebSearchPricePerCall:
+		m.ClearWebSearchPricePerCall()
+		return nil
 	case group.FieldFallbackGroupID:
 		m.ClearFallbackGroupID()
 		return nil
@@ -24858,12 +24827,6 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldRateMultiplier:
 		m.ResetRateMultiplier()
-		return nil
-	case group.FieldRecommendationLabel:
-		m.ResetRecommendationLabel()
-		return nil
-	case group.FieldRecommendationStars:
-		m.ResetRecommendationStars()
 		return nil
 	case group.FieldPeakRateEnabled:
 		m.ResetPeakRateEnabled()
@@ -24942,6 +24905,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldVideoPrice1080p:
 		m.ResetVideoPrice1080p()
+		return nil
+	case group.FieldWebSearchPricePerCall:
+		m.ResetWebSearchPricePerCall()
 		return nil
 	case group.FieldClaudeCodeOnly:
 		m.ResetClaudeCodeOnly()
@@ -41797,89 +41763,84 @@ func (m *UsageCleanupTaskMutation) ResetEdge(name string) error {
 // UsageLogMutation represents an operation that mutates the UsageLog nodes in the graph.
 type UsageLogMutation struct {
 	config
-	op                          Op
-	typ                         string
-	id                          *int64
-	request_id                  *string
-	model                       *string
-	requested_model             *string
-	upstream_model              *string
-	channel_id                  *int64
-	addchannel_id               *int64
-	model_mapping_chain         *string
-	billing_tier                *string
-	billing_mode                *string
-	payer_user_id               *int64
-	addpayer_user_id            *int64
-	parent_account_id           *int64
-	addparent_account_id        *int64
-	input_tokens                *int
-	addinput_tokens             *int
-	output_tokens               *int
-	addoutput_tokens            *int
-	cache_creation_tokens       *int
-	addcache_creation_tokens    *int
-	cache_read_tokens           *int
-	addcache_read_tokens        *int
-	cache_creation_5m_tokens    *int
-	addcache_creation_5m_tokens *int
-	cache_creation_1h_tokens    *int
-	addcache_creation_1h_tokens *int
-	input_cost                  *float64
-	addinput_cost               *float64
-	output_cost                 *float64
-	addoutput_cost              *float64
-	cache_creation_cost         *float64
-	addcache_creation_cost      *float64
-	cache_read_cost             *float64
-	addcache_read_cost          *float64
-	total_cost                  *float64
-	addtotal_cost               *float64
-	actual_cost                 *float64
-	addactual_cost              *float64
-	parent_quota_used           *float64
-	addparent_quota_used        *float64
-	rate_multiplier             *float64
-	addrate_multiplier          *float64
-	account_rate_multiplier     *float64
-	addaccount_rate_multiplier  *float64
-	billing_type                *int8
-	addbilling_type             *int8
-	stream                      *bool
-	duration_ms                 *int
-	addduration_ms              *int
-	first_token_ms              *int
-	addfirst_token_ms           *int
-	user_agent                  *string
-	ip_address                  *string
-	image_count                 *int
-	addimage_count              *int
-	image_size                  *string
-	image_input_size            *string
-	image_output_size           *string
-	image_size_source           *string
-	image_size_breakdown        *map[string]int
-	video_count                 *int
-	addvideo_count              *int
-	video_resolution            *string
-	video_duration_seconds      *int
-	addvideo_duration_seconds   *int
-	cache_ttl_overridden        *bool
-	created_at                  *time.Time
-	clearedFields               map[string]struct{}
-	user                        *int64
-	cleareduser                 bool
-	api_key                     *int64
-	clearedapi_key              bool
-	account                     *int64
-	clearedaccount              bool
-	group                       *int64
-	clearedgroup                bool
-	subscription                *int64
-	clearedsubscription         bool
-	done                        bool
-	oldValue                    func(context.Context) (*UsageLog, error)
-	predicates                  []predicate.UsageLog
+	op                           Op
+	typ                          string
+	id                           *int64
+	request_id                   *string
+	model                        *string
+	requested_model              *string
+	upstream_model               *string
+	channel_id                   *int64
+	addchannel_id                *int64
+	model_mapping_chain          *string
+	billing_tier                 *string
+	billing_mode                 *string
+	input_tokens                 *int
+	addinput_tokens              *int
+	output_tokens                *int
+	addoutput_tokens             *int
+	cache_creation_tokens        *int
+	addcache_creation_tokens     *int
+	cache_read_tokens            *int
+	addcache_read_tokens         *int
+	cache_creation_5m_tokens     *int
+	addcache_creation_5m_tokens  *int
+	cache_creation_1h_tokens     *int
+	addcache_creation_1h_tokens  *int
+	input_cost                   *float64
+	addinput_cost                *float64
+	output_cost                  *float64
+	addoutput_cost               *float64
+	cache_creation_cost          *float64
+	addcache_creation_cost       *float64
+	cache_read_cost              *float64
+	addcache_read_cost           *float64
+	total_cost                   *float64
+	addtotal_cost                *float64
+	actual_cost                  *float64
+	addactual_cost               *float64
+	rate_multiplier              *float64
+	addrate_multiplier           *float64
+	long_context_billing_applied *bool
+	account_rate_multiplier      *float64
+	addaccount_rate_multiplier   *float64
+	billing_type                 *int8
+	addbilling_type              *int8
+	stream                       *bool
+	duration_ms                  *int
+	addduration_ms               *int
+	first_token_ms               *int
+	addfirst_token_ms            *int
+	user_agent                   *string
+	ip_address                   *string
+	image_count                  *int
+	addimage_count               *int
+	image_size                   *string
+	image_input_size             *string
+	image_output_size            *string
+	image_size_source            *string
+	image_size_breakdown         *map[string]int
+	video_count                  *int
+	addvideo_count               *int
+	video_resolution             *string
+	video_duration_seconds       *int
+	addvideo_duration_seconds    *int
+	cache_ttl_overridden         *bool
+	created_at                   *time.Time
+	clearedFields                map[string]struct{}
+	user                         *int64
+	cleareduser                  bool
+	api_key                      *int64
+	clearedapi_key               bool
+	account                      *int64
+	clearedaccount               bool
+	group                        *int64
+	clearedgroup                 bool
+	subscription                 *int64
+	clearedsubscription          bool
+	done                         bool
+	oldValue                     func(context.Context) (*UsageLog, error)
+	predicates                   []predicate.UsageLog
 }
 
 var _ ent.Mutation = (*UsageLogMutation)(nil)
@@ -42573,146 +42534,6 @@ func (m *UsageLogMutation) ResetSubscriptionID() {
 	delete(m.clearedFields, usagelog.FieldSubscriptionID)
 }
 
-// SetPayerUserID sets the "payer_user_id" field.
-func (m *UsageLogMutation) SetPayerUserID(i int64) {
-	m.payer_user_id = &i
-	m.addpayer_user_id = nil
-}
-
-// PayerUserID returns the value of the "payer_user_id" field in the mutation.
-func (m *UsageLogMutation) PayerUserID() (r int64, exists bool) {
-	v := m.payer_user_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldPayerUserID returns the old "payer_user_id" field's value of the UsageLog entity.
-// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UsageLogMutation) OldPayerUserID(ctx context.Context) (v *int64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPayerUserID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPayerUserID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPayerUserID: %w", err)
-	}
-	return oldValue.PayerUserID, nil
-}
-
-// AddPayerUserID adds i to the "payer_user_id" field.
-func (m *UsageLogMutation) AddPayerUserID(i int64) {
-	if m.addpayer_user_id != nil {
-		*m.addpayer_user_id += i
-	} else {
-		m.addpayer_user_id = &i
-	}
-}
-
-// AddedPayerUserID returns the value that was added to the "payer_user_id" field in this mutation.
-func (m *UsageLogMutation) AddedPayerUserID() (r int64, exists bool) {
-	v := m.addpayer_user_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ClearPayerUserID clears the value of the "payer_user_id" field.
-func (m *UsageLogMutation) ClearPayerUserID() {
-	m.payer_user_id = nil
-	m.addpayer_user_id = nil
-	m.clearedFields[usagelog.FieldPayerUserID] = struct{}{}
-}
-
-// PayerUserIDCleared returns if the "payer_user_id" field was cleared in this mutation.
-func (m *UsageLogMutation) PayerUserIDCleared() bool {
-	_, ok := m.clearedFields[usagelog.FieldPayerUserID]
-	return ok
-}
-
-// ResetPayerUserID resets all changes to the "payer_user_id" field.
-func (m *UsageLogMutation) ResetPayerUserID() {
-	m.payer_user_id = nil
-	m.addpayer_user_id = nil
-	delete(m.clearedFields, usagelog.FieldPayerUserID)
-}
-
-// SetParentAccountID sets the "parent_account_id" field.
-func (m *UsageLogMutation) SetParentAccountID(i int64) {
-	m.parent_account_id = &i
-	m.addparent_account_id = nil
-}
-
-// ParentAccountID returns the value of the "parent_account_id" field in the mutation.
-func (m *UsageLogMutation) ParentAccountID() (r int64, exists bool) {
-	v := m.parent_account_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldParentAccountID returns the old "parent_account_id" field's value of the UsageLog entity.
-// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UsageLogMutation) OldParentAccountID(ctx context.Context) (v *int64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldParentAccountID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldParentAccountID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldParentAccountID: %w", err)
-	}
-	return oldValue.ParentAccountID, nil
-}
-
-// AddParentAccountID adds i to the "parent_account_id" field.
-func (m *UsageLogMutation) AddParentAccountID(i int64) {
-	if m.addparent_account_id != nil {
-		*m.addparent_account_id += i
-	} else {
-		m.addparent_account_id = &i
-	}
-}
-
-// AddedParentAccountID returns the value that was added to the "parent_account_id" field in this mutation.
-func (m *UsageLogMutation) AddedParentAccountID() (r int64, exists bool) {
-	v := m.addparent_account_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ClearParentAccountID clears the value of the "parent_account_id" field.
-func (m *UsageLogMutation) ClearParentAccountID() {
-	m.parent_account_id = nil
-	m.addparent_account_id = nil
-	m.clearedFields[usagelog.FieldParentAccountID] = struct{}{}
-}
-
-// ParentAccountIDCleared returns if the "parent_account_id" field was cleared in this mutation.
-func (m *UsageLogMutation) ParentAccountIDCleared() bool {
-	_, ok := m.clearedFields[usagelog.FieldParentAccountID]
-	return ok
-}
-
-// ResetParentAccountID resets all changes to the "parent_account_id" field.
-func (m *UsageLogMutation) ResetParentAccountID() {
-	m.parent_account_id = nil
-	m.addparent_account_id = nil
-	delete(m.clearedFields, usagelog.FieldParentAccountID)
-}
-
 // SetInputTokens sets the "input_tokens" field.
 func (m *UsageLogMutation) SetInputTokens(i int) {
 	m.input_tokens = &i
@@ -43385,62 +43206,6 @@ func (m *UsageLogMutation) ResetActualCost() {
 	m.addactual_cost = nil
 }
 
-// SetParentQuotaUsed sets the "parent_quota_used" field.
-func (m *UsageLogMutation) SetParentQuotaUsed(f float64) {
-	m.parent_quota_used = &f
-	m.addparent_quota_used = nil
-}
-
-// ParentQuotaUsed returns the value of the "parent_quota_used" field in the mutation.
-func (m *UsageLogMutation) ParentQuotaUsed() (r float64, exists bool) {
-	v := m.parent_quota_used
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldParentQuotaUsed returns the old "parent_quota_used" field's value of the UsageLog entity.
-// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UsageLogMutation) OldParentQuotaUsed(ctx context.Context) (v float64, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldParentQuotaUsed is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldParentQuotaUsed requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldParentQuotaUsed: %w", err)
-	}
-	return oldValue.ParentQuotaUsed, nil
-}
-
-// AddParentQuotaUsed adds f to the "parent_quota_used" field.
-func (m *UsageLogMutation) AddParentQuotaUsed(f float64) {
-	if m.addparent_quota_used != nil {
-		*m.addparent_quota_used += f
-	} else {
-		m.addparent_quota_used = &f
-	}
-}
-
-// AddedParentQuotaUsed returns the value that was added to the "parent_quota_used" field in this mutation.
-func (m *UsageLogMutation) AddedParentQuotaUsed() (r float64, exists bool) {
-	v := m.addparent_quota_used
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetParentQuotaUsed resets all changes to the "parent_quota_used" field.
-func (m *UsageLogMutation) ResetParentQuotaUsed() {
-	m.parent_quota_used = nil
-	m.addparent_quota_used = nil
-}
-
 // SetRateMultiplier sets the "rate_multiplier" field.
 func (m *UsageLogMutation) SetRateMultiplier(f float64) {
 	m.rate_multiplier = &f
@@ -43495,6 +43260,42 @@ func (m *UsageLogMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *UsageLogMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
+}
+
+// SetLongContextBillingApplied sets the "long_context_billing_applied" field.
+func (m *UsageLogMutation) SetLongContextBillingApplied(b bool) {
+	m.long_context_billing_applied = &b
+}
+
+// LongContextBillingApplied returns the value of the "long_context_billing_applied" field in the mutation.
+func (m *UsageLogMutation) LongContextBillingApplied() (r bool, exists bool) {
+	v := m.long_context_billing_applied
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLongContextBillingApplied returns the old "long_context_billing_applied" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldLongContextBillingApplied(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLongContextBillingApplied is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLongContextBillingApplied requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLongContextBillingApplied: %w", err)
+	}
+	return oldValue.LongContextBillingApplied, nil
+}
+
+// ResetLongContextBillingApplied resets all changes to the "long_context_billing_applied" field.
+func (m *UsageLogMutation) ResetLongContextBillingApplied() {
+	m.long_context_billing_applied = nil
 }
 
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
@@ -44614,7 +44415,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 47)
+	fields := make([]string, 0, 45)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -44654,12 +44455,6 @@ func (m *UsageLogMutation) Fields() []string {
 	if m.subscription != nil {
 		fields = append(fields, usagelog.FieldSubscriptionID)
 	}
-	if m.payer_user_id != nil {
-		fields = append(fields, usagelog.FieldPayerUserID)
-	}
-	if m.parent_account_id != nil {
-		fields = append(fields, usagelog.FieldParentAccountID)
-	}
 	if m.input_tokens != nil {
 		fields = append(fields, usagelog.FieldInputTokens)
 	}
@@ -44696,11 +44491,11 @@ func (m *UsageLogMutation) Fields() []string {
 	if m.actual_cost != nil {
 		fields = append(fields, usagelog.FieldActualCost)
 	}
-	if m.parent_quota_used != nil {
-		fields = append(fields, usagelog.FieldParentQuotaUsed)
-	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
+	}
+	if m.long_context_billing_applied != nil {
+		fields = append(fields, usagelog.FieldLongContextBillingApplied)
 	}
 	if m.account_rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
@@ -44790,10 +44585,6 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.GroupID()
 	case usagelog.FieldSubscriptionID:
 		return m.SubscriptionID()
-	case usagelog.FieldPayerUserID:
-		return m.PayerUserID()
-	case usagelog.FieldParentAccountID:
-		return m.ParentAccountID()
 	case usagelog.FieldInputTokens:
 		return m.InputTokens()
 	case usagelog.FieldOutputTokens:
@@ -44818,10 +44609,10 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalCost()
 	case usagelog.FieldActualCost:
 		return m.ActualCost()
-	case usagelog.FieldParentQuotaUsed:
-		return m.ParentQuotaUsed()
 	case usagelog.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case usagelog.FieldLongContextBillingApplied:
+		return m.LongContextBillingApplied()
 	case usagelog.FieldAccountRateMultiplier:
 		return m.AccountRateMultiplier()
 	case usagelog.FieldBillingType:
@@ -44893,10 +44684,6 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldGroupID(ctx)
 	case usagelog.FieldSubscriptionID:
 		return m.OldSubscriptionID(ctx)
-	case usagelog.FieldPayerUserID:
-		return m.OldPayerUserID(ctx)
-	case usagelog.FieldParentAccountID:
-		return m.OldParentAccountID(ctx)
 	case usagelog.FieldInputTokens:
 		return m.OldInputTokens(ctx)
 	case usagelog.FieldOutputTokens:
@@ -44921,10 +44708,10 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldTotalCost(ctx)
 	case usagelog.FieldActualCost:
 		return m.OldActualCost(ctx)
-	case usagelog.FieldParentQuotaUsed:
-		return m.OldParentQuotaUsed(ctx)
 	case usagelog.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case usagelog.FieldLongContextBillingApplied:
+		return m.OldLongContextBillingApplied(ctx)
 	case usagelog.FieldAccountRateMultiplier:
 		return m.OldAccountRateMultiplier(ctx)
 	case usagelog.FieldBillingType:
@@ -45061,20 +44848,6 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetSubscriptionID(v)
 		return nil
-	case usagelog.FieldPayerUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetPayerUserID(v)
-		return nil
-	case usagelog.FieldParentAccountID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetParentAccountID(v)
-		return nil
 	case usagelog.FieldInputTokens:
 		v, ok := value.(int)
 		if !ok {
@@ -45159,19 +44932,19 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetActualCost(v)
 		return nil
-	case usagelog.FieldParentQuotaUsed:
-		v, ok := value.(float64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetParentQuotaUsed(v)
-		return nil
 	case usagelog.FieldRateMultiplier:
 		v, ok := value.(float64)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRateMultiplier(v)
+		return nil
+	case usagelog.FieldLongContextBillingApplied:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLongContextBillingApplied(v)
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		v, ok := value.(float64)
@@ -45310,12 +45083,6 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addchannel_id != nil {
 		fields = append(fields, usagelog.FieldChannelID)
 	}
-	if m.addpayer_user_id != nil {
-		fields = append(fields, usagelog.FieldPayerUserID)
-	}
-	if m.addparent_account_id != nil {
-		fields = append(fields, usagelog.FieldParentAccountID)
-	}
 	if m.addinput_tokens != nil {
 		fields = append(fields, usagelog.FieldInputTokens)
 	}
@@ -45352,9 +45119,6 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addactual_cost != nil {
 		fields = append(fields, usagelog.FieldActualCost)
 	}
-	if m.addparent_quota_used != nil {
-		fields = append(fields, usagelog.FieldParentQuotaUsed)
-	}
 	if m.addrate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
 	}
@@ -45389,10 +45153,6 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case usagelog.FieldChannelID:
 		return m.AddedChannelID()
-	case usagelog.FieldPayerUserID:
-		return m.AddedPayerUserID()
-	case usagelog.FieldParentAccountID:
-		return m.AddedParentAccountID()
 	case usagelog.FieldInputTokens:
 		return m.AddedInputTokens()
 	case usagelog.FieldOutputTokens:
@@ -45417,8 +45177,6 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalCost()
 	case usagelog.FieldActualCost:
 		return m.AddedActualCost()
-	case usagelog.FieldParentQuotaUsed:
-		return m.AddedParentQuotaUsed()
 	case usagelog.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
 	case usagelog.FieldAccountRateMultiplier:
@@ -45450,20 +45208,6 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddChannelID(v)
-		return nil
-	case usagelog.FieldPayerUserID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddPayerUserID(v)
-		return nil
-	case usagelog.FieldParentAccountID:
-		v, ok := value.(int64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddParentAccountID(v)
 		return nil
 	case usagelog.FieldInputTokens:
 		v, ok := value.(int)
@@ -45548,13 +45292,6 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddActualCost(v)
-		return nil
-	case usagelog.FieldParentQuotaUsed:
-		v, ok := value.(float64)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddParentQuotaUsed(v)
 		return nil
 	case usagelog.FieldRateMultiplier:
 		v, ok := value.(float64)
@@ -45644,12 +45381,6 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldSubscriptionID) {
 		fields = append(fields, usagelog.FieldSubscriptionID)
 	}
-	if m.FieldCleared(usagelog.FieldPayerUserID) {
-		fields = append(fields, usagelog.FieldPayerUserID)
-	}
-	if m.FieldCleared(usagelog.FieldParentAccountID) {
-		fields = append(fields, usagelog.FieldParentAccountID)
-	}
 	if m.FieldCleared(usagelog.FieldAccountRateMultiplier) {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
 	}
@@ -45723,12 +45454,6 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldSubscriptionID:
 		m.ClearSubscriptionID()
-		return nil
-	case usagelog.FieldPayerUserID:
-		m.ClearPayerUserID()
-		return nil
-	case usagelog.FieldParentAccountID:
-		m.ClearParentAccountID()
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		m.ClearAccountRateMultiplier()
@@ -45813,12 +45538,6 @@ func (m *UsageLogMutation) ResetField(name string) error {
 	case usagelog.FieldSubscriptionID:
 		m.ResetSubscriptionID()
 		return nil
-	case usagelog.FieldPayerUserID:
-		m.ResetPayerUserID()
-		return nil
-	case usagelog.FieldParentAccountID:
-		m.ResetParentAccountID()
-		return nil
 	case usagelog.FieldInputTokens:
 		m.ResetInputTokens()
 		return nil
@@ -45855,11 +45574,11 @@ func (m *UsageLogMutation) ResetField(name string) error {
 	case usagelog.FieldActualCost:
 		m.ResetActualCost()
 		return nil
-	case usagelog.FieldParentQuotaUsed:
-		m.ResetParentQuotaUsed()
-		return nil
 	case usagelog.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case usagelog.FieldLongContextBillingApplied:
+		m.ResetLongContextBillingApplied()
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		m.ResetAccountRateMultiplier()
@@ -46101,7 +45820,6 @@ type UserMutation struct {
 	addtotal_recharged            *float64
 	rpm_limit                     *int
 	addrpm_limit                  *int
-	is_parent_account             *bool
 	clearedFields                 map[string]struct{}
 	api_keys                      map[int64]struct{}
 	removedapi_keys               map[int64]struct{}
@@ -47308,42 +47026,6 @@ func (m *UserMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
-// SetIsParentAccount sets the "is_parent_account" field.
-func (m *UserMutation) SetIsParentAccount(b bool) {
-	m.is_parent_account = &b
-}
-
-// IsParentAccount returns the value of the "is_parent_account" field in the mutation.
-func (m *UserMutation) IsParentAccount() (r bool, exists bool) {
-	v := m.is_parent_account
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldIsParentAccount returns the old "is_parent_account" field's value of the User entity.
-// If the User object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserMutation) OldIsParentAccount(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldIsParentAccount is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldIsParentAccount requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldIsParentAccount: %w", err)
-	}
-	return oldValue.IsParentAccount, nil
-}
-
-// ResetIsParentAccount resets all changes to the "is_parent_account" field.
-func (m *UserMutation) ResetIsParentAccount() {
-	m.is_parent_account = nil
-}
-
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *UserMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -48080,7 +47762,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -48153,9 +47835,6 @@ func (m *UserMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
-	if m.is_parent_account != nil {
-		fields = append(fields, user.FieldIsParentAccount)
-	}
 	return fields
 }
 
@@ -48212,8 +47891,6 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalRecharged()
 	case user.FieldRpmLimit:
 		return m.RpmLimit()
-	case user.FieldIsParentAccount:
-		return m.IsParentAccount()
 	}
 	return nil, false
 }
@@ -48271,8 +47948,6 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTotalRecharged(ctx)
 	case user.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
-	case user.FieldIsParentAccount:
-		return m.OldIsParentAccount(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -48449,13 +48124,6 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRpmLimit(v)
-		return nil
-	case user.FieldIsParentAccount:
-		v, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetIsParentAccount(v)
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
@@ -48691,9 +48359,6 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldRpmLimit:
 		m.ResetRpmLimit()
-		return nil
-	case user.FieldIsParentAccount:
-		m.ResetIsParentAccount()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

@@ -115,9 +115,6 @@ func (User) Fields() []ent.Field {
 		// 用户级每分钟请求数上限（0 = 不限制）。仅当所在分组未设置 rpm_limit 时作为兜底生效。
 		field.Int("rpm_limit").
 			Default(0),
-		// 是否为母账号。母账号可管理已注册子账号并为其分配优先使用额度。
-		field.Bool("is_parent_account").
-			Default(false),
 	}
 }
 

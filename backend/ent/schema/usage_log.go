@@ -63,14 +63,6 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("subscription_id").
 			Optional().
 			Nillable(),
-		// payer_user_id 表示实际余额扣费用户；空值兼容历史数据，等同 user_id。
-		field.Int64("payer_user_id").
-			Optional().
-			Nillable(),
-		// parent_account_id 表示该记录使用了哪个母账号额度。
-		field.Int64("parent_account_id").
-			Optional().
-			Nillable(),
 
 		// Token 计数字段
 		field.Int("input_tokens").
@@ -105,13 +97,12 @@ func (UsageLog) Fields() []ent.Field {
 		field.Float("actual_cost").
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
-		// parent_quota_used 为本次请求从母账号分配额度中扣除的金额；0 表示未使用母账号额度。
-		field.Float("parent_quota_used").
-			Default(0).
-			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.Float("rate_multiplier").
 			Default(1).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
+		field.Bool("long_context_billing_applied").
+			Default(false).
+			Comment("Whether long-context pricing changed token prices for this request"),
 
 		// account_rate_multiplier: 账号计费倍率快照（NULL 表示按 1.0 处理）
 		field.Float("account_rate_multiplier").
@@ -224,7 +215,6 @@ func (UsageLog) Indexes() []ent.Index {
 		index.Fields("account_id"),
 		index.Fields("group_id"),
 		index.Fields("subscription_id"),
-		index.Fields("parent_account_id"),
 		index.Fields("created_at"),
 		index.Fields("model"),
 		index.Fields("requested_model"),
