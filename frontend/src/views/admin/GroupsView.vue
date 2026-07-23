@@ -4014,12 +4014,8 @@ import {
   type ReasoningEffortMappingRow,
 } from "./groupsReasoningEffort";
 import {
-  getDefaultImagePreviewPrice,
   getDefaultVideoPreviewPrice,
-  getImagePricePlaceholder,
   getVideoPricePlaceholder,
-  imagePricingI18nKey,
-  supportsImagePricingPlatform,
   supportsVideoPricingPlatform,
   videoPricingI18nKey,
 } from "./groupsImagePricing";
@@ -4084,8 +4080,6 @@ const toggleableColumns = computed(() =>
   allColumns.value.filter((col) => !ALWAYS_VISIBLE_COLUMNS.has(col.key)),
 );
 const hiddenColumns = reactive<Set<string>>(new Set());
-const showColumnDropdown = ref(false);
-const columnDropdownRef = ref<HTMLElement | null>(null);
 
 const getValidHiddenColumnKeys = () =>
   new Set(toggleableColumns.value.map((col) => col.key));
@@ -4153,32 +4147,6 @@ const saveColumnsToStorage = () => {
     );
   } catch (error) {
     console.error("Failed to save group column settings:", error);
-  }
-};
-
-const isColumnVisible = (key: string) => !hiddenColumns.has(key);
-const hasVisibleUsageSummaryConsumer = computed(
-  () => isColumnVisible("usage") || isColumnVisible("billing_type"),
-);
-const hasVisibleCapacityColumn = computed(() => isColumnVisible("capacity"));
-
-const toggleColumn = (key: string) => {
-  const validKeys = getValidHiddenColumnKeys();
-  if (!validKeys.has(key)) return;
-
-  const wasHidden = hiddenColumns.has(key);
-  if (wasHidden) {
-    hiddenColumns.delete(key);
-  } else {
-    hiddenColumns.add(key);
-  }
-  saveColumnsToStorage();
-
-  if (wasHidden && (key === "usage" || key === "billing_type")) {
-    loadUsageSummary();
-  }
-  if (wasHidden && key === "capacity") {
-    loadCapacitySummary();
   }
 };
 
@@ -4503,8 +4471,11 @@ const createForm = reactive({
   monthly_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
+  allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
+  batch_image_discount_multiplier: 0.5,
+  batch_image_hold_multiplier: 0.6,
   image_price_1k: null as number | null,
   image_price_2k: null as number | null,
   image_price_4k: null as number | null,
@@ -4853,8 +4824,11 @@ const editForm = reactive({
   monthly_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
+  allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
+  batch_image_discount_multiplier: 0.5,
+  batch_image_hold_multiplier: 0.6,
   image_price_1k: null as number | null,
   image_price_2k: null as number | null,
   image_price_4k: null as number | null,
@@ -4902,18 +4876,39 @@ const editForm = reactive({
 });
 
 type ImagePricingFormState = {
+  platform: GroupPlatform;
+  allow_image_generation: boolean;
+  allow_batch_image_generation: boolean;
   rate_multiplier: number;
   image_rate_independent: boolean;
   image_rate_multiplier: number;
+  batch_image_discount_multiplier: number;
+  batch_image_hold_multiplier: number;
   image_price_1k: number | string | null;
   image_price_2k: number | string | null;
   image_price_4k: number | string | null;
+};
+
+type VideoPricingFormState = {
+  platform: GroupPlatform;
+  rate_multiplier: number;
+  video_rate_independent: boolean;
+  video_rate_multiplier: number;
+  video_price_480p: number | string | null;
+  video_price_720p: number | string | null;
+  video_price_1080p: number | string | null;
 };
 
 const imagePricingTiers = [
   { key: "image_price_1k", label: "1K" },
   { key: "image_price_2k", label: "2K" },
   { key: "image_price_4k", label: "4K" },
+] as const;
+
+const videoPricingTiers = [
+  { key: "video_price_480p", label: "480p" },
+  { key: "video_price_720p", label: "720p" },
+  { key: "video_price_1080p", label: "1080p" },
 ] as const;
 
 const normalizePreviewNumber = (value: number | string | null | undefined, fallback = 0) => {
@@ -4924,6 +4919,12 @@ const normalizePreviewNumber = (value: number | string | null | undefined, fallb
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parsePreviewPrice = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
 const formatImagePricePreview = (value: number | string | null | undefined) => {
   if (value === null || value === undefined || value === "") {
     return t("admin.groups.imagePricing.notConfigured");
@@ -4932,6 +4933,13 @@ const formatImagePricePreview = (value: number | string | null | undefined) => {
   if (!Number.isFinite(price) || price < 0) {
     return t("admin.groups.imagePricing.notConfigured");
   }
+  return `$${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+};
+
+const formatVideoPricePreview = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined || value === "") return t("admin.groups.videoPricing.notConfigured");
+  const price = Number(value);
+  if (!Number.isFinite(price) || price < 0) return t("admin.groups.videoPricing.notConfigured");
   return `$${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
 };
 
@@ -4947,6 +4955,16 @@ const buildImageFinalPricePreview = (form: ImagePricingFormState) => {
         ? formatImagePricePreview(basePrice * multiplier)
         : t("admin.groups.imagePricing.notConfigured"),
     };
+  });
+};
+
+const buildVideoFinalPricePreview = (form: VideoPricingFormState) => {
+  const multiplier = form.video_rate_independent
+    ? normalizePreviewNumber(form.video_rate_multiplier, 1)
+    : normalizePreviewNumber(form.rate_multiplier, 1);
+  return videoPricingTiers.map((tier) => {
+    const basePrice = parsePreviewPrice(form[tier.key]) ?? getDefaultVideoPreviewPrice(form.platform, tier.key);
+    return { label: tier.label, value: basePrice !== null ? formatVideoPricePreview(basePrice * multiplier) : t("admin.groups.videoPricing.notConfigured") };
   });
 };
 
@@ -5230,10 +5248,10 @@ const normalizeImageRateMultiplier = (
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
 };
 
-const normalizeRecommendationStars = (value: unknown): number => {
+const normalizeRateMultiplier = (value: number | string | null | undefined): number => {
+  if (value === null || value === undefined || value === "") return 1;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 3;
-  return Math.min(5, Math.max(3, Math.round(parsed)));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
 };
 
 const handleCreateGroup = async () => {
@@ -5355,17 +5373,20 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.weekly_limit_usd = group.weekly_limit_usd;
   editForm.monthly_limit_usd = group.monthly_limit_usd;
   editForm.allow_image_generation = group.allow_image_generation ?? false;
+  editForm.allow_batch_image_generation = group.allow_batch_image_generation ?? false;
   editForm.image_rate_independent = group.image_rate_independent ?? false;
   editForm.image_rate_multiplier = group.image_rate_multiplier ?? 1;
-  editForm.image_price_1k = group.image_price_1k;
-  editForm.image_price_2k = group.image_price_2k;
-  editForm.image_price_4k = group.image_price_4k;
+  editForm.batch_image_discount_multiplier = group.batch_image_discount_multiplier ?? 0.5;
+  editForm.batch_image_hold_multiplier = group.batch_image_hold_multiplier ?? 0.6;
+  editForm.image_price_1k = group.image_price_1k ?? null;
+  editForm.image_price_2k = group.image_price_2k ?? null;
+  editForm.image_price_4k = group.image_price_4k ?? null;
 
   editForm.video_rate_independent = group.video_rate_independent ?? false;
   editForm.video_rate_multiplier = group.video_rate_multiplier ?? 1;
-  editForm.video_price_480p = group.video_price_480p;
-  editForm.video_price_720p = group.video_price_720p;
-  editForm.video_price_1080p = group.video_price_1080p;
+  editForm.video_price_480p = group.video_price_480p ?? null;
+  editForm.video_price_720p = group.video_price_720p ?? null;
+  editForm.video_price_1080p = group.video_price_1080p ?? null;
   editForm.web_search_price_per_call = group.web_search_price_per_call ?? null;
   editForm.peak_rate_enabled = group.peak_rate_enabled ?? false;
   editForm.peak_start = group.peak_start ?? "";
@@ -5400,10 +5421,10 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.rpm_limit = group.rpm_limit ?? 0;
   editForm.max_reasoning_effort = normalizeReasoningEffortForPlatform(
     group.platform,
-    group.max_reasoning_effort,
+    group.max_reasoning_effort ?? "",
   );
   editForm.reasoning_effort_mappings = reasoningEffortMappingsToRows(
-    group.reasoning_effort_mappings,
+    group.reasoning_effort_mappings ?? [],
     group.platform,
   );
   resetModelsListState(editModelsListState, group.models_list_config);

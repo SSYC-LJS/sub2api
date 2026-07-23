@@ -320,6 +320,7 @@ const adminSettingsStore = useAdminSettingsStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
 const isAdmin = computed(() => authStore.isAdmin)
+const homePath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/dashboard'))
 const isParentAccount = computed(() => !!authStore.user?.is_parent_account)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const showContactDialog = ref(false)
@@ -1196,4 +1197,3 @@ onMounted(() => {
   height: 1.25rem;
 }
 </style>
-
