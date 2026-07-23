@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/domain"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/SSYC-LJS/sub2api/internal/domain"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/timezone"
 )
 
 type OpenAIMessagesDispatchModelConfig = domain.OpenAIMessagesDispatchModelConfig

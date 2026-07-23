@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	dbent "github.com/SSYC-LJS/sub2api/ent"
+	infraerrors "github.com/SSYC-LJS/sub2api/internal/pkg/errors"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/logger"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/pagination"
 )
 
 var (
@@ -534,6 +534,7 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	if err != nil {
 		return nil, fmt.Errorf("get updated redeem code: %w", err)
 	}
+	user, _ := s.userRepo.GetByID(ctx, userID)
 	s.notifyRedeemCodeUsed(user, redeemCode)
 
 	return redeemCode, nil

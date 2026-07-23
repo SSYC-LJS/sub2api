@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/SSYC-LJS/sub2api/internal/config"
 )
 
 const (

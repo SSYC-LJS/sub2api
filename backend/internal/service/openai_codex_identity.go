@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/openai"
 	"github.com/google/uuid"
 )
 

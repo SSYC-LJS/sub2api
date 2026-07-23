@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/group"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	dbent "github.com/SSYC-LJS/sub2api/ent"
+	"github.com/SSYC-LJS/sub2api/ent/group"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 )
 
 const simpleModeDefaultGroupDescription = "Auto-created default group"

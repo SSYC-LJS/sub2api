@@ -3,11 +3,11 @@ package handler
 import (
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
-	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/SSYC-LJS/sub2api/internal/handler/admin"
+	"github.com/SSYC-LJS/sub2api/internal/handler/dto"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/response"
+	middleware2 "github.com/SSYC-LJS/sub2api/internal/server/middleware"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

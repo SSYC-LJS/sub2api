@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 )
 
 type authCacheInvalidationOutboxRepository struct {

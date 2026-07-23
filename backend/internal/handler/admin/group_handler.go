@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/SSYC-LJS/sub2api/internal/handler/dto"
+	infraerrors "github.com/SSYC-LJS/sub2api/internal/pkg/errors"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/response"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/timezone"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

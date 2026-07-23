@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/channelmonitor"
-	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	dbent "github.com/SSYC-LJS/sub2api/ent"
+	"github.com/SSYC-LJS/sub2api/ent/channelmonitor"
+	"github.com/SSYC-LJS/sub2api/ent/channelmonitorrequesttemplate"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 	"github.com/lib/pq"
 )
 

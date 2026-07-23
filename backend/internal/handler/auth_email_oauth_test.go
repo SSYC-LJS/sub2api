@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/ent/authidentity"
-	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
-	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	dbent "github.com/SSYC-LJS/sub2api/ent"
+	"github.com/SSYC-LJS/sub2api/ent/authidentity"
+	"github.com/SSYC-LJS/sub2api/ent/redeemcode"
+	dbuser "github.com/SSYC-LJS/sub2api/ent/user"
+	"github.com/SSYC-LJS/sub2api/internal/config"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )

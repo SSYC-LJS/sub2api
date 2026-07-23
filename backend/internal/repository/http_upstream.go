@@ -25,13 +25,13 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/net/http2"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
-	"github.com/Wei-Shaw/sub2api/internal/service"
-	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
+	"github.com/SSYC-LJS/sub2api/internal/config"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/proxyurl"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/proxyutil"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/servertiming"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/tlsfingerprint"
+	"github.com/SSYC-LJS/sub2api/internal/service"
+	"github.com/SSYC-LJS/sub2api/internal/util/urlvalidator"
 	"golang.org/x/mod/semver"
 )
 

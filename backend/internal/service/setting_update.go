@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/SSYC-LJS/sub2api/internal/config"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/antigravity"
+	infraerrors "github.com/SSYC-LJS/sub2api/internal/pkg/errors"
 )
 
 // UpdateSettings 更新系统设置

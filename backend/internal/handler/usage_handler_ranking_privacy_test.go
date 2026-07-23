@@ -3,7 +3,7 @@ package handler
 import (
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/usagestats"
 )
 
 func TestMaskUserRankingIdentitiesPrefersUsernameAndPreservesEmailDomain(t *testing.T) {

@@ -1030,6 +1030,8 @@ type GatewayRequestResponseCaptureConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 	// MaxBodyBytes: request_body/response_body 各自最多保存多少字节，超出只保存前缀并标记 truncated。
 	MaxBodyBytes int `mapstructure:"max_body_bytes"`
+}
+
 // GatewayOpenAIProxyStreamCircuitConfig controls the bounded, in-process
 // proxy-ID circuit used for incomplete OpenAI Responses SSE streams.
 type GatewayOpenAIProxyStreamCircuitConfig struct {

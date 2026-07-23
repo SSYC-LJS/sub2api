@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/handler"
-	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/SSYC-LJS/sub2api/internal/config"
+	"github.com/SSYC-LJS/sub2api/internal/handler"
+	pkghttputil "github.com/SSYC-LJS/sub2api/internal/pkg/httputil"
+	"github.com/SSYC-LJS/sub2api/internal/server/middleware"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"

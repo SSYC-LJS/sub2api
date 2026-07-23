@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	dbent "github.com/SSYC-LJS/sub2api/ent"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 )
 
 func TestSanitizeAdminPaymentOrderForResponseAddsCurrency(t *testing.T) {

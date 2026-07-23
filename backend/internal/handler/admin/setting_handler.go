@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/SSYC-LJS/sub2api/internal/config"
+	"github.com/SSYC-LJS/sub2api/internal/handler/dto"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/response"
+	"github.com/SSYC-LJS/sub2api/internal/server/middleware"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -154,6 +154,8 @@ func buildWebhookTestData(eventName, message string, now time.Time) map[string]a
 		base["模型"] = "gpt-test"
 	}
 	return base
+}
+
 // SetStepUpDeps attaches the services backing the step-up switch preconditions
 // (enable requires the acting admin to have TOTP enabled; disable is itself a
 // step-up gated operation), without changing the constructor signature used by

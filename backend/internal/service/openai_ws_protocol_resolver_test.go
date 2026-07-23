@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/SSYC-LJS/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
 

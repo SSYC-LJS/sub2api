@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
+	infraerrors "github.com/SSYC-LJS/sub2api/internal/pkg/errors"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/logger"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"

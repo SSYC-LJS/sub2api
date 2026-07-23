@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/SSYC-LJS/sub2api/internal/pkg/pagination"
+	"github.com/SSYC-LJS/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 

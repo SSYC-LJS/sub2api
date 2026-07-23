@@ -268,7 +268,7 @@ docker compose logs -f sub2api
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/SSYC-LJS/sub2api.git
 cd sub2api/deploy
 
 # 2. 環境設定ファイルをコピー
@@ -407,7 +407,7 @@ rm -rf data/ postgres_data/ redis_data/
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/Wei-Shaw/sub2api.git
+git clone https://github.com/SSYC-LJS/sub2api.git
 cd sub2api
 
 # 2. pnpm をインストール（未インストールの場合）
@@ -633,11 +633,11 @@ sub2api/
 
 ## スター履歴
 
-<a href="https://star-history.com/#Wei-Shaw/sub2api&Date">
+<a href="https://star-history.com/#SSYC-LJS/sub2api&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=SSYC-LJS/sub2api&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=SSYC-LJS/sub2api&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=SSYC-LJS/sub2api&type=Date" />
  </picture>
 </a>
 
