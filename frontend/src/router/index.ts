@@ -903,8 +903,6 @@ router.beforeEach(async (to, _from, next) => {
     next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
     return
   }
-  }
-
   if (
     to.meta.requiresRiskControl &&
     appStore.publicSettingsLoaded &&

@@ -87,8 +87,6 @@ export async function getUpdateStatus(operationId: string): Promise<UpdateStatus
 /**
  * Rollback to previous version
  */
-export async function rollback(): Promise<UpdateResult> {
-  const { data } = await apiClient.post<UpdateResult>('/admin/system/rollback')
 export async function rollback(version?: string): Promise<UpdateResult> {
   const { data } = await apiClient.post<UpdateResult>(
     '/admin/system/rollback',

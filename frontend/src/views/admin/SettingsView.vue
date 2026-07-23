@@ -10347,7 +10347,6 @@ async function saveSettings() {
       webhook_bearer_token: form.webhook_bearer_token || undefined,
       webhook_timeout_seconds: Number(form.webhook_timeout_seconds) || 5,
       webhook_events: normalizeWebhookEvents(form.webhook_events),
-      openai_advanced_scheduler_enabled: form.openai_advanced_scheduler_enabled,
       payment_alipay_mobile_precreate_deep_link:
         form.payment_alipay_mobile_precreate_deep_link,
       openai_low_upstream_rate_priority_enabled:

@@ -951,6 +951,8 @@ export interface AccountSchedulerScore {
 export interface AccountSchedulerGroupScore extends AccountSchedulerScore {
   group_id: number | null
   group_name?: string
+}
+
 export interface UpstreamBillingData {
   object: 'sub2api.key_billing'
   schema_version: 1
