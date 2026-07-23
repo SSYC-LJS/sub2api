@@ -40,6 +40,10 @@ const (
 	FieldIsExclusive = "is_exclusive"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldRecommendationLabel holds the string denoting the recommendation_label field in the database.
+	FieldRecommendationLabel = "recommendation_label"
+	// FieldRecommendationStars holds the string denoting the recommendation_stars field in the database.
+	FieldRecommendationStars = "recommendation_stars"
 	// FieldDuplicateOperationID holds the string denoting the duplicate_operation_id field in the database.
 	FieldDuplicateOperationID = "duplicate_operation_id"
 	// FieldPlatform holds the string denoting the platform field in the database.
@@ -205,6 +209,8 @@ var Columns = []string{
 	FieldPeakRateMultiplier,
 	FieldIsExclusive,
 	FieldStatus,
+	FieldRecommendationLabel,
+	FieldRecommendationStars,
 	FieldDuplicateOperationID,
 	FieldPlatform,
 	FieldSubscriptionType,
@@ -301,6 +307,12 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultRecommendationLabel holds the default value on creation for the "recommendation_label" field.
+	DefaultRecommendationLabel string
+	// RecommendationLabelValidator is a validator for the "recommendation_label" field. It is called by the builders before save.
+	RecommendationLabelValidator func(string) error
+	// DefaultRecommendationStars holds the default value on creation for the "recommendation_stars" field.
+	DefaultRecommendationStars int
 	// DuplicateOperationIDValidator is a validator for the "duplicate_operation_id" field. It is called by the builders before save.
 	DuplicateOperationIDValidator func(string) error
 	// DefaultPlatform holds the default value on creation for the "platform" field.
@@ -429,6 +441,16 @@ func ByIsExclusive(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByRecommendationLabel orders the results by the recommendation_label field.
+func ByRecommendationLabel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRecommendationLabel, opts...).ToFunc()
+}
+
+// ByRecommendationStars orders the results by the recommendation_stars field.
+func ByRecommendationStars(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRecommendationStars, opts...).ToFunc()
 }
 
 // ByDuplicateOperationID orders the results by the duplicate_operation_id field.

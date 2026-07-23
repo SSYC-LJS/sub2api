@@ -214,6 +214,7 @@ func (h *SystemHandler) GetRollbackVersions(c *gin.Context) {
 // Rollback restores the previous version
 // POST /api/v1/admin/system/rollback
 func (h *SystemHandler) Rollback(c *gin.Context) {
+	targetVersion := strings.TrimSpace(c.Query("version"))
 	operationID := buildSystemOperationID(c, "rollback")
 	payload := gin.H{"operation_id": operationID}
 	executeAdminIdempotentJSON(c, "admin.system.rollback", payload, service.DefaultSystemOperationIdempotencyTTL(), func(ctx context.Context) (any, error) {

@@ -46,6 +46,7 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest represents the update API key request payload
 type UpdateAPIKeyRequest struct {
+	/* Legacy duplicate fields retained for merge audit.
 	Name        string   `json:"name"`
 	GroupID     *int64   `json:"group_id"`
 	Status      string   `json:"status" binding:"omitempty,oneof=active inactive"`
@@ -54,6 +55,7 @@ type UpdateAPIKeyRequest struct {
 	Quota       *float64 `json:"quota"`        // 配额限制 (人民币), 0=无限制
 	ExpiresAt   *string  `json:"expires_at"`   // 过期时间 (ISO 8601)
 	ResetQuota  *bool    `json:"reset_quota"`  // 重置已用配额
+	*/
 	Name        string    `json:"name"`
 	GroupID     *int64    `json:"group_id"`
 	Status      string    `json:"status" binding:"omitempty,oneof=active inactive"`

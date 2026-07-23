@@ -66,6 +66,11 @@ func (Group) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		field.String("recommendation_label").
+			MaxLen(50).
+			Default(""),
+		field.Int("recommendation_stars").
+			Default(3),
 		field.String("duplicate_operation_id").
 			MaxLen(64).
 			Optional().

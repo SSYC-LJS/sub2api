@@ -208,6 +208,41 @@ func (_u *GroupUpdate) SetNillableStatus(v *string) *GroupUpdate {
 	return _u
 }
 
+// SetRecommendationLabel sets the "recommendation_label" field.
+func (_u *GroupUpdate) SetRecommendationLabel(v string) *GroupUpdate {
+	_u.mutation.SetRecommendationLabel(v)
+	return _u
+}
+
+// SetNillableRecommendationLabel sets the "recommendation_label" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableRecommendationLabel(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetRecommendationLabel(*v)
+	}
+	return _u
+}
+
+// SetRecommendationStars sets the "recommendation_stars" field.
+func (_u *GroupUpdate) SetRecommendationStars(v int) *GroupUpdate {
+	_u.mutation.ResetRecommendationStars()
+	_u.mutation.SetRecommendationStars(v)
+	return _u
+}
+
+// SetNillableRecommendationStars sets the "recommendation_stars" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableRecommendationStars(v *int) *GroupUpdate {
+	if v != nil {
+		_u.SetRecommendationStars(*v)
+	}
+	return _u
+}
+
+// AddRecommendationStars adds value to the "recommendation_stars" field.
+func (_u *GroupUpdate) AddRecommendationStars(v int) *GroupUpdate {
+	_u.mutation.AddRecommendationStars(v)
+	return _u
+}
+
 // SetPlatform sets the "platform" field.
 func (_u *GroupUpdate) SetPlatform(v string) *GroupUpdate {
 	_u.mutation.SetPlatform(v)
@@ -1224,6 +1259,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Group.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RecommendationLabel(); ok {
+		if err := group.RecommendationLabelValidator(v); err != nil {
+			return &ValidationError{Name: "recommendation_label", err: fmt.Errorf(`ent: validator failed for field "Group.recommendation_label": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Platform(); ok {
 		if err := group.PlatformValidator(v); err != nil {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
@@ -1303,6 +1343,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RecommendationLabel(); ok {
+		_spec.SetField(group.FieldRecommendationLabel, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RecommendationStars(); ok {
+		_spec.SetField(group.FieldRecommendationStars, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRecommendationStars(); ok {
+		_spec.AddField(group.FieldRecommendationStars, field.TypeInt, value)
 	}
 	if _u.mutation.DuplicateOperationIDCleared() {
 		_spec.ClearField(group.FieldDuplicateOperationID, field.TypeString)
@@ -2010,6 +2059,41 @@ func (_u *GroupUpdateOne) SetNillableStatus(v *string) *GroupUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetRecommendationLabel sets the "recommendation_label" field.
+func (_u *GroupUpdateOne) SetRecommendationLabel(v string) *GroupUpdateOne {
+	_u.mutation.SetRecommendationLabel(v)
+	return _u
+}
+
+// SetNillableRecommendationLabel sets the "recommendation_label" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableRecommendationLabel(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetRecommendationLabel(*v)
+	}
+	return _u
+}
+
+// SetRecommendationStars sets the "recommendation_stars" field.
+func (_u *GroupUpdateOne) SetRecommendationStars(v int) *GroupUpdateOne {
+	_u.mutation.ResetRecommendationStars()
+	_u.mutation.SetRecommendationStars(v)
+	return _u
+}
+
+// SetNillableRecommendationStars sets the "recommendation_stars" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableRecommendationStars(v *int) *GroupUpdateOne {
+	if v != nil {
+		_u.SetRecommendationStars(*v)
+	}
+	return _u
+}
+
+// AddRecommendationStars adds value to the "recommendation_stars" field.
+func (_u *GroupUpdateOne) AddRecommendationStars(v int) *GroupUpdateOne {
+	_u.mutation.AddRecommendationStars(v)
 	return _u
 }
 
@@ -3042,6 +3126,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Group.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RecommendationLabel(); ok {
+		if err := group.RecommendationLabelValidator(v); err != nil {
+			return &ValidationError{Name: "recommendation_label", err: fmt.Errorf(`ent: validator failed for field "Group.recommendation_label": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Platform(); ok {
 		if err := group.PlatformValidator(v); err != nil {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
@@ -3138,6 +3227,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RecommendationLabel(); ok {
+		_spec.SetField(group.FieldRecommendationLabel, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RecommendationStars(); ok {
+		_spec.SetField(group.FieldRecommendationStars, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRecommendationStars(); ok {
+		_spec.AddField(group.FieldRecommendationStars, field.TypeInt, value)
 	}
 	if _u.mutation.DuplicateOperationIDCleared() {
 		_spec.ClearField(group.FieldDuplicateOperationID, field.TypeString)

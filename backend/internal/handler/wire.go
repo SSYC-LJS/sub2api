@@ -109,7 +109,7 @@ func ProvideGatewayHandler(
 	coordinator *securityaudit.Coordinator,
 ) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService,
-		userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
+		userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool, nil,
 		errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
 	h.securityAuditCoordinator = coordinator
 	return h
@@ -232,7 +232,6 @@ var ProviderSet = wire.NewSet(
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
 	NewImageCanvasHandler,
-	NewBatchImageHandler,
 	NewAsyncImageHandler,
 	ProvideBatchImageHandler,
 

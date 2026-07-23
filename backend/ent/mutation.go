@@ -21861,6 +21861,9 @@ type GroupMutation struct {
 	addpeak_rate_multiplier                 *float64
 	is_exclusive                            *bool
 	status                                  *string
+	recommendation_label                    *string
+	recommendation_stars                    *int
+	addrecommendation_stars                 *int
 	duplicate_operation_id                  *string
 	platform                                *string
 	subscription_type                       *string
@@ -22539,6 +22542,98 @@ func (m *GroupMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *GroupMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetRecommendationLabel sets the "recommendation_label" field.
+func (m *GroupMutation) SetRecommendationLabel(s string) {
+	m.recommendation_label = &s
+}
+
+// RecommendationLabel returns the value of the "recommendation_label" field in the mutation.
+func (m *GroupMutation) RecommendationLabel() (r string, exists bool) {
+	v := m.recommendation_label
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecommendationLabel returns the old "recommendation_label" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldRecommendationLabel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecommendationLabel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecommendationLabel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecommendationLabel: %w", err)
+	}
+	return oldValue.RecommendationLabel, nil
+}
+
+// ResetRecommendationLabel resets all changes to the "recommendation_label" field.
+func (m *GroupMutation) ResetRecommendationLabel() {
+	m.recommendation_label = nil
+}
+
+// SetRecommendationStars sets the "recommendation_stars" field.
+func (m *GroupMutation) SetRecommendationStars(i int) {
+	m.recommendation_stars = &i
+	m.addrecommendation_stars = nil
+}
+
+// RecommendationStars returns the value of the "recommendation_stars" field in the mutation.
+func (m *GroupMutation) RecommendationStars() (r int, exists bool) {
+	v := m.recommendation_stars
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecommendationStars returns the old "recommendation_stars" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldRecommendationStars(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecommendationStars is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecommendationStars requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecommendationStars: %w", err)
+	}
+	return oldValue.RecommendationStars, nil
+}
+
+// AddRecommendationStars adds i to the "recommendation_stars" field.
+func (m *GroupMutation) AddRecommendationStars(i int) {
+	if m.addrecommendation_stars != nil {
+		*m.addrecommendation_stars += i
+	} else {
+		m.addrecommendation_stars = &i
+	}
+}
+
+// AddedRecommendationStars returns the value that was added to the "recommendation_stars" field in this mutation.
+func (m *GroupMutation) AddedRecommendationStars() (r int, exists bool) {
+	v := m.addrecommendation_stars
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRecommendationStars resets all changes to the "recommendation_stars" field.
+func (m *GroupMutation) ResetRecommendationStars() {
+	m.recommendation_stars = nil
+	m.addrecommendation_stars = nil
 }
 
 // SetDuplicateOperationID sets the "duplicate_operation_id" field.
@@ -24907,7 +25002,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 51)
+	fields := make([]string, 0, 53)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -24943,6 +25038,12 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, group.FieldStatus)
+	}
+	if m.recommendation_label != nil {
+		fields = append(fields, group.FieldRecommendationLabel)
+	}
+	if m.recommendation_stars != nil {
+		fields = append(fields, group.FieldRecommendationStars)
 	}
 	if m.duplicate_operation_id != nil {
 		fields = append(fields, group.FieldDuplicateOperationID)
@@ -25093,6 +25194,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.IsExclusive()
 	case group.FieldStatus:
 		return m.Status()
+	case group.FieldRecommendationLabel:
+		return m.RecommendationLabel()
+	case group.FieldRecommendationStars:
+		return m.RecommendationStars()
 	case group.FieldDuplicateOperationID:
 		return m.DuplicateOperationID()
 	case group.FieldPlatform:
@@ -25204,6 +25309,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldIsExclusive(ctx)
 	case group.FieldStatus:
 		return m.OldStatus(ctx)
+	case group.FieldRecommendationLabel:
+		return m.OldRecommendationLabel(ctx)
+	case group.FieldRecommendationStars:
+		return m.OldRecommendationStars(ctx)
 	case group.FieldDuplicateOperationID:
 		return m.OldDuplicateOperationID(ctx)
 	case group.FieldPlatform:
@@ -25374,6 +25483,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case group.FieldRecommendationLabel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecommendationLabel(v)
+		return nil
+	case group.FieldRecommendationStars:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecommendationStars(v)
 		return nil
 	case group.FieldDuplicateOperationID:
 		v, ok := value.(string)
@@ -25662,6 +25785,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
+	if m.addrecommendation_stars != nil {
+		fields = append(fields, group.FieldRecommendationStars)
+	}
 	if m.adddaily_limit_usd != nil {
 		fields = append(fields, group.FieldDailyLimitUsd)
 	}
@@ -25731,6 +25857,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedRateMultiplier()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
+	case group.FieldRecommendationStars:
+		return m.AddedRecommendationStars()
 	case group.FieldDailyLimitUsd:
 		return m.AddedDailyLimitUsd()
 	case group.FieldWeeklyLimitUsd:
@@ -25791,6 +25919,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddPeakRateMultiplier(v)
+		return nil
+	case group.FieldRecommendationStars:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRecommendationStars(v)
 		return nil
 	case group.FieldDailyLimitUsd:
 		v, ok := value.(float64)
@@ -26086,6 +26221,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case group.FieldRecommendationLabel:
+		m.ResetRecommendationLabel()
+		return nil
+	case group.FieldRecommendationStars:
+		m.ResetRecommendationStars()
 		return nil
 	case group.FieldDuplicateOperationID:
 		m.ResetDuplicateOperationID()
@@ -47107,6 +47248,7 @@ type UserMutation struct {
 	concurrency                   *int
 	addconcurrency                *int
 	status                        *string
+	is_parent_account             *bool
 	username                      *string
 	notes                         *string
 	totp_secret_encrypted         *string
@@ -47698,6 +47840,42 @@ func (m *UserMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *UserMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetIsParentAccount sets the "is_parent_account" field.
+func (m *UserMutation) SetIsParentAccount(b bool) {
+	m.is_parent_account = &b
+}
+
+// IsParentAccount returns the value of the "is_parent_account" field in the mutation.
+func (m *UserMutation) IsParentAccount() (r bool, exists bool) {
+	v := m.is_parent_account
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsParentAccount returns the old "is_parent_account" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldIsParentAccount(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsParentAccount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsParentAccount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsParentAccount: %w", err)
+	}
+	return oldValue.IsParentAccount, nil
+}
+
+// ResetIsParentAccount resets all changes to the "is_parent_account" field.
+func (m *UserMutation) ResetIsParentAccount() {
+	m.is_parent_account = nil
 }
 
 // SetUsername sets the "username" field.
@@ -49066,7 +49244,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -49096,6 +49274,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, user.FieldStatus)
+	}
+	if m.is_parent_account != nil {
+		fields = append(fields, user.FieldIsParentAccount)
 	}
 	if m.username != nil {
 		fields = append(fields, user.FieldUsername)
@@ -49167,6 +49348,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Concurrency()
 	case user.FieldStatus:
 		return m.Status()
+	case user.FieldIsParentAccount:
+		return m.IsParentAccount()
 	case user.FieldUsername:
 		return m.Username()
 	case user.FieldNotes:
@@ -49224,6 +49407,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldConcurrency(ctx)
 	case user.FieldStatus:
 		return m.OldStatus(ctx)
+	case user.FieldIsParentAccount:
+		return m.OldIsParentAccount(ctx)
 	case user.FieldUsername:
 		return m.OldUsername(ctx)
 	case user.FieldNotes:
@@ -49330,6 +49515,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case user.FieldIsParentAccount:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsParentAccount(v)
 		return nil
 	case user.FieldUsername:
 		v, ok := value.(string)
@@ -49621,6 +49813,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case user.FieldIsParentAccount:
+		m.ResetIsParentAccount()
 		return nil
 	case user.FieldUsername:
 		m.ResetUsername()
