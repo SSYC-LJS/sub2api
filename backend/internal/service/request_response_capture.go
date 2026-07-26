@@ -10,14 +10,21 @@ import (
 
 const (
 	SettingKeyRequestResponseCaptureEnabled      = "request_response_capture_enabled"
+	SettingKeyRequestResponseCaptureGroupID      = "request_response_capture_group_id"
 	SettingKeyRequestResponseCaptureMaxBodyBytes = "request_response_capture_max_body_bytes"
 )
 
-const DefaultRequestResponseCaptureMaxBodyBytes = 64 * 1024
+const DefaultRequestResponseCaptureMaxBodyBytes = 0
 
 type RequestResponseCaptureSettings struct {
-	Enabled      bool `json:"enabled"`
-	MaxBodyBytes int  `json:"max_body_bytes"`
+	Enabled bool  `json:"enabled"`
+	GroupID int64 `json:"group_id"`
+	// MaxBodyBytes is retained for API compatibility. Capture is always unlimited and returns 0.
+	MaxBodyBytes int `json:"max_body_bytes"`
+}
+
+func (s RequestResponseCaptureSettings) CapturesGroup(groupID *int64) bool {
+	return s.GroupID == 0 || (groupID != nil && *groupID == s.GroupID)
 }
 
 type RequestResponseCaptureSettingsReader interface {
@@ -40,8 +47,8 @@ type RequestResponseLog struct {
 	ResponseBody      string    `json:"response_body"`
 	RequestTruncated  bool      `json:"request_truncated"`
 	ResponseTruncated bool      `json:"response_truncated"`
-	RequestBodyBytes  int       `json:"request_body_bytes"`
-	ResponseBodyBytes int       `json:"response_body_bytes"`
+	RequestBodyBytes  int64     `json:"request_body_bytes"`
+	ResponseBodyBytes int64     `json:"response_body_bytes"`
 	DurationMs        int64     `json:"duration_ms"`
 	UserAgent         string    `json:"user_agent"`
 	IPAddress         string    `json:"ip_address"`
@@ -87,7 +94,7 @@ func (s *RequestResponseCaptureService) MaxBodyBytes(ctx context.Context) int {
 
 func (s *RequestResponseCaptureService) Settings(ctx context.Context) RequestResponseCaptureSettings {
 	if s == nil {
-		return RequestResponseCaptureSettings{Enabled: false, MaxBodyBytes: DefaultRequestResponseCaptureMaxBodyBytes}
+		return RequestResponseCaptureSettings{Enabled: false}
 	}
 	if s.settingsReader != nil {
 		return s.settingsReader.GetRequestResponseCaptureSettings(ctx)
@@ -124,24 +131,20 @@ func (s *RequestResponseCaptureService) ListForExport(ctx context.Context, filte
 }
 
 func requestResponseCaptureSettingsFromConfig(cfg *config.Config) RequestResponseCaptureSettings {
-	maxBodyBytes := DefaultRequestResponseCaptureMaxBodyBytes
-	enabled := false
+	enabled := true
+	var groupID int64
 	if cfg != nil {
 		enabled = cfg.Gateway.RequestResponseCapture.Enabled
-		if cfg.Gateway.RequestResponseCapture.MaxBodyBytes > 0 {
-			maxBodyBytes = cfg.Gateway.RequestResponseCapture.MaxBodyBytes
-		}
+		groupID = cfg.Gateway.RequestResponseCapture.GroupID
 	}
-	return RequestResponseCaptureSettings{Enabled: enabled, MaxBodyBytes: maxBodyBytes}
+	return normalizeRequestResponseCaptureSettings(RequestResponseCaptureSettings{Enabled: enabled, GroupID: groupID})
 }
 
 func normalizeRequestResponseCaptureSettings(in RequestResponseCaptureSettings) RequestResponseCaptureSettings {
-	if in.MaxBodyBytes <= 0 {
-		in.MaxBodyBytes = DefaultRequestResponseCaptureMaxBodyBytes
+	if in.GroupID < 0 {
+		in.GroupID = 0
 	}
-	if in.MaxBodyBytes > 1024*1024 {
-		in.MaxBodyBytes = 1024 * 1024
-	}
+	in.MaxBodyBytes = DefaultRequestResponseCaptureMaxBodyBytes
 	return in
 }
 

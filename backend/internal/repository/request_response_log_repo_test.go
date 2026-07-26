@@ -47,7 +47,7 @@ func TestRequestResponseLogRepositoryCreate(t *testing.T) {
 			"req-1", int64(10), int64(20), &groupID,
 			"POST", "/v1/chat/completions", "/v1/chat/completions", "gpt-test", true,
 			200, `{"model":"gpt-test"}`, `data: {"ok":true}`, false, true,
-			20, 100000, 1234, "client-test", "127.0.0.1", createdAt,
+			int64(20), int64(100000), int64(1234), "client-test", "127.0.0.1", createdAt,
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -82,7 +82,7 @@ func TestRequestResponseLogRepositoryCreateEmptyStringsAsNull(t *testing.T) {
 			nil, int64(10), int64(20), nil,
 			"POST", "/v1/messages", nil, nil, false,
 			400, "", "", false, false,
-			0, 0, 0, nil, nil, createdAt,
+			int64(0), int64(0), int64(0), nil, nil, createdAt,
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 

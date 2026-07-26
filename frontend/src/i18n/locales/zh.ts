@@ -1538,7 +1538,7 @@ export default {
   admin: {
     requestResponseLogs: {
       title: '请求/返回采集',
-      description: '查看用户请求入参和上游返回数据快照',
+      description: '查看用户与站点之间的完整双向请求和返回数据',
     },
     dashboard: {
       title: '管理控制台',

@@ -1139,7 +1139,11 @@ func (s *SettingService) GetRequestResponseCaptureSettings(ctx context.Context) 
 		}
 		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), requestResponseCaptureSettingsDBTimeout)
 		defer cancel()
-		vals, err := s.settingRepo.GetMultiple(dbCtx, []string{SettingKeyRequestResponseCaptureEnabled, SettingKeyRequestResponseCaptureMaxBodyBytes})
+		vals, err := s.settingRepo.GetMultiple(dbCtx, []string{
+			SettingKeyRequestResponseCaptureEnabled,
+			SettingKeyRequestResponseCaptureGroupID,
+			SettingKeyRequestResponseCaptureMaxBodyBytes,
+		})
 		if err != nil {
 			slog.Warn("failed to get request_response_capture settings, using config fallback", "error", err)
 			s.requestResponseCaptureCache.Store(&cachedRequestResponseCaptureSettings{settings: fallback, expiresAt: time.Now().Add(requestResponseCaptureSettingsErrorTTL).UnixNano()})
@@ -1149,9 +1153,9 @@ func (s *SettingService) GetRequestResponseCaptureSettings(ctx context.Context) 
 		if raw, ok := vals[SettingKeyRequestResponseCaptureEnabled]; ok && strings.TrimSpace(raw) != "" {
 			settings.Enabled = parseBoolSetting(raw, fallback.Enabled)
 		}
-		if raw, ok := vals[SettingKeyRequestResponseCaptureMaxBodyBytes]; ok && strings.TrimSpace(raw) != "" {
-			if parsed, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
-				settings.MaxBodyBytes = parsed
+		if raw, ok := vals[SettingKeyRequestResponseCaptureGroupID]; ok && strings.TrimSpace(raw) != "" {
+			if parsed, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil {
+				settings.GroupID = parsed
 			}
 		}
 		settings = normalizeRequestResponseCaptureSettings(settings)
@@ -1168,6 +1172,7 @@ func (s *SettingService) UpdateRequestResponseCaptureSettings(ctx context.Contex
 	settings = normalizeRequestResponseCaptureSettings(settings)
 	updates := map[string]string{
 		SettingKeyRequestResponseCaptureEnabled:      strconv.FormatBool(settings.Enabled),
+		SettingKeyRequestResponseCaptureGroupID:      strconv.FormatInt(settings.GroupID, 10),
 		SettingKeyRequestResponseCaptureMaxBodyBytes: strconv.Itoa(settings.MaxBodyBytes),
 	}
 	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {

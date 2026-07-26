@@ -25,8 +25,9 @@ func NewRequestResponseHandler(captureService *service.RequestResponseCaptureSer
 }
 
 type updateRequestResponseCaptureSettingsRequest struct {
-	Enabled      bool `json:"enabled"`
-	MaxBodyBytes int  `json:"max_body_bytes"`
+	Enabled      bool  `json:"enabled"`
+	GroupID      int64 `json:"group_id"`
+	MaxBodyBytes int   `json:"max_body_bytes"`
 }
 
 func (h *RequestResponseHandler) GetSettings(c *gin.Context) {
@@ -42,6 +43,7 @@ func (h *RequestResponseHandler) UpdateSettings(c *gin.Context) {
 	}
 	settings, err := h.settingService.UpdateRequestResponseCaptureSettings(c.Request.Context(), service.RequestResponseCaptureSettings{
 		Enabled:      req.Enabled,
+		GroupID:      req.GroupID,
 		MaxBodyBytes: req.MaxBodyBytes,
 	})
 	if err != nil {
@@ -127,8 +129,8 @@ func (h *RequestResponseHandler) Export(c *gin.Context) {
 			strconv.FormatBool(item.Stream),
 			strconv.Itoa(item.StatusCode),
 			strconv.FormatInt(item.DurationMs, 10),
-			strconv.Itoa(item.RequestBodyBytes),
-			strconv.Itoa(item.ResponseBodyBytes),
+			strconv.FormatInt(item.RequestBodyBytes, 10),
+			strconv.FormatInt(item.ResponseBodyBytes, 10),
 			strconv.FormatBool(item.RequestTruncated),
 			strconv.FormatBool(item.ResponseTruncated),
 			item.UserAgent,

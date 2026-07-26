@@ -155,6 +155,14 @@ gateway:
   # Max request body size in bytes (default: 256MB)
   # 请求体最大字节数（默认 256MB）
   max_body_size: 268435456
+  # Full request/response capture. group_id=0 captures every group.
+  # 全量请求/返回采集；group_id=0 表示采集全部分组。
+  request_response_capture:
+    enabled: true
+    group_id: 0
+    # Deprecated compatibility field. 0 means unlimited and bodies are never truncated.
+    # 已弃用的兼容字段；0 表示不限制，正文不会被截断。
+    max_body_bytes: 0
   # Max bytes to read for non-stream upstream responses (default: 8MB)
   # 非流式上游响应体读取上限（默认 8MB）
   upstream_response_read_max_bytes: 8388608

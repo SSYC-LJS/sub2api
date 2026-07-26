@@ -904,7 +904,8 @@ const adminNavItems = computed((): NavItem[] => {
         { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: CreditCardIcon },
       ],
     },
-    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
+    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
+    { path: '/admin/request-response-logs', label: t('nav.requestResponseLogs'), icon: ChartIcon }
   ]
 
   const visible = applyFeatureFlags(baseItems)
@@ -1177,4 +1178,3 @@ onMounted(() => {
   height: 1.25rem;
 }
 </style>
-

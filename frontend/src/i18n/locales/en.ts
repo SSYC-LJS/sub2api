@@ -1534,7 +1534,7 @@ export default {
   admin: {
     requestResponseLogs: {
       title: 'Request/Response Capture',
-      description: 'View user request input and upstream response snapshots',
+      description: 'View complete request and response data exchanged between users and the site',
     },
     // Dashboard
     dashboard: {

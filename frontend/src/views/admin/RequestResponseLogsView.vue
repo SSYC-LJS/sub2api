@@ -5,7 +5,7 @@
         <div>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">请求/返回采集</h1>
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            查看网关请求的用户入参和返回给用户的上游响应快照。
+            查看用户发送到站点的完整请求，以及站点返回给用户的完整数据。
           </p>
         </div>
         <div class="flex gap-2">
@@ -19,23 +19,29 @@
       </div>
 
       <section class="card p-4">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
           <div>
             <h2 class="text-base font-semibold text-gray-900 dark:text-white">采集设置</h2>
             <p class="mt-1 text-sm text-amber-600 dark:text-amber-300">
-              开启后会持久化用户输入和模型返回正文，可能包含隐私数据，请仅在需要排查/审计时开启。
+              开启后会全量持久化双向正文，可能包含隐私数据，请仅在需要排查或审计时开启。
             </p>
           </div>
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center 2xl:flex-nowrap">
+            <label class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
               <input v-model="settings.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
               启用采集
             </label>
-            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-              最大保存字节
-              <input v-model.number="settings.max_body_bytes" type="number" min="1024" max="1048576" step="1024" class="input w-32" />
+            <label class="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-200">
+              采集分组
+              <select v-model.number="settings.group_id" class="input w-full sm:w-56">
+                <option :value="0">全部分组</option>
+                <option v-for="group in groups" :key="group.id" :value="group.id">
+                  {{ group.name }}（{{ group.platform }}）{{ group.status === 'inactive' ? ' - 已停用' : '' }}
+                </option>
+              </select>
             </label>
-            <button class="btn btn-primary" type="button" :disabled="savingSettings" @click="saveSettings">
+            <span class="shrink-0 whitespace-nowrap text-sm font-medium text-emerald-700 dark:text-emerald-300">包体：全量</span>
+            <button class="btn btn-primary shrink-0 whitespace-nowrap" type="button" :disabled="savingSettings" @click="saveSettings">
               {{ savingSettings ? '保存中...' : '保存设置' }}
             </button>
           </div>
@@ -43,10 +49,15 @@
       </section>
 
       <section class="card p-4">
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           <input v-model="filters.user_id" class="input" placeholder="用户 ID" />
           <input v-model="filters.api_key_id" class="input" placeholder="API Key ID" />
-          <input v-model="filters.group_id" class="input" placeholder="分组 ID" />
+          <select v-model="filters.group_id" class="input">
+            <option value="">全部分组</option>
+            <option v-for="group in groups" :key="group.id" :value="String(group.id)">
+              {{ group.name }}（{{ group.platform }}）
+            </option>
+          </select>
           <input v-model="filters.endpoint" class="input" placeholder="Endpoint" />
           <input v-model="filters.model" class="input" placeholder="模型" />
           <input v-model="filters.search" class="input" placeholder="搜索正文/Request ID" />
@@ -82,7 +93,7 @@
                 <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{{ formatTime(log.created_at) }}</td>
                 <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
                   <div>U: {{ log.user_id }}</div>
-                  <div class="text-xs text-gray-500">K: {{ log.api_key_id }}<span v-if="log.group_id"> / G: {{ log.group_id }}</span></div>
+                  <div class="text-xs text-gray-500">K: {{ log.api_key_id }}<span v-if="log.group_id"> / {{ groupLabel(log.group_id) }}</span></div>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
                   <div class="font-medium">{{ log.method }} {{ log.path }}</div>
@@ -117,7 +128,7 @@
           </div>
           <div class="grid max-h-[78vh] grid-cols-1 gap-4 overflow-auto p-4 lg:grid-cols-2">
             <div>
-              <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">请求入参 <span v-if="selectedLog.request_truncated" class="text-amber-500">（已截断）</span></h4>
+              <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">用户 → 站点</h4>
               <pre v-if="detailLoading" class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-400 dark:bg-dark-800">加载中...</pre>
               <template v-else>
                 <div v-if="requestImageFiles.length" class="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -133,7 +144,7 @@
               </template>
             </div>
             <div>
-              <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">返回数据 <span v-if="selectedLog.response_truncated" class="text-amber-500">（已截断）</span></h4>
+              <h4 class="mb-2 font-medium text-gray-800 dark:text-gray-100">站点 → 用户</h4>
               <pre v-if="detailLoading" class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-400 dark:bg-dark-800">加载中...</pre>
               <pre v-else class="whitespace-pre-wrap break-all rounded-lg bg-gray-100 p-3 text-xs text-gray-800 dark:bg-dark-800 dark:text-gray-100">{{ prettyBody(selectedLog.response_body) }}</pre>
             </div>
@@ -149,6 +160,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { useAppStore } from '@/stores/app'
+import { getAllIncludingInactive } from '@/api/admin/groups'
+import type { AdminGroup } from '@/types'
 import {
   exportRequestResponseLogsUrl,
   getCaptureSettings,
@@ -167,7 +180,8 @@ const savingSettings = ref(false)
 const exporting = ref(false)
 const selectedLog = ref<RequestResponseLog | null>(null)
 const detailLoading = ref(false)
-const settings = reactive<RequestResponseCaptureSettings>({ enabled: false, max_body_bytes: 65536 })
+const groups = ref<AdminGroup[]>([])
+const settings = reactive<RequestResponseCaptureSettings>({ enabled: true, group_id: 0, max_body_bytes: 0 })
 const filters = reactive<Record<string, string>>({
   user_id: '',
   api_key_id: '',
@@ -227,7 +241,12 @@ function buildParams(): RequestResponseLogQueryParams {
 async function loadSettings() {
   const data = await getCaptureSettings()
   settings.enabled = data.enabled
-  settings.max_body_bytes = data.max_body_bytes
+  settings.group_id = data.group_id || 0
+  settings.max_body_bytes = 0
+}
+
+async function loadGroups() {
+  groups.value = await getAllIncludingInactive()
 }
 
 async function loadLogs() {
@@ -242,15 +261,20 @@ async function loadLogs() {
 }
 
 async function loadAll() {
-  await Promise.all([loadSettings(), loadLogs()])
+  await Promise.all([loadSettings(), loadGroups(), loadLogs()])
 }
 
 async function saveSettings() {
   savingSettings.value = true
   try {
-    const data = await updateCaptureSettings({ enabled: settings.enabled, max_body_bytes: Number(settings.max_body_bytes) || 65536 })
+    const data = await updateCaptureSettings({
+      enabled: settings.enabled,
+      group_id: Number(settings.group_id) || 0,
+      max_body_bytes: 0,
+    })
     settings.enabled = data.enabled
-    settings.max_body_bytes = data.max_body_bytes
+    settings.group_id = data.group_id || 0
+    settings.max_body_bytes = 0
     appStore.showSuccess('采集设置已保存')
   } catch (error) {
     appStore.showError('保存采集设置失败')
@@ -326,6 +350,11 @@ async function exportCSV() {
 function formatTime(value: string): string {
   if (!value) return '-'
   return new Date(value).toLocaleString()
+}
+
+function groupLabel(groupId: number): string {
+  const group = groups.value.find((item) => item.id === groupId)
+  return group ? `G: ${group.name}` : `G: ${groupId}`
 }
 
 function prettyBody(body: string): string {

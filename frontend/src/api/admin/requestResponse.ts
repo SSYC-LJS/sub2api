@@ -3,6 +3,8 @@ import type { PaginatedResponse } from '@/types'
 
 export interface RequestResponseCaptureSettings {
   enabled: boolean
+  group_id: number
+  /** Always 0: request and response bodies are captured without truncation. */
   max_body_bytes: number
 }
 
