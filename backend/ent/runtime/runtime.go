@@ -19,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitordailyrollup"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
+	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
@@ -865,6 +866,75 @@ func init() {
 	channelmonitorrequesttemplate.DefaultBodyOverrideMode = channelmonitorrequesttemplateDescBodyOverrideMode.Default.(string)
 	// channelmonitorrequesttemplate.BodyOverrideModeValidator is a validator for the "body_override_mode" field. It is called by the builders before save.
 	channelmonitorrequesttemplate.BodyOverrideModeValidator = channelmonitorrequesttemplateDescBodyOverrideMode.Validators[0].(func(string) error)
+	compositemodelrouteMixin := schema.CompositeModelRoute{}.Mixin()
+	compositemodelrouteMixinHooks1 := compositemodelrouteMixin[1].Hooks()
+	compositemodelroute.Hooks[0] = compositemodelrouteMixinHooks1[0]
+	compositemodelrouteMixinInters1 := compositemodelrouteMixin[1].Interceptors()
+	compositemodelroute.Interceptors[0] = compositemodelrouteMixinInters1[0]
+	compositemodelrouteMixinFields0 := compositemodelrouteMixin[0].Fields()
+	_ = compositemodelrouteMixinFields0
+	compositemodelrouteFields := schema.CompositeModelRoute{}.Fields()
+	_ = compositemodelrouteFields
+	// compositemodelrouteDescCreatedAt is the schema descriptor for created_at field.
+	compositemodelrouteDescCreatedAt := compositemodelrouteMixinFields0[0].Descriptor()
+	// compositemodelroute.DefaultCreatedAt holds the default value on creation for the created_at field.
+	compositemodelroute.DefaultCreatedAt = compositemodelrouteDescCreatedAt.Default.(func() time.Time)
+	// compositemodelrouteDescUpdatedAt is the schema descriptor for updated_at field.
+	compositemodelrouteDescUpdatedAt := compositemodelrouteMixinFields0[1].Descriptor()
+	// compositemodelroute.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	compositemodelroute.DefaultUpdatedAt = compositemodelrouteDescUpdatedAt.Default.(func() time.Time)
+	// compositemodelroute.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	compositemodelroute.UpdateDefaultUpdatedAt = compositemodelrouteDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// compositemodelrouteDescPublicModel is the schema descriptor for public_model field.
+	compositemodelrouteDescPublicModel := compositemodelrouteFields[1].Descriptor()
+	// compositemodelroute.PublicModelValidator is a validator for the "public_model" field. It is called by the builders before save.
+	compositemodelroute.PublicModelValidator = func() func(string) error {
+		validators := compositemodelrouteDescPublicModel.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(public_model string) error {
+			for _, fn := range fns {
+				if err := fn(public_model); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// compositemodelrouteDescMatchType is the schema descriptor for match_type field.
+	compositemodelrouteDescMatchType := compositemodelrouteFields[2].Descriptor()
+	// compositemodelroute.DefaultMatchType holds the default value on creation for the match_type field.
+	compositemodelroute.DefaultMatchType = compositemodelrouteDescMatchType.Default.(string)
+	// compositemodelroute.MatchTypeValidator is a validator for the "match_type" field. It is called by the builders before save.
+	compositemodelroute.MatchTypeValidator = compositemodelrouteDescMatchType.Validators[0].(func(string) error)
+	// compositemodelrouteDescTargetPlatform is the schema descriptor for target_platform field.
+	compositemodelrouteDescTargetPlatform := compositemodelrouteFields[3].Descriptor()
+	// compositemodelroute.DefaultTargetPlatform holds the default value on creation for the target_platform field.
+	compositemodelroute.DefaultTargetPlatform = compositemodelrouteDescTargetPlatform.Default.(string)
+	// compositemodelroute.TargetPlatformValidator is a validator for the "target_platform" field. It is called by the builders before save.
+	compositemodelroute.TargetPlatformValidator = compositemodelrouteDescTargetPlatform.Validators[0].(func(string) error)
+	// compositemodelrouteDescUpstreamModel is the schema descriptor for upstream_model field.
+	compositemodelrouteDescUpstreamModel := compositemodelrouteFields[4].Descriptor()
+	// compositemodelroute.DefaultUpstreamModel holds the default value on creation for the upstream_model field.
+	compositemodelroute.DefaultUpstreamModel = compositemodelrouteDescUpstreamModel.Default.(string)
+	// compositemodelroute.UpstreamModelValidator is a validator for the "upstream_model" field. It is called by the builders before save.
+	compositemodelroute.UpstreamModelValidator = compositemodelrouteDescUpstreamModel.Validators[0].(func(string) error)
+	// compositemodelrouteDescEndpoint is the schema descriptor for endpoint field.
+	compositemodelrouteDescEndpoint := compositemodelrouteFields[5].Descriptor()
+	// compositemodelroute.DefaultEndpoint holds the default value on creation for the endpoint field.
+	compositemodelroute.DefaultEndpoint = compositemodelrouteDescEndpoint.Default.(string)
+	// compositemodelroute.EndpointValidator is a validator for the "endpoint" field. It is called by the builders before save.
+	compositemodelroute.EndpointValidator = compositemodelrouteDescEndpoint.Validators[0].(func(string) error)
+	// compositemodelrouteDescPriority is the schema descriptor for priority field.
+	compositemodelrouteDescPriority := compositemodelrouteFields[6].Descriptor()
+	// compositemodelroute.DefaultPriority holds the default value on creation for the priority field.
+	compositemodelroute.DefaultPriority = compositemodelrouteDescPriority.Default.(int)
+	// compositemodelrouteDescEnabled is the schema descriptor for enabled field.
+	compositemodelrouteDescEnabled := compositemodelrouteFields[7].Descriptor()
+	// compositemodelroute.DefaultEnabled holds the default value on creation for the enabled field.
+	compositemodelroute.DefaultEnabled = compositemodelrouteDescEnabled.Default.(bool)
 	errorpassthroughruleMixin := schema.ErrorPassthroughRule{}.Mixin()
 	errorpassthroughruleMixinFields0 := errorpassthroughruleMixin[0].Fields()
 	_ = errorpassthroughruleMixinFields0
@@ -1005,6 +1075,10 @@ func init() {
 	group.DefaultStatus = groupDescStatus.Default.(string)
 	// group.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	group.StatusValidator = groupDescStatus.Validators[0].(func(string) error)
+	// groupDescDuplicateOperationID is the schema descriptor for duplicate_operation_id field.
+	groupDescDuplicateOperationID := groupFields[9].Descriptor()
+	// group.DuplicateOperationIDValidator is a validator for the "duplicate_operation_id" field. It is called by the builders before save.
+	group.DuplicateOperationIDValidator = groupDescDuplicateOperationID.Validators[0].(func(string) error)
 	// groupDescPlatform is the schema descriptor for platform field.
 	groupDescPlatform := groupFields[11].Descriptor()
 	// group.DefaultPlatform holds the default value on creation for the platform field.
@@ -1077,6 +1151,10 @@ func init() {
 	groupDescAllowMessagesDispatch := groupFields[39].Descriptor()
 	// group.DefaultAllowMessagesDispatch holds the default value on creation for the allow_messages_dispatch field.
 	group.DefaultAllowMessagesDispatch = groupDescAllowMessagesDispatch.Default.(bool)
+	// groupDescAllowLive is the schema descriptor for allow_live field.
+	groupDescAllowLive := groupFields[40].Descriptor()
+	// group.DefaultAllowLive holds the default value on creation for the allow_live field.
+	group.DefaultAllowLive = groupDescAllowLive.Default.(bool)
 	// groupDescRequireOauthOnly is the schema descriptor for require_oauth_only field.
 	groupDescRequireOauthOnly := groupFields[40].Descriptor()
 	// group.DefaultRequireOauthOnly holds the default value on creation for the require_oauth_only field.
@@ -1103,6 +1181,16 @@ func init() {
 	groupDescRpmLimit := groupFields[45].Descriptor()
 	// group.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	group.DefaultRpmLimit = groupDescRpmLimit.Default.(int)
+	// groupDescMaxReasoningEffort is the schema descriptor for max_reasoning_effort field.
+	groupDescMaxReasoningEffort := groupFields[47].Descriptor()
+	// group.DefaultMaxReasoningEffort holds the default value on creation for the max_reasoning_effort field.
+	group.DefaultMaxReasoningEffort = groupDescMaxReasoningEffort.Default.(string)
+	// group.MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
+	group.MaxReasoningEffortValidator = groupDescMaxReasoningEffort.Validators[0].(func(string) error)
+	// groupDescReasoningEffortMappings is the schema descriptor for reasoning_effort_mappings field.
+	groupDescReasoningEffortMappings := groupFields[48].Descriptor()
+	// group.DefaultReasoningEffortMappings holds the default value on creation for the reasoning_effort_mappings field.
+	group.DefaultReasoningEffortMappings = groupDescReasoningEffortMappings.Default.([]domain.ReasoningEffortMapping)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
 	idempotencyrecordMixinFields0 := idempotencyrecordMixin[0].Fields()
 	_ = idempotencyrecordMixinFields0
@@ -1728,40 +1816,46 @@ func init() {
 	subscriptionplanDescDescription := subscriptionplanFields[2].Descriptor()
 	// subscriptionplan.DefaultDescription holds the default value on creation for the description field.
 	subscriptionplan.DefaultDescription = subscriptionplanDescDescription.Default.(string)
+	// subscriptionplanDescCurrency is the schema descriptor for currency field.
+	subscriptionplanDescCurrency := subscriptionplanFields[5].Descriptor()
+	// subscriptionplan.DefaultCurrency holds the default value on creation for the currency field.
+	subscriptionplan.DefaultCurrency = subscriptionplanDescCurrency.Default.(string)
+	// subscriptionplan.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	subscriptionplan.CurrencyValidator = subscriptionplanDescCurrency.Validators[0].(func(string) error)
 	// subscriptionplanDescValidityDays is the schema descriptor for validity_days field.
-	subscriptionplanDescValidityDays := subscriptionplanFields[5].Descriptor()
+	subscriptionplanDescValidityDays := subscriptionplanFields[6].Descriptor()
 	// subscriptionplan.DefaultValidityDays holds the default value on creation for the validity_days field.
 	subscriptionplan.DefaultValidityDays = subscriptionplanDescValidityDays.Default.(int)
 	// subscriptionplanDescValidityUnit is the schema descriptor for validity_unit field.
-	subscriptionplanDescValidityUnit := subscriptionplanFields[6].Descriptor()
+	subscriptionplanDescValidityUnit := subscriptionplanFields[7].Descriptor()
 	// subscriptionplan.DefaultValidityUnit holds the default value on creation for the validity_unit field.
 	subscriptionplan.DefaultValidityUnit = subscriptionplanDescValidityUnit.Default.(string)
 	// subscriptionplan.ValidityUnitValidator is a validator for the "validity_unit" field. It is called by the builders before save.
 	subscriptionplan.ValidityUnitValidator = subscriptionplanDescValidityUnit.Validators[0].(func(string) error)
 	// subscriptionplanDescFeatures is the schema descriptor for features field.
-	subscriptionplanDescFeatures := subscriptionplanFields[7].Descriptor()
+	subscriptionplanDescFeatures := subscriptionplanFields[8].Descriptor()
 	// subscriptionplan.DefaultFeatures holds the default value on creation for the features field.
 	subscriptionplan.DefaultFeatures = subscriptionplanDescFeatures.Default.(string)
 	// subscriptionplanDescProductName is the schema descriptor for product_name field.
-	subscriptionplanDescProductName := subscriptionplanFields[8].Descriptor()
+	subscriptionplanDescProductName := subscriptionplanFields[9].Descriptor()
 	// subscriptionplan.DefaultProductName holds the default value on creation for the product_name field.
 	subscriptionplan.DefaultProductName = subscriptionplanDescProductName.Default.(string)
 	// subscriptionplan.ProductNameValidator is a validator for the "product_name" field. It is called by the builders before save.
 	subscriptionplan.ProductNameValidator = subscriptionplanDescProductName.Validators[0].(func(string) error)
 	// subscriptionplanDescForSale is the schema descriptor for for_sale field.
-	subscriptionplanDescForSale := subscriptionplanFields[9].Descriptor()
+	subscriptionplanDescForSale := subscriptionplanFields[10].Descriptor()
 	// subscriptionplan.DefaultForSale holds the default value on creation for the for_sale field.
 	subscriptionplan.DefaultForSale = subscriptionplanDescForSale.Default.(bool)
 	// subscriptionplanDescSortOrder is the schema descriptor for sort_order field.
-	subscriptionplanDescSortOrder := subscriptionplanFields[10].Descriptor()
+	subscriptionplanDescSortOrder := subscriptionplanFields[11].Descriptor()
 	// subscriptionplan.DefaultSortOrder holds the default value on creation for the sort_order field.
 	subscriptionplan.DefaultSortOrder = subscriptionplanDescSortOrder.Default.(int)
 	// subscriptionplanDescCreatedAt is the schema descriptor for created_at field.
-	subscriptionplanDescCreatedAt := subscriptionplanFields[11].Descriptor()
+	subscriptionplanDescCreatedAt := subscriptionplanFields[12].Descriptor()
 	// subscriptionplan.DefaultCreatedAt holds the default value on creation for the created_at field.
 	subscriptionplan.DefaultCreatedAt = subscriptionplanDescCreatedAt.Default.(func() time.Time)
 	// subscriptionplanDescUpdatedAt is the schema descriptor for updated_at field.
-	subscriptionplanDescUpdatedAt := subscriptionplanFields[12].Descriptor()
+	subscriptionplanDescUpdatedAt := subscriptionplanFields[13].Descriptor()
 	// subscriptionplan.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	subscriptionplan.DefaultUpdatedAt = subscriptionplanDescUpdatedAt.Default.(func() time.Time)
 	// subscriptionplan.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -1954,6 +2048,10 @@ func init() {
 	usagelogDescRateMultiplier := usagelogFields[28].Descriptor()
 	// usagelog.DefaultRateMultiplier holds the default value on creation for the rate_multiplier field.
 	usagelog.DefaultRateMultiplier = usagelogDescRateMultiplier.Default.(float64)
+	// usagelogDescLongContextBillingApplied is the schema descriptor for long_context_billing_applied field.
+	usagelogDescLongContextBillingApplied := usagelogFields[26].Descriptor()
+	// usagelog.DefaultLongContextBillingApplied holds the default value on creation for the long_context_billing_applied field.
+	usagelog.DefaultLongContextBillingApplied = usagelogDescLongContextBillingApplied.Default.(bool)
 	// usagelogDescBillingType is the schema descriptor for billing_type field.
 	usagelogDescBillingType := usagelogFields[30].Descriptor()
 	// usagelog.DefaultBillingType holds the default value on creation for the billing_type field.

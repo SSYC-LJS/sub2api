@@ -63,7 +63,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
-import type { DashboardStats } from '@/types/payment'
+import type { CurrencyAmounts, DashboardStats } from '@/types/payment'
 
 const { t } = useI18n()
 
@@ -71,7 +71,11 @@ defineProps<{
   stats: DashboardStats
 }>()
 
-function formatMoney(value: number): string {
-  return value.toFixed(2)
+function sortedAmounts(amounts: CurrencyAmounts): [string, number][] {
+  return Object.entries(amounts).sort(([left], [right]) => left.localeCompare(right))
+}
+
+function formatMoney(currency: string, amount: number): string {
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount)
 }
 </script>

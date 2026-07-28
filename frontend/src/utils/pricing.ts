@@ -6,8 +6,9 @@
  *   formatScaled(null,       1_000_000) → "-"
  *
  * Uses toPrecision(10) then strips trailing zeros to avoid IEEE 754 display noise.
+ * `minFractionDigits` pads the result back up to a minimum number of decimals.
  */
-export function formatScaled(value: number | null, scale: number): string {
+export function formatScaled(value: number | null, scale: number, minFractionDigits = 0): string {
   if (value == null) return '-'
   return `￥${(value * scale).toPrecision(10).replace(/\.?0+$/, '')}`
 }
