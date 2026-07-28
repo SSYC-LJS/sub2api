@@ -10,5 +10,14 @@
  */
 export function formatScaled(value: number | null, scale: number, minFractionDigits = 0): string {
   if (value == null) return '-'
-  return `￥${(value * scale).toPrecision(10).replace(/\.?0+$/, '')}`
+  let formatted = (value * scale).toPrecision(10).replace(/\.?0+$/, '')
+  if (minFractionDigits > 0 && !formatted.includes('e')) {
+    const decimalIndex = formatted.indexOf('.')
+    const fractionDigits = decimalIndex === -1 ? 0 : formatted.length - decimalIndex - 1
+    if (fractionDigits < minFractionDigits) {
+      formatted = (decimalIndex === -1 ? `${formatted}.` : formatted)
+        + '0'.repeat(minFractionDigits - fractionDigits)
+    }
+  }
+  return `￥${formatted}`
 }

@@ -206,7 +206,7 @@ func TestOpsCaptureWriterPool_DropsLargeBuffers(t *testing.T) {
 
 func TestEnqueueOpsErrorLog_SanitizesAndBoundsBodyBeforeQueue(t *testing.T) {
 	setupOpsErrorLogTestQueue(t, 1)
-	ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	secret := strings.Repeat("s", service.OpsErrorLogQueueBodyMaxBytes)
 	entry := &service.OpsInsertErrorLogInput{
 		ErrorPhase: "request",
@@ -257,7 +257,7 @@ func TestOpsErrorLoggerMiddleware_HardSkipsIngressRejection(t *testing.T) {
 
 	settings := &ingressRejectSettingRepo{}
 	repo := &ingressRejectOpsRepo{}
-	ops := service.NewOpsService(repo, settings, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	ops := service.NewOpsService(repo, settings, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	// Construction may read unrelated runtime settings; only request-path reads matter here.
 	settings.getValueCalls = 0
 
@@ -337,7 +337,7 @@ func TestLogOpsStreamError_UpstreamFailureCountsTowardsSLA(t *testing.T) {
 		http.StatusBadGateway,
 	)
 
-	ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	logOpsStreamError(c, ops, http.StatusOK)
 
 	job := <-opsErrorLogQueue

@@ -588,7 +588,7 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 		        created_at
 		    FROM usage_logs
 		    WHERE group_id = ANY($1)
-		      AND created_at >= NOW() - INTERVAL '7 days'
+		      AND created_at >= NOW() - INTERVAL '24 hours'
 		    UNION ALL
 		    SELECT
 		        group_id,
@@ -598,16 +598,14 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 		        created_at
 		    FROM ops_error_logs
 		    WHERE group_id = ANY($1)
-		      AND created_at >= NOW() - INTERVAL '7 days'
-		      AND COALESCE(is_business_limited, false) = false
+		      AND created_at >= NOW() - INTERVAL '24 hours'
+		      AND error_source = 'upstream_http'
 		), ranked AS (
 		    SELECT *, ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY created_at DESC) AS rn
 		    FROM events
 		), agg AS (
 		    SELECT
 		        group_id,
-		        COUNT(*) AS total,
-		        COUNT(*) FILTER (WHERE status = 'operational') AS ok,
 		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '1 hour') AS req_1h,
 		        COUNT(*) FILTER (WHERE status = 'operational' AND created_at >= NOW() - INTERVAL '1 hour') AS ok_1h,
 		        COUNT(*) FILTER (WHERE status = 'failed' AND created_at >= NOW() - INTERVAL '1 hour') AS err_1h,
@@ -625,7 +623,7 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 		    l.model,
 		    l.status,
 		    l.latency_ms,
-		    CASE WHEN a.total > 0 THEN (a.ok::float8 * 100.0 / a.total::float8) ELSE 0 END AS availability_7d,
+		    CASE WHEN a.req_12h > 0 THEN (a.ok_12h::float8 * 100.0 / a.req_12h::float8) ELSE 100 END AS availability_12h,
 		    a.req_1h, a.ok_1h, a.err_1h,
 		    a.req_12h, a.ok_12h, a.err_12h,
 		    a.req_24h, a.ok_24h, a.err_24h
@@ -642,7 +640,7 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 		stat := &service.RealUsageGroupMonitorStat{}
 		var latency sql.NullInt64
 		if err := rows.Scan(
-			&stat.GroupID, &stat.PrimaryModel, &stat.PrimaryStatus, &latency, &stat.Availability7d,
+			&stat.GroupID, &stat.PrimaryModel, &stat.PrimaryStatus, &latency, &stat.Availability12h,
 			&stat.WindowStats.Requests1h, &stat.WindowStats.Success1h, &stat.WindowStats.Errors1h,
 			&stat.WindowStats.Requests12h, &stat.WindowStats.Success12h, &stat.WindowStats.Errors12h,
 			&stat.WindowStats.Requests24h, &stat.WindowStats.Success24h, &stat.WindowStats.Errors24h,
@@ -663,7 +661,7 @@ func (r *channelMonitorRepository) ListRealUsageGroupMonitorStats(ctx context.Co
 	for groupID, points := range timeline {
 		stat := out[groupID]
 		if stat == nil {
-			stat = &service.RealUsageGroupMonitorStat{GroupID: groupID}
+			stat = &service.RealUsageGroupMonitorStat{GroupID: groupID, Availability12h: 100}
 			out[groupID] = stat
 		}
 		stat.Timeline = points
@@ -684,7 +682,7 @@ func (r *channelMonitorRepository) listRealUsageGroupTimeline(ctx context.Contex
 		    FROM ops_error_logs
 		    WHERE group_id = ANY($1)
 		      AND created_at >= NOW() - INTERVAL '7 days'
-		      AND COALESCE(is_business_limited, false) = false
+		      AND error_source = 'upstream_http'
 		), ranked AS (
 		    SELECT *, ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY created_at DESC) AS rn
 		    FROM events
@@ -733,7 +731,7 @@ func (r *channelMonitorRepository) GetRealUsageGroupMonitorDetail(ctx context.Co
 		    FROM ops_error_logs
 		    WHERE group_id = $1
 		      AND created_at >= NOW() - INTERVAL '30 days'
-		      AND COALESCE(is_business_limited, false) = false
+		      AND error_source = 'upstream_http'
 		), latest AS (
 		    SELECT DISTINCT ON (model) model, status, latency_ms
 		    FROM events
@@ -741,13 +739,9 @@ func (r *channelMonitorRepository) GetRealUsageGroupMonitorDetail(ctx context.Co
 		), agg AS (
 		    SELECT
 		        model,
-		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS total_7d,
-		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days' AND status = 'operational') AS ok_7d,
-		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '15 days') AS total_15d,
-		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '15 days' AND status = 'operational') AS ok_15d,
-		        COUNT(*) AS total_30d,
-		        COUNT(*) FILTER (WHERE status = 'operational') AS ok_30d,
-		        AVG(latency_ms) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days' AND latency_ms IS NOT NULL) AS avg_latency_7d
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '12 hours') AS total_12h,
+		        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '12 hours' AND status = 'operational') AS ok_12h,
+		        AVG(latency_ms) FILTER (WHERE created_at >= NOW() - INTERVAL '12 hours' AND latency_ms IS NOT NULL) AS avg_latency_12h
 		    FROM events
 		    GROUP BY model
 		)
@@ -755,13 +749,11 @@ func (r *channelMonitorRepository) GetRealUsageGroupMonitorDetail(ctx context.Co
 		    a.model,
 		    l.status,
 		    l.latency_ms,
-		    CASE WHEN a.total_7d > 0 THEN a.ok_7d::float8 * 100.0 / a.total_7d::float8 ELSE 0 END AS availability_7d,
-		    CASE WHEN a.total_15d > 0 THEN a.ok_15d::float8 * 100.0 / a.total_15d::float8 ELSE 0 END AS availability_15d,
-		    CASE WHEN a.total_30d > 0 THEN a.ok_30d::float8 * 100.0 / a.total_30d::float8 ELSE 0 END AS availability_30d,
-		    a.avg_latency_7d
+		    CASE WHEN a.total_12h > 0 THEN a.ok_12h::float8 * 100.0 / a.total_12h::float8 ELSE 100 END AS availability_12h,
+		    a.avg_latency_12h
 		FROM agg a
 		JOIN latest l ON l.model = a.model
-		ORDER BY a.total_7d DESC, a.model ASC
+		ORDER BY a.total_12h DESC, a.model ASC
 	`
 	rows, err := r.db.QueryContext(ctx, q, groupID)
 	if err != nil {
@@ -773,13 +765,13 @@ func (r *channelMonitorRepository) GetRealUsageGroupMonitorDetail(ctx context.Co
 		model := service.ModelDetail{}
 		var latestLatency sql.NullInt64
 		var avgLatency sql.NullFloat64
-		if err := rows.Scan(&model.Model, &model.LatestStatus, &latestLatency, &model.Availability7d, &model.Availability15d, &model.Availability30d, &avgLatency); err != nil {
+		if err := rows.Scan(&model.Model, &model.LatestStatus, &latestLatency, &model.Availability12h, &avgLatency); err != nil {
 			return nil, fmt.Errorf("scan real usage group detail: %w", err)
 		}
 		assignNullInt(&model.LatestLatencyMs, latestLatency)
 		if avgLatency.Valid {
 			v := int(avgLatency.Float64)
-			model.AvgLatency7dMs = &v
+			model.AvgLatency12hMs = &v
 		}
 		detail.Models = append(detail.Models, model)
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"runtime"
 	"runtime/debug"
@@ -562,63 +563,63 @@ func shouldPoolOpsCaptureWriter(w *opsCaptureWriter) bool {
 }
 
 func (w *opsCaptureWriter) Status() int {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return 0
 	}
 	return w.ResponseWriter.Status()
 }
 
 func (w *opsCaptureWriter) Size() int {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return -1
 	}
 	return w.ResponseWriter.Size()
 }
 
 func (w *opsCaptureWriter) Written() bool {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return false
 	}
 	return w.ResponseWriter.Written()
 }
 
 func (w *opsCaptureWriter) Header() http.Header {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return http.Header{}
 	}
 	return w.ResponseWriter.Header()
 }
 
 func (w *opsCaptureWriter) WriteHeader(code int) {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return
 	}
 	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *opsCaptureWriter) WriteHeaderNow() {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return
 	}
 	w.ResponseWriter.WriteHeaderNow()
 }
 
 func (w *opsCaptureWriter) Flush() {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return
 	}
 	w.ResponseWriter.Flush()
 }
 
 func (w *opsCaptureWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return nil, nil, errors.New("response writer released")
 	}
 	return w.ResponseWriter.Hijack()
 }
 
 func (w *opsCaptureWriter) CloseNotify() <-chan bool {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		ch := make(chan bool)
 		close(ch)
 		return ch
@@ -627,17 +628,29 @@ func (w *opsCaptureWriter) CloseNotify() <-chan bool {
 }
 
 func (w *opsCaptureWriter) Pusher() http.Pusher {
-	if w.ResponseWriter == nil {
+	if w == nil || w.ResponseWriter == nil {
 		return nil
 	}
 	return w.ResponseWriter.Pusher()
+}
+
+func (w *opsCaptureWriter) shouldCaptureBody() bool {
+	if w == nil || w.ResponseWriter == nil || w.limit <= 0 || w.buf.Len() >= w.limit {
+		return false
+	}
+	if w.ctx != nil {
+		if _, rejected := middleware2.GetIngressRejectReason(w.ctx); rejected {
+			return false
+		}
+	}
+	return w.Status() >= http.StatusBadRequest
 }
 
 func (w *opsCaptureWriter) Write(b []byte) (int, error) {
 	if w == nil || w.ResponseWriter == nil {
 		return 0, nil
 	}
-	if w.Status() >= 400 && w.limit > 0 && w.buf.Len() < w.limit {
+	if w.shouldCaptureBody() {
 		remaining := w.limit - w.buf.Len()
 		if len(b) > remaining {
 			_, _ = w.buf.Write(b[:remaining])
@@ -652,7 +665,7 @@ func (w *opsCaptureWriter) WriteString(s string) (int, error) {
 	if w == nil || w.ResponseWriter == nil {
 		return 0, nil
 	}
-	if w.Status() >= 400 && w.limit > 0 && w.buf.Len() < w.limit {
+	if w.shouldCaptureBody() {
 		remaining := w.limit - w.buf.Len()
 		if len(s) > remaining {
 			_, _ = w.buf.WriteString(s[:remaining])
@@ -661,24 +674,6 @@ func (w *opsCaptureWriter) WriteString(s string) (int, error) {
 		}
 	}
 	return w.ResponseWriter.WriteString(s)
-}
-
-// Status guards against nil ResponseWriter to prevent panics when the
-// wrapper has been released back to the pool but an outer middleware
-// still holds a reference to it.
-func (w *opsCaptureWriter) Status() int {
-	if w == nil || w.ResponseWriter == nil {
-		return http.StatusOK
-	}
-	return w.ResponseWriter.Status()
-}
-
-// Written guards against nil ResponseWriter for the same reason as Status.
-func (w *opsCaptureWriter) Written() bool {
-	if w == nil || w.ResponseWriter == nil {
-		return false
-	}
-	return w.ResponseWriter.Written()
 }
 
 // OpsErrorLoggerMiddleware records error responses (status >= 400) into ops_error_logs.

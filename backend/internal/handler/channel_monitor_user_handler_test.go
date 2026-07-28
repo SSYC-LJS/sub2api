@@ -8,15 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUserMonitorViewToItemIncludesWindowStats(t *testing.T) {
+func TestUserMonitorViewToItemIncludes12HourAvailabilityAndWindowStats(t *testing.T) {
 	item := userMonitorViewToItem(&service.UserMonitorView{
-		ID:             10,
-		Name:           "VIP Group",
-		Provider:       "openai",
-		GroupName:      "VIP Group",
-		PrimaryModel:   "gpt-4o",
-		PrimaryStatus:  "operational",
-		Availability7d: 99.5,
+		ID:              10,
+		Name:            "VIP Group",
+		Provider:        "openai",
+		GroupName:       "VIP Group",
+		PrimaryModel:    "gpt-4o",
+		PrimaryStatus:   "operational",
+		Availability12h: 99.5,
 		WindowStats: service.GroupWindowStats{
 			Requests1h:  11,
 			Success1h:   10,
@@ -45,7 +45,7 @@ func TestUserMonitorViewToItemIncludesWindowStats(t *testing.T) {
 		"primary_status":"operational",
 		"primary_latency_ms":null,
 		"primary_ping_latency_ms":null,
-		"availability_7d":99.5,
+		"availability_12h":99.5,
 		"window_stats":{
 			"requests_1h":11,
 			"success_1h":10,

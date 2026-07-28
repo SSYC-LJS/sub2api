@@ -13,6 +13,10 @@ export default {
         backup: '数据备份',
         payment: '支付设置',
       },
+      webhook: {
+        testSuccess: 'Webhook 测试成功',
+        testFailed: 'Webhook 测试失败'
+      },
       features: {
         channelMonitor: {
           title: '渠道监控',

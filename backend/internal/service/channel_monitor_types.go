@@ -135,6 +135,7 @@ type UserMonitorView struct {
 	PrimaryLatencyMs     *int
 	PrimaryPingLatencyMs *int    // 主模型最近一次 ping 延迟
 	Availability7d       float64 // 0-100
+	Availability12h      float64 // 0-100，无真实请求样本时为 100
 	WindowStats          GroupWindowStats
 	ExtraModels          []ExtraModelStatus
 	Timeline             []UserMonitorTimelinePoint // 主模型最近 N 个历史点（按 checked_at DESC，最新在前）
@@ -179,13 +180,13 @@ type GroupWindowStats struct {
 
 // RealUsageGroupMonitorStat 是基于真实用户请求日志聚合出来的分组健康状态。
 type RealUsageGroupMonitorStat struct {
-	GroupID        int64
-	PrimaryStatus  string
-	PrimaryModel   string
-	LatencyMs      *int
-	Availability7d float64
-	WindowStats    GroupWindowStats
-	Timeline       []UserMonitorTimelinePoint
+	GroupID         int64
+	PrimaryStatus   string
+	PrimaryModel    string
+	LatencyMs       *int
+	Availability12h float64
+	WindowStats     GroupWindowStats
+	Timeline        []UserMonitorTimelinePoint
 }
 
 // RealUsageGroupMonitorDetail 是某个分组按模型聚合的真实请求健康详情。
@@ -198,6 +199,8 @@ type ModelDetail struct {
 	Model           string
 	LatestStatus    string
 	LatestLatencyMs *int
+	Availability12h float64 // 0-100，无真实请求样本时为 100
+	AvgLatency12hMs *int
 	Availability7d  float64 // 0-100
 	Availability15d float64
 	Availability30d float64

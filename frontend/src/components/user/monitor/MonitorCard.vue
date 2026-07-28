@@ -93,7 +93,6 @@
 
     <!-- Availability row -->
     <MonitorAvailabilityRow
-      class="mt-3"
       :window-label="availabilityLabel"
       :value="availabilityValue"
       :samples-label="extraModelsCountLabel"
@@ -122,7 +121,6 @@ const PROVIDER_TINT: Record<string, string> = {
 
 const props = defineProps<{
   item: UserMonitorView
-  window: '7d' | '15d' | '30d'
   availabilityValue: number | null
   countdownSeconds: number
 }>()
@@ -145,8 +143,7 @@ const providerTintClass = computed(() =>
 )
 
 const availabilityLabel = computed(() => {
-  const win = t(`channelStatus.windowTab.${props.window}`)
-  return `${t('monitorCommon.availabilityPrefix')} · ${win}`
+  return `${t('monitorCommon.availabilityPrefix')} / ${t('channelStatus.windowTab.12h')}`
 })
 
 const extraModelsCountLabel = computed(() => {

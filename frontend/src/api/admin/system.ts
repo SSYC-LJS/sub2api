@@ -60,6 +60,22 @@ export interface UpdateStatus {
   finished_at?: string
 }
 
+export interface RollbackVersionInfo {
+  version: string
+  published_at: string
+  html_url: string
+}
+
+/**
+ * Get versions available for rollback (up to 3 versions older than current)
+ */
+export async function getRollbackVersions(): Promise<{ versions: RollbackVersionInfo[] }> {
+  const { data } = await apiClient.get<{ versions: RollbackVersionInfo[] }>(
+    '/admin/system/rollback-versions'
+  )
+  return data
+}
+
 /**
  * In-place update/rollback downloads a full release binary from GitHub, which
  * can take several minutes on slow links. The global 30s axios timeout would
@@ -85,10 +101,14 @@ export async function getUpdateStatus(operationId: string): Promise<UpdateStatus
 }
 
 /**
- * Rollback to previous version
+ * Rollback to a previous version
+ * @param version - Target version (e.g. "0.1.146"); omit to restore the local backup binary
  */
-export async function rollback(): Promise<UpdateResult> {
-  const { data } = await apiClient.post<UpdateResult>('/admin/system/rollback')
+export async function rollback(version?: string): Promise<UpdateResult> {
+  const { data } = await apiClient.post<UpdateResult>(
+    '/admin/system/rollback',
+    version ? { version } : undefined
+  )
   return data
 }
 
@@ -105,6 +125,7 @@ export const systemAPI = {
   checkUpdates,
   performUpdate,
   getUpdateStatus,
+  getRollbackVersions,
   rollback,
   restartService
 }

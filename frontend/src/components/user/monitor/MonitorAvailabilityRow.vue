@@ -26,7 +26,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { hslForPct } from '@/composables/useChannelMonitorFormat'
 
 const props = defineProps<{
@@ -35,15 +34,17 @@ const props = defineProps<{
   samplesLabel?: string
 }>()
 
-const { t } = useI18n()
+const normalizedValue = computed(() => {
+  if (props.value === null || Number.isNaN(props.value)) return 100
+  return props.value
+})
 
 const displayValue = computed(() => {
-  if (props.value === null || Number.isNaN(props.value)) return t('monitorCommon.latencyEmpty')
-  return props.value.toFixed(2)
+  return normalizedValue.value.toFixed(2)
 })
 
 const colorStyle = computed(() => {
-  const colour = hslForPct(props.value)
+  const colour = hslForPct(normalizedValue.value)
   return colour ? { color: colour } : { color: 'rgb(156 163 175)' }
 })
 </script>

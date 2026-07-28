@@ -127,9 +127,9 @@ const handleUpdateUser = async () => {
   try {
     const data: any = { email: form.email, username: form.username, notes: form.notes, concurrency: form.concurrency, rpm_limit: form.rpm_limit, is_parent_account: form.is_parent_account }
     if (form.password.trim()) data.password = form.password.trim()
-    await adminAPI.users.update(props.user.id, data)
-    if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(props.user.id, form.customAttributes)
-    if (authStore.user?.id === props.user.id) {
+    await stepUp.run(() => adminAPI.users.update(userId, data))
+    if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(userId, form.customAttributes)
+    if (authStore.user?.id === userId) {
       await authStore.refreshUser()
     }
     appStore.showSuccess(t('admin.users.userUpdated'))

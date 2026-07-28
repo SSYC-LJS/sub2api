@@ -44,6 +44,9 @@ type subAccountUserRepoStub struct {
 }
 
 func (s *subAccountUserRepoStub) Create(context.Context, *User) error { return nil }
+func (s *subAccountUserRepoStub) CreateWithEmailAliasGuard(context.Context, *User) error {
+	return nil
+}
 func (s *subAccountUserRepoStub) GetByID(_ context.Context, id int64) (*User, error) {
 	user, ok := s.users[id]
 	if !ok {
@@ -60,8 +63,8 @@ func (s *subAccountUserRepoStub) GetByEmail(context.Context, string) (*User, err
 func (s *subAccountUserRepoStub) GetFirstAdmin(context.Context) (*User, error) {
 	return nil, ErrUserNotFound
 }
-func (s *subAccountUserRepoStub) Update(context.Context, *User) error { return nil }
-func (s *subAccountUserRepoStub) Delete(context.Context, int64) error { return nil }
+func (s *subAccountUserRepoStub) Update(context.Context, *User, UserUpdateFields) error { return nil }
+func (s *subAccountUserRepoStub) Delete(context.Context, int64) error                   { return nil }
 func (s *subAccountUserRepoStub) GetUserAvatar(context.Context, int64) (*UserAvatar, error) {
 	return nil, nil
 }
@@ -86,6 +89,12 @@ func (s *subAccountUserRepoStub) UpdateUserLastActiveAt(context.Context, int64, 
 }
 func (s *subAccountUserRepoStub) UpdateBalance(context.Context, int64, float64) error { return nil }
 func (s *subAccountUserRepoStub) DeductBalance(context.Context, int64, float64) error { return nil }
+func (s *subAccountUserRepoStub) AdjustBalance(context.Context, int64, float64) (BalanceChange, error) {
+	return BalanceChange{}, nil
+}
+func (s *subAccountUserRepoStub) SetBalance(context.Context, int64, float64) (BalanceChange, error) {
+	return BalanceChange{}, nil
+}
 func (s *subAccountUserRepoStub) UpdateConcurrency(context.Context, int64, int) error { return nil }
 func (s *subAccountUserRepoStub) BatchSetConcurrency(context.Context, []int64, int) (int, error) {
 	return 0, nil
@@ -93,7 +102,13 @@ func (s *subAccountUserRepoStub) BatchSetConcurrency(context.Context, []int64, i
 func (s *subAccountUserRepoStub) BatchAddConcurrency(context.Context, []int64, int) (int, error) {
 	return 0, nil
 }
+func (s *subAccountUserRepoStub) BatchUpdateLimits(context.Context, []int64, *int, *int) (int, error) {
+	return 0, nil
+}
 func (s *subAccountUserRepoStub) ExistsByEmail(context.Context, string) (bool, error) {
+	return false, nil
+}
+func (s *subAccountUserRepoStub) ExistsByEmailAlias(context.Context, string) (bool, error) {
 	return false, nil
 }
 func (s *subAccountUserRepoStub) RemoveGroupFromAllowedGroups(context.Context, int64) (int64, error) {

@@ -455,9 +455,7 @@ export default {
     detailTitle: '渠道详情',
     closeDetail: '关闭',
     windowTab: {
-      '7d': '7 天',
-      '15d': '15 天',
-      '30d': '30 天'
+      '12h': '12 小时'
     },
     overall: {
       operational: 'OPERATIONAL',
@@ -469,17 +467,15 @@ export default {
       provider: '供应商',
       groupName: '分组',
       primaryModel: '主模型',
-      availability7d: '7 天可用率',
+      availability12h: '12 小时可用率',
       latency: '延迟 (ms)'
     },
     detailColumns: {
       model: '模型',
       latestStatus: '最新状态',
       latestLatency: '最新延迟 (ms)',
-      availability7d: '7 天可用率',
-      availability15d: '15 天可用率',
-      availability30d: '30 天可用率',
-      avgLatency7d: '7 天平均延迟 (ms)'
+      availability12h: '12 小时可用率',
+      avgLatency12h: '12 小时平均延迟 (ms)'
     },
     empty: {
       title: '暂无可显示的渠道',

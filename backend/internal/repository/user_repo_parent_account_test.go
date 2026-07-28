@@ -25,7 +25,7 @@ func TestUserRepositoryUpdatePersistsAndReloadsIsParentAccount(t *testing.T) {
 	require.False(t, user.IsParentAccount)
 
 	user.IsParentAccount = true
-	require.NoError(t, repo.Update(ctx, user))
+	require.NoError(t, repo.Update(ctx, user, service.UserUpdateFields{IsParentAccount: true}))
 
 	byID, err := repo.GetByID(ctx, user.ID)
 	require.NoError(t, err)

@@ -1042,6 +1042,14 @@ type GatewayOpenAIHTTP2Config struct {
 	FallbackTTLSeconds int `mapstructure:"fallback_ttl_seconds"`
 }
 
+// GatewayOpenAIProxyStreamCircuitConfig controls the bounded, in-process
+// proxy-ID circuit used for incomplete OpenAI Responses SSE streams.
+type GatewayOpenAIProxyStreamCircuitConfig struct {
+	FailureThreshold int `mapstructure:"failure_threshold"`
+	WindowSeconds    int `mapstructure:"window_seconds"`
+	TTLSeconds       int `mapstructure:"ttl_seconds"`
+}
+
 // GatewayRequestResponseCaptureConfig 请求/响应正文采集配置。
 type GatewayRequestResponseCaptureConfig struct {
 	// Enabled: 是否启用请求/响应正文采集。

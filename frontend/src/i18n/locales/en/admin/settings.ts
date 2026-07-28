@@ -13,6 +13,10 @@ export default {
         backup: 'Backup',
         payment: 'Payment',
       },
+      webhook: {
+        testSuccess: 'Webhook test succeeded',
+        testFailed: 'Webhook test failed'
+      },
       features: {
         channelMonitor: {
           title: 'Channel Monitor',
