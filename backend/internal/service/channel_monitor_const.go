@@ -71,7 +71,10 @@ const (
 	MonitorStatusFailed      = "failed"
 	MonitorStatusError       = "error"
 
-	// monitorAvailability7Days / 15 / 30 用于聚合查询窗口。
+	// monitorAvailability12Hours is the availability window shown in the UI.
+	monitorAvailability12Hours = 12
+
+	// Legacy day windows are retained for historical repository callers.
 	monitorAvailability7Days  = 7
 	monitorAvailability15Days = 15
 	monitorAvailability30Days = 30

@@ -141,7 +141,8 @@ func (h *SystemHandler) GetUpdateStatus(c *gin.Context) {
 }
 
 func (h *SystemHandler) runUpdateJob(lock *service.SystemOperationLock, release func(string, bool), operationID string) {
-	ctx := context.Background()
+	ctx, cancel := systemUpdateContext(context.Background())
+	defer cancel()
 	releaseReason := ""
 	succeeded := false
 	defer func() {

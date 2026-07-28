@@ -5,6 +5,41 @@ import (
 	"fmt"
 )
 
+func defaultAllowImageGenerationForPlatform(platform string) bool {
+	return platform == PlatformGrok
+}
+
+func compositeDefaultModelsListCandidateIDs() []string {
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformAntigravity, PlatformGrok} {
+		for _, id := range defaultModelsListCandidateIDs(platform) {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func canCopyAccountsFromGroupPlatform(targetPlatform, sourcePlatform string) bool {
+	if targetPlatform == PlatformComposite {
+		return sourcePlatform == PlatformComposite || isConcreteRequestPlatform(sourcePlatform)
+	}
+	return sourcePlatform == targetPlatform
+}
+
+func groupSupportsOAuthOnlyFilter(platform string) bool {
+	return platform == PlatformOpenAI ||
+		platform == PlatformAntigravity ||
+		platform == PlatformAnthropic ||
+		platform == PlatformGemini ||
+		platform == PlatformGrok ||
+		platform == PlatformComposite
+}
+
 func (s *adminServiceImpl) ListCompositeRoutes(ctx context.Context, groupID int64) ([]CompositeModelRoute, error) {
 	if err := s.requireCompositeGroup(ctx, groupID); err != nil {
 		return nil, err

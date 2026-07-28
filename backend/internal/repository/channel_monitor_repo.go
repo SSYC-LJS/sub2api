@@ -363,6 +363,44 @@ func (r *channelMonitorRepository) ComputeAvailability(ctx context.Context, moni
 	return out, rows.Err()
 }
 
+// ComputeAvailabilityHours computes availability over an hour-based window.
+// The hour form is used by the channel monitor UI so a 12-hour result does not
+// accidentally include the older 7-day history.
+func (r *channelMonitorRepository) ComputeAvailabilityHours(ctx context.Context, monitorID int64, windowHours int) ([]*service.ChannelMonitorAvailability, error) {
+	if windowHours <= 0 {
+		windowHours = 12
+	}
+	const q = `
+		SELECT model,
+		       COUNT(*) AS total,
+		       COUNT(*) FILTER (WHERE status IN ('operational','degraded')) AS ok,
+		       CASE WHEN COUNT(latency_ms) > 0
+		            THEN SUM(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::float8 / COUNT(latency_ms)
+		            ELSE NULL END AS avg_latency_ms
+		FROM channel_monitor_histories
+		WHERE monitor_id = $1
+		  AND checked_at >= NOW() - ($2::int || ' hours')::interval
+		GROUP BY model
+	`
+	rows, err := r.db.QueryContext(ctx, q, monitorID, windowHours)
+	if err != nil {
+		return nil, fmt.Errorf("query availability hours: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]*service.ChannelMonitorAvailability, 0)
+	for rows.Next() {
+		row := &service.ChannelMonitorAvailability{WindowHours: windowHours}
+		var avgLatency sql.NullFloat64
+		if err := rows.Scan(&row.Model, &row.TotalChecks, &row.OperationalChecks, &avgLatency); err != nil {
+			return nil, fmt.Errorf("scan availability hours row: %w", err)
+		}
+		finalizeAvailabilityRow(row, avgLatency)
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // scanAvailabilityRow 把单行 (model, total, ok, avg_latency) 扫描为 ChannelMonitorAvailability。
 // 仅服务于 ComputeAvailability（4 列）；批量版本因为多一列 monitor_id 直接 inline 调 finalizeAvailabilityRow。
 func scanAvailabilityRow(rows interface{ Scan(...any) error }, windowDays int) (*service.ChannelMonitorAvailability, error) {
@@ -563,6 +601,51 @@ func (r *channelMonitorRepository) ComputeAvailabilityForMonitors(ctx context.Co
 		}
 		// 批量查询多了首列 monitor_id；其余字段的可用率/平均延迟换算与单 monitor 版本一致，
 		// 抽出 finalizeAvailabilityRow 复用，避免两处分别维护除法与 NullFloat 解包。
+		finalizeAvailabilityRow(row, avgLatency)
+		out[monitorID] = append(out[monitorID], row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ComputeAvailabilityForMonitorsHours is the batch equivalent of
+// ComputeAvailabilityHours.
+func (r *channelMonitorRepository) ComputeAvailabilityForMonitorsHours(ctx context.Context, ids []int64, windowHours int) (map[int64][]*service.ChannelMonitorAvailability, error) {
+	out := make(map[int64][]*service.ChannelMonitorAvailability, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	if windowHours <= 0 {
+		windowHours = 12
+	}
+	const q = `
+		SELECT monitor_id,
+		       model,
+		       COUNT(*) AS total,
+		       COUNT(*) FILTER (WHERE status IN ('operational','degraded')) AS ok,
+		       CASE WHEN COUNT(latency_ms) > 0
+		            THEN SUM(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::float8 / COUNT(latency_ms)
+		            ELSE NULL END AS avg_latency_ms
+		FROM channel_monitor_histories
+		WHERE monitor_id = ANY($1)
+		  AND checked_at >= NOW() - ($2::int || ' hours')::interval
+		GROUP BY monitor_id, model
+	`
+	rows, err := r.db.QueryContext(ctx, q, pq.Array(ids), windowHours)
+	if err != nil {
+		return nil, fmt.Errorf("query availability batch hours: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var monitorID int64
+		row := &service.ChannelMonitorAvailability{WindowHours: windowHours}
+		var avgLatency sql.NullFloat64
+		if err := rows.Scan(&monitorID, &row.Model, &row.TotalChecks, &row.OperationalChecks, &avgLatency); err != nil {
+			return nil, fmt.Errorf("scan availability batch hours row: %w", err)
+		}
 		finalizeAvailabilityRow(row, avgLatency)
 		out[monitorID] = append(out[monitorID], row)
 	}

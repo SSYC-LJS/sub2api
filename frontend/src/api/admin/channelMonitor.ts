@@ -38,8 +38,8 @@ export interface ChannelMonitor {
   primary_status: MonitorStatus | ''
   /** Latest latency of the primary model in ms (null when no history yet) */
   primary_latency_ms: number | null
-  /** Primary model 7-day availability percentage (0-100) */
-  availability_7d: number
+  /** Primary model 12-hour availability percentage (0-100; defaults to 100 with no samples) */
+  availability_12h: number
   /** Latest status per extra model (used for hover tooltip) */
   extra_models_status: ExtraModelStatus[]
   /** 请求自定义快照字段（高级设置） */

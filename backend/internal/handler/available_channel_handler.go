@@ -59,6 +59,10 @@ type userAvailableGroup struct {
 	Platform            string  `json:"platform"`
 	SubscriptionType    string  `json:"subscription_type"`
 	RateMultiplier      float64 `json:"rate_multiplier"`
+	PeakRateEnabled     bool    `json:"peak_rate_enabled"`
+	PeakStart           string  `json:"peak_start"`
+	PeakEnd             string  `json:"peak_end"`
+	PeakRateMultiplier  float64 `json:"peak_rate_multiplier"`
 	RecommendationLabel string  `json:"recommendation_label"`
 	RecommendationStars int     `json:"recommendation_stars"`
 	IsExclusive         bool    `json:"is_exclusive"`
@@ -253,6 +257,10 @@ func filterUserVisibleGroups(
 			Platform:            g.Platform,
 			SubscriptionType:    g.SubscriptionType,
 			RateMultiplier:      g.RateMultiplier,
+			PeakRateEnabled:     g.PeakRateEnabled,
+			PeakStart:           g.PeakStart,
+			PeakEnd:             g.PeakEnd,
+			PeakRateMultiplier:  g.PeakRateMultiplier,
 			RecommendationLabel: g.RecommendationLabel,
 			RecommendationStars: g.RecommendationStars,
 			IsExclusive:         g.IsExclusive,

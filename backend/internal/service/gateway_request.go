@@ -229,6 +229,7 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
 	if maxTokensResult.Exists() && maxTokensResult.Type == gjson.Number {
 		f := maxTokensResult.Float()
 		if !math.IsNaN(f) && !math.IsInf(f, 0) && f == math.Trunc(f) &&
+			f <= float64(1<<53-1) && f >= float64(-(1<<53-1)) &&
 			f <= float64(math.MaxInt) && f >= float64(math.MinInt) {
 			parsed.MaxTokens = int(f)
 		}

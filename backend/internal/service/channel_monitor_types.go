@@ -124,7 +124,7 @@ type CheckResult struct {
 	CheckedAt     time.Time
 }
 
-// UserMonitorView 用户只读视图：监控概览（含主模型最近状态 + 7d 可用率 + 附加模型最近状态）。
+// UserMonitorView 用户只读视图：监控概览（含主模型最近状态 + 12h 可用率 + 附加模型最近状态）。
 type UserMonitorView struct {
 	ID                   int64
 	Name                 string
@@ -134,7 +134,6 @@ type UserMonitorView struct {
 	PrimaryStatus        string
 	PrimaryLatencyMs     *int
 	PrimaryPingLatencyMs *int    // 主模型最近一次 ping 延迟
-	Availability7d       float64 // 0-100
 	Availability12h      float64 // 0-100，无真实请求样本时为 100
 	WindowStats          GroupWindowStats
 	ExtraModels          []ExtraModelStatus
@@ -156,7 +155,7 @@ type ExtraModelStatus struct {
 	LatencyMs *int
 }
 
-// UserMonitorDetail 用户只读视图：监控详情（含全部模型 7d/15d/30d 可用率与平均延迟）。
+// UserMonitorDetail 用户只读视图：监控详情（含全部模型 12h 可用率与平均延迟）。
 type UserMonitorDetail struct {
 	ID        int64
 	Name      string
@@ -201,10 +200,6 @@ type ModelDetail struct {
 	LatestLatencyMs *int
 	Availability12h float64 // 0-100，无真实请求样本时为 100
 	AvgLatency12hMs *int
-	Availability7d  float64 // 0-100
-	Availability15d float64
-	Availability30d float64
-	AvgLatency7dMs  *int
 }
 
 // ChannelMonitorHistoryRow 历史记录入库行（service 层向 repository 提交的数据）。
@@ -242,6 +237,7 @@ type ChannelMonitorLatest struct {
 type ChannelMonitorAvailability struct {
 	Model             string
 	WindowDays        int
+	WindowHours       int
 	TotalChecks       int
 	OperationalChecks int // operational + degraded 视为可用
 	AvailabilityPct   float64
@@ -249,11 +245,11 @@ type ChannelMonitorAvailability struct {
 }
 
 // MonitorStatusSummary 监控状态聚合（admin list 用，单次 repo 查询消除前端 N+1）。
-// PrimaryStatus / PrimaryLatencyMs 描述主模型最近状态；Availability7d 是主模型 7 天可用率；
+// PrimaryStatus / PrimaryLatencyMs 描述主模型最近状态；Availability12h 是主模型 12 小时可用率；
 // ExtraModels 描述附加模型最近状态（用于 hover 展示）。
 type MonitorStatusSummary struct {
 	PrimaryStatus    string // 空字符串表示无历史
 	PrimaryLatencyMs *int
-	Availability7d   float64 // 0-100，无历史时为 0
+	Availability12h  float64 // 0-100，无历史时为 100
 	ExtraModels      []ExtraModelStatus
 }

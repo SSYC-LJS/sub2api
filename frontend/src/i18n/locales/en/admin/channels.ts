@@ -498,7 +498,7 @@ export default {
         name: 'Name',
         provider: 'Provider',
         primaryModel: 'Primary Model',
-        availability7d: '7d Availability',
+        availability12h: '12h Availability',
         latency: 'Latency (ms)',
         enabled: 'Enabled',
         actions: 'Actions'

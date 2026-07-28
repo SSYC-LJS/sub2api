@@ -138,23 +138,25 @@ func TestCaptureResponseWriter_DoesNotTruncateLargeResponse(t *testing.T) {
 func TestRequestResponseCaptureMiddleware_FiltersGroupAndCapturesGETResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tt := range []struct {
-		name        string
-		apiGroupID  int64
-		wantEntries int
+		name           string
+		captureGroupID int64
+		apiGroupID     *int64
+		wantEntries    int
 	}{
-		{name: "matching group", apiGroupID: 10, wantEntries: 1},
-		{name: "different group", apiGroupID: 20, wantEntries: 0},
+		{name: "matching group", captureGroupID: 10, apiGroupID: int64Pointer(10), wantEntries: 1},
+		{name: "different group", captureGroupID: 10, apiGroupID: int64Pointer(20), wantEntries: 0},
+		{name: "all groups includes grouped key", captureGroupID: 0, apiGroupID: int64Pointer(20), wantEntries: 1},
+		{name: "all groups includes ungrouped key", captureGroupID: 0, apiGroupID: nil, wantEntries: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &requestResponseLogRepoStub{}
 			captureService := service.NewRequestResponseCaptureService(repo, nil, requestResponseSettingsReaderStub{
-				settings: service.RequestResponseCaptureSettings{Enabled: true, GroupID: 10},
+				settings: service.RequestResponseCaptureSettings{Enabled: true, GroupID: tt.captureGroupID},
 			})
 			h := &GatewayHandler{requestResponseCaptureService: captureService}
 			router := gin.New()
 			router.Use(func(c *gin.Context) {
-				groupID := tt.apiGroupID
-				c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{ID: 3, UserID: 5, GroupID: &groupID})
+				c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{ID: 3, UserID: 5, GroupID: tt.apiGroupID})
 				c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 5})
 				c.Next()
 			})
@@ -176,4 +178,8 @@ func TestRequestResponseCaptureMiddleware_FiltersGroupAndCapturesGETResponse(t *
 			}
 		})
 	}
+}
+
+func int64Pointer(value int64) *int64 {
+	return &value
 }

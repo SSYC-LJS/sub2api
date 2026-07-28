@@ -833,12 +833,16 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	} else if s.settingService != nil {
 		balance = s.settingService.GetDefaultBalance(ctx)
 	}
+	role, err := normalizeUserRole(input.Role, RoleUser)
+	if err != nil {
+		return nil, err
+	}
 
 	user := &User{
 		Email:           input.Email,
 		Username:        input.Username,
 		Notes:           input.Notes,
-		Role:            RoleUser, // Always create as regular user, never admin
+		Role:            role,
 		Balance:         balance,
 		Concurrency:     input.Concurrency,
 		RPMLimit:        input.RPMLimit,
@@ -851,6 +855,10 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, err
+	}
+	if user.Role == RoleAdmin {
+		logger.LegacyPrintf("service.admin", "audit: admin user created actor_admin_id=%d target_user_id=%d",
+			input.ActorAdminID, user.ID)
 	}
 	s.assignDefaultSubscriptions(ctx, user.ID)
 	return user, nil
@@ -1967,7 +1975,7 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 		seen[model] = struct{}{}
 	}
 	for _, acc := range accounts {
-		if acc.Platform != platform {
+		if platform != PlatformComposite && acc.Platform != platform {
 			continue
 		}
 		for model := range acc.GetModelMapping() {
@@ -2004,6 +2012,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return ids
 	case PlatformGrok:
 		return xai.DefaultModelIDs()
+	case PlatformComposite:
+		return compositeDefaultModelsListCandidateIDs()
 	default:
 		ids := make([]string, 0, len(claude.DefaultModels))
 		for _, model := range claude.DefaultModels {
@@ -2024,6 +2034,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if platform == "" {
 		platform = PlatformAnthropic
 	}
+	maxReasoningEffort, err := normalizeMaxReasoningEffortForPlatform(platform, input.MaxReasoningEffort)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_MAX_REASONING_EFFORT", "%v", err)
+	}
+	reasoningEffortMappings, err := NormalizeReasoningEffortMappings(platform, input.ReasoningEffortMappings)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_REASONING_EFFORT_MAPPING", "%v", err)
+	}
 
 	subscriptionType := input.SubscriptionType
 	if subscriptionType == "" {
@@ -2039,6 +2057,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	imagePrice1K := normalizePrice(input.ImagePrice1K)
 	imagePrice2K := normalizePrice(input.ImagePrice2K)
 	imagePrice4K := normalizePrice(input.ImagePrice4K)
+	videoPrice480P := normalizePrice(input.VideoPrice480P)
+	videoPrice720P := normalizePrice(input.VideoPrice720P)
+	videoPrice1080P := normalizePrice(input.VideoPrice1080P)
 	webSearchPricePerCall := normalizePrice(input.WebSearchPricePerCall)
 	imageRateMultiplier := 1.0
 	if input.ImageRateMultiplier != nil {
@@ -2046,6 +2067,45 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 			return nil, errors.New("image_rate_multiplier must be >= 0")
 		}
 		imageRateMultiplier = *input.ImageRateMultiplier
+	}
+	batchImageDiscountMultiplier := defaultBatchImageDiscountMultiplier
+	if input.BatchImageDiscountMultiplier != nil {
+		if *input.BatchImageDiscountMultiplier < 0 {
+			return nil, errors.New("batch_image_discount_multiplier must be >= 0")
+		}
+		batchImageDiscountMultiplier = *input.BatchImageDiscountMultiplier
+	}
+	batchImageHoldMultiplier := defaultBatchImageHoldMultiplier
+	if input.BatchImageHoldMultiplier != nil {
+		if *input.BatchImageHoldMultiplier < 0 {
+			return nil, errors.New("batch_image_hold_multiplier must be >= 0")
+		}
+		batchImageHoldMultiplier = *input.BatchImageHoldMultiplier
+	}
+	if batchImageHoldMultiplier < batchImageDiscountMultiplier {
+		return nil, errors.New("batch_image_hold_multiplier must be >= batch_image_discount_multiplier")
+	}
+	videoRateMultiplier := 1.0
+	if input.VideoRateMultiplier != nil {
+		if *input.VideoRateMultiplier < 0 {
+			return nil, errors.New("video_rate_multiplier must be >= 0")
+		}
+		videoRateMultiplier = *input.VideoRateMultiplier
+	}
+
+	peakRateMultiplier := 1.0
+	if input.PeakRateMultiplier != nil {
+		peakRateMultiplier = *input.PeakRateMultiplier
+	}
+	peakRateEnabled, peakStart, peakEnd, peakRateMultiplier := NormalizePeakRateConfig(
+		subscriptionType,
+		input.PeakRateEnabled,
+		input.PeakStart,
+		input.PeakEnd,
+		peakRateMultiplier,
+	)
+	if err := ValidatePeakRateConfig(subscriptionType, peakRateEnabled, peakStart, peakEnd, peakRateMultiplier); err != nil {
+		return nil, err
 	}
 
 	// 校验降级分组
@@ -2090,7 +2150,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 			if err != nil {
 				return nil, fmt.Errorf("source group %d not found: %w", srcGroupID, err)
 			}
-			if srcGroup.Platform != platform {
+			if !canCopyAccountsFromGroupPlatform(platform, srcGroup.Platform) {
 				return nil, fmt.Errorf("source group %d platform mismatch: expected %s, got %s", srcGroupID, platform, srcGroup.Platform)
 			}
 		}
@@ -2102,6 +2162,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 			return nil, fmt.Errorf("failed to get accounts from source groups: %w", err)
 		}
 	}
+
+	allowImageGeneration := input.AllowImageGeneration || defaultAllowImageGenerationForPlatform(platform)
+	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && platform == PlatformGemini
 
 	group := &Group{
 		Name:                            input.Name,
@@ -2116,12 +2179,24 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		DailyLimitUSD:                   dailyLimit,
 		WeeklyLimitUSD:                  weeklyLimit,
 		MonthlyLimitUSD:                 monthlyLimit,
-		AllowImageGeneration:            input.AllowImageGeneration,
+		AllowImageGeneration:            allowImageGeneration,
+		AllowBatchImageGeneration:       allowBatchImageGeneration,
 		ImageRateIndependent:            input.ImageRateIndependent,
 		ImageRateMultiplier:             imageRateMultiplier,
+		BatchImageDiscountMultiplier:    batchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:        batchImageHoldMultiplier,
+		VideoRateIndependent:            input.VideoRateIndependent,
+		VideoRateMultiplier:             videoRateMultiplier,
+		PeakRateEnabled:                 peakRateEnabled,
+		PeakStart:                       peakStart,
+		PeakEnd:                         peakEnd,
+		PeakRateMultiplier:              peakRateMultiplier,
 		ImagePrice1K:                    imagePrice1K,
 		ImagePrice2K:                    imagePrice2K,
 		ImagePrice4K:                    imagePrice4K,
+		VideoPrice480P:                  videoPrice480P,
+		VideoPrice720P:                  videoPrice720P,
+		VideoPrice1080P:                 videoPrice1080P,
 		WebSearchPricePerCall:           webSearchPricePerCall,
 		ClaudeCodeOnly:                  input.ClaudeCodeOnly,
 		FallbackGroupID:                 input.FallbackGroupID,
@@ -2130,20 +2205,27 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MCPXMLInject:                    mcpXMLInject,
 		SupportedModelScopes:            input.SupportedModelScopes,
 		AllowMessagesDispatch:           input.AllowMessagesDispatch,
+		AllowLive:                       input.AllowLive,
 		RequireOAuthOnly:                input.RequireOAuthOnly,
 		RequirePrivacySet:               input.RequirePrivacySet,
 		DefaultMappedModel:              input.DefaultMappedModel,
 		MessagesDispatchModelConfig:     normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
 		ModelsListConfig:                normalizeGroupModelsListConfig(input.ModelsListConfig),
 		RPMLimit:                        input.RPMLimit,
+		MaxReasoningEffort:              maxReasoningEffort,
+		ReasoningEffortMappings:         reasoningEffortMappings,
 	}
 	sanitizeGroupMessagesDispatchFields(group)
+	if group.Platform != PlatformOpenAI {
+		group.AllowLive = false
+	}
+	sanitizeGroupReasoningEffortPolicy(group)
 	if err := s.groupRepo.Create(ctx, group); err != nil {
 		return nil, err
 	}
 
 	// require_oauth_only: 过滤掉 apikey 类型账号
-	if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok) && len(accountIDsToCopy) > 0 {
+	if group.RequireOAuthOnly && groupSupportsOAuthOnlyFilter(group.Platform) && len(accountIDsToCopy) > 0 {
 		accounts, err := s.accountRepo.GetByIDs(ctx, accountIDsToCopy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch accounts for oauth filter: %w", err)
@@ -2319,6 +2401,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
 	}
+	if input.AllowBatchImageGeneration != nil {
+		group.AllowBatchImageGeneration = *input.AllowBatchImageGeneration
+	}
+	if !group.AllowImageGeneration || group.Platform != PlatformGemini {
+		group.AllowBatchImageGeneration = false
+	}
 	if input.ImageRateIndependent != nil {
 		group.ImageRateIndependent = *input.ImageRateIndependent
 	}
@@ -2328,6 +2416,53 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		}
 		group.ImageRateMultiplier = *input.ImageRateMultiplier
 	}
+	if input.BatchImageDiscountMultiplier != nil {
+		if *input.BatchImageDiscountMultiplier < 0 {
+			return nil, errors.New("batch_image_discount_multiplier must be >= 0")
+		}
+		group.BatchImageDiscountMultiplier = *input.BatchImageDiscountMultiplier
+	}
+	if input.BatchImageHoldMultiplier != nil {
+		if *input.BatchImageHoldMultiplier < 0 {
+			return nil, errors.New("batch_image_hold_multiplier must be >= 0")
+		}
+		group.BatchImageHoldMultiplier = *input.BatchImageHoldMultiplier
+	}
+	if (input.BatchImageDiscountMultiplier != nil || input.BatchImageHoldMultiplier != nil) &&
+		group.BatchImageHoldMultiplier < group.BatchImageDiscountMultiplier {
+		return nil, errors.New("batch_image_hold_multiplier must be >= batch_image_discount_multiplier")
+	}
+	if input.VideoRateIndependent != nil {
+		group.VideoRateIndependent = *input.VideoRateIndependent
+	}
+	if input.VideoRateMultiplier != nil {
+		if *input.VideoRateMultiplier < 0 {
+			return nil, errors.New("video_rate_multiplier must be >= 0")
+		}
+		group.VideoRateMultiplier = *input.VideoRateMultiplier
+	}
+	if input.PeakRateEnabled != nil {
+		group.PeakRateEnabled = *input.PeakRateEnabled
+	}
+	if input.PeakStart != nil {
+		group.PeakStart = *input.PeakStart
+	}
+	if input.PeakEnd != nil {
+		group.PeakEnd = *input.PeakEnd
+	}
+	if input.PeakRateMultiplier != nil {
+		group.PeakRateMultiplier = *input.PeakRateMultiplier
+	}
+	group.PeakRateEnabled, group.PeakStart, group.PeakEnd, group.PeakRateMultiplier = NormalizePeakRateConfig(
+		group.SubscriptionType,
+		group.PeakRateEnabled,
+		group.PeakStart,
+		group.PeakEnd,
+		group.PeakRateMultiplier,
+	)
+	if err := ValidatePeakRateConfig(group.SubscriptionType, group.PeakRateEnabled, group.PeakStart, group.PeakEnd, group.PeakRateMultiplier); err != nil {
+		return nil, err
+	}
 	if input.ImagePrice1K != nil {
 		group.ImagePrice1K = normalizePrice(input.ImagePrice1K)
 	}
@@ -2336,6 +2471,15 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.ImagePrice4K != nil {
 		group.ImagePrice4K = normalizePrice(input.ImagePrice4K)
+	}
+	if input.VideoPrice480P != nil {
+		group.VideoPrice480P = normalizePrice(input.VideoPrice480P)
+	}
+	if input.VideoPrice720P != nil {
+		group.VideoPrice720P = normalizePrice(input.VideoPrice720P)
+	}
+	if input.VideoPrice1080P != nil {
+		group.VideoPrice1080P = normalizePrice(input.VideoPrice1080P)
 	}
 	if input.WebSearchPricePerCall != nil {
 		group.WebSearchPricePerCall = normalizePrice(input.WebSearchPricePerCall)
@@ -2392,6 +2536,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.AllowMessagesDispatch != nil {
 		group.AllowMessagesDispatch = *input.AllowMessagesDispatch
 	}
+	if input.AllowLive != nil {
+		group.AllowLive = *input.AllowLive
+	}
 	if input.RequireOAuthOnly != nil {
 		group.RequireOAuthOnly = *input.RequireOAuthOnly
 	}
@@ -2410,7 +2557,25 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.RPMLimit != nil {
 		group.RPMLimit = *input.RPMLimit
 	}
+	if input.MaxReasoningEffort != nil {
+		maxReasoningEffort, err := normalizeMaxReasoningEffortForPlatform(group.Platform, *input.MaxReasoningEffort)
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_MAX_REASONING_EFFORT", "%v", err)
+		}
+		group.MaxReasoningEffort = maxReasoningEffort
+	}
+	if input.ReasoningEffortMappings != nil {
+		reasoningEffortMappings, err := NormalizeReasoningEffortMappings(group.Platform, *input.ReasoningEffortMappings)
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadRequest, "INVALID_REASONING_EFFORT_MAPPING", "%v", err)
+		}
+		group.ReasoningEffortMappings = reasoningEffortMappings
+	}
 	sanitizeGroupMessagesDispatchFields(group)
+	if group.Platform != PlatformOpenAI {
+		group.AllowLive = false
+	}
+	sanitizeGroupReasoningEffortPolicy(group)
 
 	if err := s.groupRepo.Update(ctx, group); err != nil {
 		return nil, err
@@ -2443,7 +2608,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			if err != nil {
 				return nil, fmt.Errorf("source group %d not found: %w", srcGroupID, err)
 			}
-			if srcGroup.Platform != group.Platform {
+			if !canCopyAccountsFromGroupPlatform(group.Platform, srcGroup.Platform) {
 				return nil, fmt.Errorf("source group %d platform mismatch: expected %s, got %s", srcGroupID, group.Platform, srcGroup.Platform)
 			}
 		}
@@ -2460,7 +2625,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		}
 
 		// require_oauth_only: 过滤掉 apikey 类型账号
-		if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok) && len(accountIDsToCopy) > 0 {
+		if group.RequireOAuthOnly && groupSupportsOAuthOnlyFilter(group.Platform) && len(accountIDsToCopy) > 0 {
 			accounts, err := s.accountRepo.GetByIDs(ctx, accountIDsToCopy)
 			if err != nil {
 				return nil, fmt.Errorf("failed to fetch accounts for oauth filter: %w", err)
@@ -2841,9 +3006,6 @@ func (s *adminServiceImpl) GetAccountsByIDs(ctx context.Context, ids []int64) ([
 func normalizeAccountConcurrency(platform, accountType string, concurrency int) int {
 	if platform == PlatformGrok && accountType == AccountTypeOAuth {
 		if concurrency <= 0 {
-			return 1
-		}
-		if concurrency > 1 && !xai.AllowUnsafeHighConcurrency() {
 			return 1
 		}
 	}
@@ -3663,6 +3825,9 @@ func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opt
 		Priority:        priority,
 		Concurrency:     concurrency,
 		Schedulable:     true,
+		Extra: map[string]any{
+			openAILongContextBillingEnabledKey: parent.IsOpenAILongContextBillingEnabled(),
+		},
 	}
 
 	// 5. 持久化（Create 填充 shadow.ID）。并发竞态:预查(步骤2)放行后另一请求抢先建成,本次会撞

@@ -31,6 +31,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
@@ -1538,7 +1539,7 @@ func (s *GatewayService) applyClaudeCodeOAuthMimicryToBody(
 
 	systemPromptInjectionEnabled, systemPrompt, systemPromptBlocks := s.claudeOAuthSystemPromptInjectionSettings(ctx)
 	systemRewritten := false
-	if systemPromptInjectionEnabled && !strings.Contains(strings.ToLower(model), "haiku") {
+	if systemPromptInjectionEnabled {
 		body = rewriteSystemForNonClaudeCodeWithPromptBlocks(body, normalizeSystemParam(systemRaw), systemPrompt, systemPromptBlocks)
 		systemRewritten = true
 	}
@@ -5027,7 +5028,14 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	// 最低缓存门槛，导致系统级缓存失效）。
 	//
 	// 对于非 Claude Code 的第三方客户端（opencode 等），仍然走完整 mimicry。
-	isClaudeCode := IsClaudeCodeClient(ctx) || isClaudeCodeClient(c.GetHeader("User-Agent"), parsed.MetadataUserID)
+	clientUserAgent := ""
+	if c != nil {
+		clientUserAgent = c.GetHeader("User-Agent")
+	}
+	isClaudeCode := IsClaudeCodeClient(ctx) || isClaudeCodeClient(clientUserAgent, parsed.MetadataUserID)
+	if !isClaudeCode && parsed.MetadataUserID != "" {
+		isClaudeCode = systemHasBillingAttributionBlock(body)
+	}
 	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCode
 
 	if shouldMimicClaudeCode {
@@ -9539,10 +9547,13 @@ func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usage
 	if writer, ok := repo.(usageLogBestEffortWriter); ok {
 		if err := writer.CreateBestEffort(usageCtx, usageLog); err != nil {
 			logger.LegacyPrintf(logKey, "Create usage log failed: %v", err)
-			if IsUsageLogCreateDropped(err) {
-				return
+			fallbackCtx := usageCtx
+			if usageCtx.Err() != nil {
+				var fallbackCancel context.CancelFunc
+				fallbackCtx, fallbackCancel = detachedBillingContext(context.Background())
+				defer fallbackCancel()
 			}
-			if _, syncErr := repo.Create(usageCtx, usageLog); syncErr != nil {
+			if _, syncErr := repo.Create(fallbackCtx, usageLog); syncErr != nil {
 				logger.LegacyPrintf(logKey, "Create usage log sync fallback failed: %v", syncErr)
 			}
 		}
@@ -9683,16 +9694,21 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		groupDefault := apiKey.Group.RateMultiplier
 		multiplier = s.getUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
 	}
-	imageMultiplier := resolveImageRateMultiplier(apiKey, multiplier)
+	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, multiplier, timezone.Now())
 
 	// 确定计费模型
-	billingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
+	concreteBillingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
+	billingModel := concreteBillingModel
 	if input.BillingModelSource == BillingModelSourceChannelMapped && input.ChannelMappedModel != "" {
 		billingModel = input.ChannelMappedModel
 	}
 	if input.BillingModelSource == BillingModelSourceRequested && input.OriginalModel != "" {
 		billingModel = input.OriginalModel
 	}
+	if apiKey.Group != nil && apiKey.Group.Platform == PlatformComposite {
+		billingModel = s.compositeBillableModel(ctx, apiKey, billingModel, concreteBillingModel)
+	}
+	billingModel = s.billableModelWithFallback(ctx, apiKey, billingModel, result.UpstreamModel, result.Model)
 
 	// 确定 RequestedModel（渠道映射前的原始模型）
 	requestedModel := result.Model
@@ -9788,6 +9804,19 @@ func (s *GatewayService) calculateRecordUsageCost(
 
 	// Token 计费
 	return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, opts)
+}
+
+// compositeBillableModel keeps composite aliases on an explicitly configured
+// channel price, while avoiding family-prefix matches when no alias price exists.
+func (s *GatewayService) compositeBillableModel(ctx context.Context, apiKey *APIKey, billingModel, concreteBillingModel string) string {
+	if concreteBillingModel == "" || billingModel == concreteBillingModel {
+		return billingModel
+	}
+	if s.resolveChannelPricing(ctx, billingModel, apiKey) != nil {
+		return billingModel
+	}
+	logger.LegacyPrintf("service.gateway", "[Billing] composite billing model %q has no explicit channel pricing, billing by concrete model %q", billingModel, concreteBillingModel)
+	return concreteBillingModel
 }
 
 // resolveChannelPricing 检查指定模型是否存在渠道级别定价。

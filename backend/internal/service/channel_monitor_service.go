@@ -38,10 +38,12 @@ type ChannelMonitorRepository interface {
 	// 用户视图聚合
 	ListLatestPerModel(ctx context.Context, monitorID int64) ([]*ChannelMonitorLatest, error)
 	ComputeAvailability(ctx context.Context, monitorID int64, windowDays int) ([]*ChannelMonitorAvailability, error)
+	ComputeAvailabilityHours(ctx context.Context, monitorID int64, windowHours int) ([]*ChannelMonitorAvailability, error)
 
 	// 批量聚合（admin/user list 用，避免 N+1）
 	ListLatestForMonitorIDs(ctx context.Context, ids []int64) (map[int64][]*ChannelMonitorLatest, error)
 	ComputeAvailabilityForMonitors(ctx context.Context, ids []int64, windowDays int) (map[int64][]*ChannelMonitorAvailability, error)
+	ComputeAvailabilityForMonitorsHours(ctx context.Context, ids []int64, windowHours int) (map[int64][]*ChannelMonitorAvailability, error)
 	ListRealUsageGroupMonitorStats(ctx context.Context, groupIDs []int64) (map[int64]*RealUsageGroupMonitorStat, error)
 	GetRealUsageGroupMonitorDetail(ctx context.Context, groupID int64) (*RealUsageGroupMonitorDetail, error)
 	// ListRecentHistoryForMonitors 批量取多个 monitor 各自主模型（primaryModels[monitorID]）最近 perMonitorLimit 条历史。

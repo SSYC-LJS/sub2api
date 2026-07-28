@@ -94,7 +94,7 @@ type channelMonitorResponse struct {
 	UpdatedAt           string                               `json:"updated_at"`
 	PrimaryStatus       string                               `json:"primary_status"`
 	PrimaryLatencyMs    *int                                 `json:"primary_latency_ms"`
-	Availability7d      float64                              `json:"availability_7d"`
+	Availability12h     float64                              `json:"availability_12h"`
 	ExtraModelsStatus   []dto.ChannelMonitorExtraModelStatus `json:"extra_models_status"`
 	// 请求自定义快照：前端编辑 / 展示「高级设置」用
 	TemplateID       *int64            `json:"template_id"`
@@ -163,7 +163,8 @@ func channelMonitorToResponse(m *service.ChannelMonitor) *channelMonitorResponse
 		ExtraHeaders:        headers,
 		BodyOverrideMode:    m.BodyOverrideMode,
 		BodyOverride:        m.BodyOverride,
-		// PrimaryStatus / PrimaryLatencyMs / Availability7d 由 List handler 在批量聚合后填充。
+		Availability12h:     100,
+		// PrimaryStatus / PrimaryLatencyMs / Availability12h 由 List handler 在批量聚合后填充。
 	}
 	if m.LastCheckedAt != nil {
 		s := m.LastCheckedAt.UTC().Format(time.RFC3339)
@@ -251,7 +252,7 @@ func (h *ChannelMonitorHandler) List(c *gin.Context) {
 	response.Paginated(c, out, total, page, pageSize)
 }
 
-// batchSummaryFor 批量聚合 latest + 7d 可用率，避免每行 2 次 SQL（消除 N+1）。
+// batchSummaryFor 批量聚合 latest + 12h 可用率，避免每行 2 次 SQL（消除 N+1）。
 func (h *ChannelMonitorHandler) batchSummaryFor(c *gin.Context, items []*service.ChannelMonitor) map[int64]service.MonitorStatusSummary {
 	ids := make([]int64, 0, len(items))
 	primaryByID := make(map[int64]string, len(items))
@@ -269,7 +270,7 @@ func buildListItemResponse(m *service.ChannelMonitor, summary service.MonitorSta
 	resp := channelMonitorToResponse(m)
 	resp.PrimaryStatus = summary.PrimaryStatus
 	resp.PrimaryLatencyMs = summary.PrimaryLatencyMs
-	resp.Availability7d = summary.Availability7d
+	resp.Availability12h = summary.Availability12h
 	resp.ExtraModelsStatus = make([]dto.ChannelMonitorExtraModelStatus, 0, len(summary.ExtraModels))
 	for _, e := range summary.ExtraModels {
 		resp.ExtraModelsStatus = append(resp.ExtraModelsStatus, dto.ChannelMonitorExtraModelStatus{

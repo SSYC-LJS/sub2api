@@ -10,6 +10,10 @@ export default defineConfig({
       'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js'
     }
   },
+  define: {
+    // Keep Vitest on the same JIT message path as the production Vite build.
+    __INTLIFY_JIT_COMPILATION__: true
+  },
   test: {
     globals: true,
     environment: 'jsdom',

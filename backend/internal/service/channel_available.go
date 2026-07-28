@@ -19,6 +19,10 @@ type AvailableGroupRef struct {
 	Platform            string
 	SubscriptionType    string
 	RateMultiplier      float64
+	PeakRateEnabled     bool
+	PeakStart           string
+	PeakEnd             string
+	PeakRateMultiplier  float64
 	RecommendationLabel string
 	RecommendationStars int
 	IsExclusive         bool
@@ -68,6 +72,10 @@ func (s *ChannelService) ListAvailable(ctx context.Context) ([]AvailableChannel,
 			Platform:            g.Platform,
 			SubscriptionType:    g.SubscriptionType,
 			RateMultiplier:      g.RateMultiplier,
+			PeakRateEnabled:     g.PeakRateEnabled,
+			PeakStart:           g.PeakStart,
+			PeakEnd:             g.PeakEnd,
+			PeakRateMultiplier:  g.PeakRateMultiplier,
 			RecommendationLabel: g.RecommendationLabel,
 			RecommendationStars: g.RecommendationStars,
 			IsExclusive:         g.IsExclusive,

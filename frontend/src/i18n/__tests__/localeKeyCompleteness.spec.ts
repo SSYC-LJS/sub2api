@@ -77,4 +77,16 @@ describe('runtime locale key completeness', () => {
     const messages = i18n.global.getLocaleMessage(locale) as LocaleMessages
     expect(missingReferences(messages)).toEqual([])
   })
+
+  it.each([
+    ['en', 'Per-user token usage for the current filters and time range'],
+    ['zh', '按当前筛选与时间范围统计每个用户的 Token 用量']
+  ] as const)('resolves the reported token ranking subtitle from the %s runtime locale', (locale, expected) => {
+    const previousLocale = i18n.global.locale.value
+    i18n.global.locale.value = locale
+
+    expect(i18n.global.t('admin.usage.tokenRanking.subtitle')).toBe(expected)
+
+    i18n.global.locale.value = previousLocale
+  })
 })

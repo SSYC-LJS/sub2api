@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"regexp"
 	"testing"
 	"time"
 
@@ -10,6 +11,55 @@ import (
 )
 
 const upstreamOnlyErrorQueryPattern = `(?s)FROM ops_error_logs\s+WHERE.*AND error_source = 'upstream_http'`
+
+func TestComputeAvailabilityHoursUsesTwelveHourWindow(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	repo := &channelMonitorRepository{db: db}
+	queryPattern := regexp.QuoteMeta(`
+		SELECT model,
+		       COUNT(*) AS total,
+		       COUNT(*) FILTER (WHERE status IN ('operational','degraded')) AS ok,
+		       CASE WHEN COUNT(latency_ms) > 0
+		            THEN SUM(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::float8 / COUNT(latency_ms)
+		            ELSE NULL END AS avg_latency_ms
+		FROM channel_monitor_histories
+		WHERE monitor_id = $1
+		  AND checked_at >= NOW() - ($2::int || ' hours')::interval
+		GROUP BY model
+	`)
+	mock.ExpectQuery(queryPattern).
+		WithArgs(int64(42), 12).
+		WillReturnRows(sqlmock.NewRows([]string{"model", "total", "ok", "avg_latency_ms"}).
+			AddRow("gpt-test", 8, 6, 175.5))
+
+	got, err := repo.ComputeAvailabilityHours(context.Background(), 42, 12)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.Len(t, got, 1)
+	require.Equal(t, 12, got[0].WindowHours)
+	require.Equal(t, 75.0, got[0].AvailabilityPct)
+	require.NotNil(t, got[0].AvgLatencyMs)
+	require.Equal(t, 175, *got[0].AvgLatencyMs)
+}
+
+func TestComputeAvailabilityHoursDefaultsToTwelveHoursAndReturnsNoSamples(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	repo := &channelMonitorRepository{db: db}
+	mock.ExpectQuery(`(?s)FROM channel_monitor_histories.*' hours'`).
+		WithArgs(int64(42), 12).
+		WillReturnRows(sqlmock.NewRows([]string{"model", "total", "ok", "avg_latency_ms"}))
+
+	got, err := repo.ComputeAvailabilityHours(context.Background(), 42, 0)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.Empty(t, got)
+}
 
 func TestListRealUsageGroupMonitorStatsCountsOnlyUpstreamErrors(t *testing.T) {
 	db, mock, err := sqlmock.New()

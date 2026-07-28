@@ -498,7 +498,7 @@ export default {
         name: '名称',
         provider: '供应商',
         primaryModel: '主模型',
-        availability7d: '7 天可用率',
+        availability12h: '12 小时可用率',
         latency: '延迟 (ms)',
         enabled: '启用',
         actions: '操作'

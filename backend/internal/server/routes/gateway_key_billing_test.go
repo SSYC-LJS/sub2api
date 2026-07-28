@@ -35,6 +35,33 @@ type keyBillingRouteRateRepo struct {
 	lookupCalls int
 }
 
+type keyBillingCaptureRepo struct {
+	logs []service.RequestResponseLog
+}
+
+func (r *keyBillingCaptureRepo) Create(_ context.Context, log *service.RequestResponseLog) error {
+	r.logs = append(r.logs, *log)
+	return nil
+}
+
+func (r *keyBillingCaptureRepo) List(context.Context, int, int, service.RequestResponseLogFilters) ([]service.RequestResponseLog, int64, error) {
+	return nil, 0, nil
+}
+
+func (r *keyBillingCaptureRepo) ListForExport(context.Context, service.RequestResponseLogFilters, int) ([]service.RequestResponseLog, error) {
+	return nil, nil
+}
+
+func (r *keyBillingCaptureRepo) GetByID(context.Context, int64) (*service.RequestResponseLog, error) {
+	return nil, service.ErrSettingNotFound
+}
+
+type keyBillingCaptureSettings struct{}
+
+func (keyBillingCaptureSettings) GetRequestResponseCaptureSettings(context.Context) service.RequestResponseCaptureSettings {
+	return service.RequestResponseCaptureSettings{Enabled: true, GroupID: 0}
+}
+
 func (r *keyBillingRouteRateRepo) GetByUserAndGroup(context.Context, int64, int64) (*float64, error) {
 	r.lookupCalls++
 	return nil, nil
@@ -45,6 +72,10 @@ func (r *keyBillingRouteRateRepo) GetRPMOverrideByUserAndGroup(context.Context, 
 }
 
 func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRouteRateRepo, string) {
+	return newKeyBillingRouteTestRouterWithCapture(runMode, nil)
+}
+
+func newKeyBillingRouteTestRouterWithCapture(runMode string, captureRepo service.RequestResponseLogRepository) (*gin.Engine, *keyBillingRouteRateRepo, string) {
 	gin.SetMode(gin.TestMode)
 	group := &service.Group{
 		ID:               42,
@@ -83,9 +114,13 @@ func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRoute
 		nil, nil, nil, nil, nil, rateRepo, nil, cfg, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
+	var captureService *service.RequestResponseCaptureService
+	if captureRepo != nil {
+		captureService = service.NewRequestResponseCaptureService(captureRepo, cfg, keyBillingCaptureSettings{})
+	}
 	gatewayHandler := handler.NewGatewayHandler(
 		gatewayService, openAIGatewayService, nil, nil, nil, nil, nil, nil,
-		apiKeyService, nil, nil, nil, nil, nil, cfg, nil,
+		apiKeyService, nil, captureService, nil, nil, nil, cfg, nil,
 	)
 
 	router := gin.New()
@@ -104,6 +139,29 @@ func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRoute
 		cfg,
 	)
 	return router, rateRepo, apiKey.Key
+}
+
+func TestGatewayRoutesKeyBillingInfoIsIncludedInFullCapture(t *testing.T) {
+	captureRepo := &keyBillingCaptureRepo{}
+	router, _, key := newKeyBillingRouteTestRouterWithCapture(config.RunModeStandard, captureRepo)
+	req := httptest.NewRequest(http.MethodGet, "/v1/sub2api/billing", nil)
+	req.Header.Set("Authorization", "Bearer "+key)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Len(t, captureRepo.logs, 1)
+	entry := captureRepo.logs[0]
+	require.Equal(t, int64(7), entry.UserID)
+	require.Equal(t, int64(100), entry.APIKeyID)
+	require.NotNil(t, entry.GroupID)
+	require.Equal(t, int64(42), *entry.GroupID)
+	require.Equal(t, "/v1/sub2api/billing", entry.Path)
+	require.Empty(t, entry.RequestBody)
+	require.JSONEq(t, w.Body.String(), entry.ResponseBody)
+	require.False(t, entry.RequestTruncated)
+	require.False(t, entry.ResponseTruncated)
 }
 
 func TestGatewayRoutesKeyBillingInfoPathIsRegistered(t *testing.T) {

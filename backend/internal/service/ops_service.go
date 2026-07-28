@@ -130,8 +130,12 @@ func NewOpsService(
 	openAIGatewayService *OpenAIGatewayService,
 	geminiCompatService *GeminiMessagesCompatService,
 	antigravityGatewayService *AntigravityGatewayService,
-	systemLogSink *OpsSystemLogSink,
+	systemLogSinks ...*OpsSystemLogSink,
 ) *OpsService {
+	var systemLogSink *OpsSystemLogSink
+	if len(systemLogSinks) > 0 {
+		systemLogSink = systemLogSinks[0]
+	}
 	svc := &OpsService{
 		opsRepo:     opsRepo,
 		settingRepo: settingRepo,

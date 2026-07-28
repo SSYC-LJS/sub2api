@@ -2226,6 +2226,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.ttft", 0.5)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.reset", 0.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.quota_headroom", 0.0)
+	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.upstream_cost", 0.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.previous_response", 0.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.session_sticky", 0.0)
 	// OpenAI HTTP upstream protocol strategy
@@ -2338,6 +2339,20 @@ func setDefaults() {
 	viper.SetDefault("batch_image.vertex_output_retention_hours", 72)
 	viper.SetDefault("batch_image.vertex_batch_prediction_base_url", "https://aiplatform.googleapis.com")
 	viper.SetDefault("batch_image.vertex_gcs_base_url", "https://storage.googleapis.com")
+
+	// Image storage (async image task result offload to S3-compatible object storage).
+	// Empty defaults keep credentials reachable through AutomaticEnv.
+	viper.SetDefault("image_storage.enabled", false)
+	viper.SetDefault("image_storage.endpoint", "")
+	viper.SetDefault("image_storage.region", "auto")
+	viper.SetDefault("image_storage.bucket", "")
+	viper.SetDefault("image_storage.access_key_id", "")
+	viper.SetDefault("image_storage.secret_access_key", "")
+	viper.SetDefault("image_storage.prefix", "images/")
+	viper.SetDefault("image_storage.force_path_style", false)
+	viper.SetDefault("image_storage.public_base_url", "")
+	viper.SetDefault("image_storage.presign_expiry_hours", 24)
+	viper.SetDefault("image_storage.max_download_bytes", int64(32*1024*1024))
 	viper.SetDefault("gateway.usage_record.auto_scale_enabled", true)
 	viper.SetDefault("gateway.usage_record.auto_scale_min_workers", 128)
 	viper.SetDefault("gateway.usage_record.auto_scale_max_workers", 512)
@@ -2388,6 +2403,7 @@ func setDefaults() {
 	viper.SetDefault("webhook.format", "feishu")
 	viper.SetDefault("webhook.bearer_token", "")
 	viper.SetDefault("webhook.timeout_seconds", 5)
+	viper.SetDefault("webhook.events", []string{})
 
 	// Subscription Maintenance (bounded queue + worker pool)
 	viper.SetDefault("subscription_maintenance.worker_count", 2)

@@ -71,6 +71,8 @@ type systemUpdateResponseEnvelope struct {
 	Message string `json:"message"`
 	Data    struct {
 		Message         string `json:"message"`
+		Status          string `json:"status"`
+		Error           string `json:"error"`
 		AlreadyUpToDate bool   `json:"already_up_to_date"`
 		CurrentVersion  string `json:"current_version"`
 		LatestVersion   string `json:"latest_version"`
@@ -99,9 +101,25 @@ func newSystemHandlerTestRouter(t *testing.T, updateSvc *systemHandlerUpdateServ
 
 	router := gin.New()
 	router.POST("/api/v1/admin/system/update", handler.PerformUpdate)
+	router.GET("/api/v1/admin/system/update/status/:operation_id", handler.GetUpdateStatus)
 	router.POST("/api/v1/admin/system/rollback", handler.Rollback)
 	router.GET("/api/v1/admin/system/rollback-versions", handler.GetRollbackVersions)
 	return router
+}
+
+func waitForSystemUpdateStatus(t *testing.T, router *gin.Engine, operationID, wantStatus string) systemUpdateResponseEnvelope {
+	t.Helper()
+	var body systemUpdateResponseEnvelope
+	require.Eventually(t, func() bool {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/system/update/status/"+operationID, nil)
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil {
+			return false
+		}
+		return body.Data.Status == wantStatus
+	}, time.Second, 5*time.Millisecond)
+	return body
 }
 
 func requireSystemLockStatus(t *testing.T, repo *memoryIdempotencyRepoStub, wantStatus string) {
@@ -135,19 +153,22 @@ func TestSystemHandlerPerformUpdateAlreadyUpToDateReturnsOK(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, 1, updateSvc.performCall)
-	require.Equal(t, []bool{false}, updateSvc.checkForces)
-	requireSystemLockStatus(t, repo, service.IdempotencyStatusSucceeded)
-
 	var body systemUpdateResponseEnvelope
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, 0, body.Code)
 	require.Equal(t, "success", body.Message)
-	require.Equal(t, "Already up to date", body.Data.Message)
-	require.True(t, body.Data.AlreadyUpToDate)
-	require.Equal(t, "0.1.132", body.Data.CurrentVersion)
-	require.Equal(t, "0.1.132", body.Data.LatestVersion)
+	require.Equal(t, "Update started in background", body.Data.Message)
+	require.Equal(t, "running", body.Data.Status)
 	require.NotEmpty(t, body.Data.OperationID)
+
+	completed := waitForSystemUpdateStatus(t, router, body.Data.OperationID, "completed")
+	require.Equal(t, "Already up to date", completed.Data.Message)
+	require.True(t, completed.Data.AlreadyUpToDate)
+	require.Equal(t, "0.1.132", completed.Data.CurrentVersion)
+	require.Equal(t, "0.1.132", completed.Data.LatestVersion)
+	require.Equal(t, 1, updateSvc.performCall)
+	require.Equal(t, []bool{false}, updateSvc.checkForces)
+	requireSystemLockStatus(t, repo, service.IdempotencyStatusSucceeded)
 }
 
 func TestSystemHandlerPerformUpdateFailureStillReturnsInternalError(t *testing.T) {
@@ -162,15 +183,17 @@ func TestSystemHandlerPerformUpdateFailureStillReturnsInternalError(t *testing.T
 	req.Header.Set("Idempotency-Key", "real-failure")
 	router.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body systemUpdateResponseEnvelope
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.NotEmpty(t, body.Data.OperationID)
+
+	failed := waitForSystemUpdateStatus(t, router, body.Data.OperationID, "failed")
+	require.Equal(t, "Update failed", failed.Data.Message)
+	require.Equal(t, "download failed", failed.Data.Error)
 	require.Equal(t, 1, updateSvc.performCall)
 	require.Empty(t, updateSvc.checkForces)
 	requireSystemLockStatus(t, repo, service.IdempotencyStatusFailedRetryable)
-
-	var body systemUpdateErrorEnvelope
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	require.Equal(t, http.StatusInternalServerError, body.Code)
-	require.Equal(t, "internal error", body.Message)
 }
 
 // TestSystemHandlerPerformUpdateSurvivesClientDisconnect reproduces #4504:
@@ -191,6 +214,10 @@ func TestSystemHandlerPerformUpdateSurvivesClientDisconnect(t *testing.T) {
 	req.Header.Set("Idempotency-Key", "disconnected-update")
 	router.ServeHTTP(rec, req)
 
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body systemUpdateResponseEnvelope
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	waitForSystemUpdateStatus(t, router, body.Data.OperationID, "completed")
 	require.Equal(t, 1, updateSvc.performCall)
 	require.NoError(t, updateSvc.performCtxErr,
 		"update must not observe the canceled request context")
