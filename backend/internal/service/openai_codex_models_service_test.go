@@ -391,6 +391,7 @@ func TestFetchCodexModelsManifestUpstreamError(t *testing.T) {
 	s := &OpenAIGatewayService{}
 	if _, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsTestAccount(), "0.137.0", ""); err == nil {
 		t.Fatal("expected error for upstream 500, got nil")
+		return
 	}
 }
 
@@ -401,6 +402,7 @@ func TestFetchCodexModelsManifestMissingToken(t *testing.T) {
 	s := &OpenAIGatewayService{}
 	if _, err := s.FetchCodexModelsManifest(context.Background(), account, "0.137.0", ""); err == nil {
 		t.Fatal("expected error for missing access token, got nil")
+		return
 	}
 }
 
@@ -437,6 +439,7 @@ func TestFetchCodexModelsManifestAPIKeyCustomUpstream(t *testing.T) {
 
 	if gotRequest == nil {
 		t.Fatal("expected request to custom API key upstream")
+		return
 	}
 	if gotRequest.Method != http.MethodGet {
 		t.Errorf("method: got %q", gotRequest.Method)
@@ -655,6 +658,7 @@ func TestFetchCodexModelsManifestRejectsInvalidEnvelope(t *testing.T) {
 			)
 			if err == nil {
 				t.Fatal("expected invalid manifest error, got nil")
+				return
 			}
 			if infraerrors.Reason(err) != "OPENAI_CODEX_MODELS_UPSTREAM_INVALID_MANIFEST" {
 				t.Errorf("error reason: got %q", infraerrors.Reason(err))
@@ -684,6 +688,7 @@ func TestFetchCodexModelsManifestAPIKeyDoesNotCacheInvalidEnvelope(t *testing.T)
 	account := newCodexModelsAPIKeyTestAccount("https://upstream.example")
 	if _, err := s.FetchCodexModelsManifest(context.Background(), account, "0.144.0", ""); err == nil {
 		t.Fatal("expected invalid manifest error on first fetch")
+		return
 	}
 	manifest, err := s.FetchCodexModelsManifest(context.Background(), account, "0.144.0", "")
 	if err != nil {
@@ -1237,6 +1242,7 @@ func TestFetchCodexModelsManifestAPIKeyRejectsBaseURLFragment(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected invalid upstream base URL error, got nil")
+		return
 	}
 	if infraerrors.Reason(err) != "OPENAI_CODEX_MODELS_API_KEY_UPSTREAM_INVALID" {
 		t.Errorf("error reason: got %q", infraerrors.Reason(err))
@@ -1406,6 +1412,7 @@ func TestFetchCodexModelsManifestAPIKeyUpstreamError(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected error for upstream 429, got nil")
+		return
 	}
 	if infraerrors.Code(err) != http.StatusBadGateway {
 		t.Errorf("error status: got %d, want %d", infraerrors.Code(err), http.StatusBadGateway)
@@ -1440,6 +1447,7 @@ func TestFetchCodexModelsManifestAPIKeyRejectsOfficialOpenAIBaseURL(t *testing.T
 			)
 			if err == nil {
 				t.Fatal("expected unsupported API key upstream error, got nil")
+				return
 			}
 			if infraerrors.Reason(err) != "OPENAI_CODEX_MODELS_API_KEY_UPSTREAM_UNSUPPORTED" {
 				t.Errorf("error reason: got %q", infraerrors.Reason(err))

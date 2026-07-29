@@ -558,6 +558,7 @@ func TestOpenAISelectAccountWithLoadAwareness_FiltersUnschedulable(t *testing.T)
 	}
 	if selection == nil || selection.Account == nil {
 		t.Fatalf("expected selection with account")
+		return
 	}
 	if selection.Account.ID != available.ID {
 		t.Fatalf("expected account %d, got %d", available.ID, selection.Account.ID)
@@ -654,6 +655,7 @@ func TestOpenAISelectAccountWithLoadAwareness_FiltersUnschedulableWhenNoConcurre
 	}
 	if selection == nil || selection.Account == nil {
 		t.Fatalf("expected selection with account")
+		return
 	}
 	if selection.Account.ID != available.ID {
 		t.Fatalf("expected account %d, got %d", available.ID, selection.Account.ID)
@@ -686,6 +688,7 @@ func TestOpenAISelectAccountForModelWithExclusions_StickyUnschedulableClearsSess
 	}
 	if acc == nil || acc.ID != 2 {
 		t.Fatalf("expected account 2, got %+v", acc)
+		return
 	}
 	if cache.deletedSessions["openai:"+sessionHash] != 1 {
 		t.Fatalf("expected sticky session to be deleted")
@@ -721,6 +724,7 @@ func TestOpenAISelectAccountForModelWithExclusions_StickyOutsideGroupClearsSessi
 	}
 	if acc == nil || acc.ID != 2 {
 		t.Fatalf("expected account 2, got %+v", acc)
+		return
 	}
 	if cache.deletedSessions["openai:"+sessionHash] != 1 {
 		t.Fatalf("expected sticky session to be deleted")
@@ -755,6 +759,7 @@ func TestOpenAISelectAccountWithLoadAwareness_StickyUnschedulableClearsSession(t
 	}
 	if selection == nil || selection.Account == nil || selection.Account.ID != 2 {
 		t.Fatalf("expected account 2, got %+v", selection)
+		return
 	}
 	if cache.deletedSessions["openai:"+sessionHash] != 1 {
 		t.Fatalf("expected sticky session to be deleted")
@@ -794,6 +799,7 @@ func TestOpenAISelectAccountWithLoadAwareness_StickyOutsideGroupClearsSession(t 
 	}
 	if selection == nil || selection.Account == nil || selection.Account.ID != 2 {
 		t.Fatalf("expected account 2, got %+v", selection)
+		return
 	}
 	if cache.deletedSessions["openai:"+sessionHash] != 1 {
 		t.Fatalf("expected sticky session to be deleted")
@@ -828,6 +834,7 @@ func TestOpenAISelectAccountForModelWithExclusions_NoModelSupport(t *testing.T) 
 	acc, err := svc.SelectAccountForModelWithExclusions(context.Background(), nil, "", "gpt-4", nil)
 	if err == nil {
 		t.Fatalf("expected error for unsupported model")
+		return
 	}
 	if acc != nil {
 		t.Fatalf("expected nil account for unsupported model")
@@ -862,6 +869,7 @@ func TestOpenAISelectAccountWithLoadAwareness_LoadBatchErrorFallback(t *testing.
 	}
 	if selection == nil || selection.Account == nil {
 		t.Fatalf("expected selection")
+		return
 	}
 	if selection.Account.ID != 2 {
 		t.Fatalf("expected account 2, got %d", selection.Account.ID)
@@ -901,9 +909,11 @@ func TestOpenAISelectAccountWithLoadAwareness_NoSlotFallbackWait(t *testing.T) {
 	}
 	if selection == nil || selection.WaitPlan == nil {
 		t.Fatalf("expected wait plan fallback")
+		return
 	}
 	if selection.Account == nil || selection.Account.ID != 1 {
 		t.Fatalf("expected account 1")
+		return
 	}
 }
 
@@ -927,6 +937,7 @@ func TestOpenAISelectAccountForModelWithExclusions_SetsStickyBinding(t *testing.
 	}
 	if acc == nil || acc.ID != 1 {
 		t.Fatalf("expected account 1")
+		return
 	}
 	if cache.sessionBindings["openai:"+sessionHash] != 1 {
 		t.Fatalf("expected sticky session binding")
@@ -961,9 +972,11 @@ func TestOpenAISelectAccountWithLoadAwareness_StickyWaitPlan(t *testing.T) {
 	}
 	if selection == nil || selection.WaitPlan == nil {
 		t.Fatalf("expected sticky wait plan")
+		return
 	}
 	if selection.Account == nil || selection.Account.ID != 1 {
 		t.Fatalf("expected account 1")
+		return
 	}
 }
 
@@ -995,6 +1008,7 @@ func TestOpenAISelectAccountWithLoadAwareness_PrefersLowerLoad(t *testing.T) {
 	}
 	if selection == nil || selection.Account == nil || selection.Account.ID != 2 {
 		t.Fatalf("expected account 2")
+		return
 	}
 	if cache.sessionBindings["openai:load"] != 2 {
 		t.Fatalf("expected sticky session updated")
@@ -1025,6 +1039,7 @@ func TestOpenAISelectAccountForModelWithExclusions_StickyExcludedFallback(t *tes
 	}
 	if acc == nil || acc.ID != 2 {
 		t.Fatalf("expected account 2")
+		return
 	}
 }
 
@@ -1051,6 +1066,7 @@ func TestOpenAISelectAccountForModelWithExclusions_StickyNonOpenAI(t *testing.T)
 	}
 	if acc == nil || acc.ID != 2 {
 		t.Fatalf("expected account 2")
+		return
 	}
 }
 
@@ -1066,6 +1082,7 @@ func TestOpenAISelectAccountForModelWithExclusions_NoAccounts(t *testing.T) {
 	acc, err := svc.SelectAccountForModelWithExclusions(context.Background(), nil, "", "", nil)
 	if err == nil {
 		t.Fatalf("expected error for no accounts")
+		return
 	}
 	if acc != nil {
 		t.Fatalf("expected nil account")
@@ -1095,6 +1112,7 @@ func TestOpenAISelectAccountWithLoadAwareness_NoCandidates(t *testing.T) {
 	selection, err := svc.SelectAccountWithLoadAwareness(context.Background(), &groupID, "", "gpt-4", nil)
 	if err == nil {
 		t.Fatalf("expected error for no candidates")
+		return
 	}
 	if selection != nil {
 		t.Fatalf("expected nil selection")
@@ -1127,6 +1145,7 @@ func TestOpenAISelectAccountWithLoadAwareness_AllFullWaitPlan(t *testing.T) {
 	}
 	if selection == nil || selection.WaitPlan == nil {
 		t.Fatalf("expected wait plan")
+		return
 	}
 }
 
@@ -1155,6 +1174,7 @@ func TestOpenAISelectAccountWithLoadAwareness_LoadBatchErrorNoAcquire(t *testing
 	}
 	if selection == nil || selection.WaitPlan == nil {
 		t.Fatalf("expected wait plan")
+		return
 	}
 }
 
@@ -1186,6 +1206,7 @@ func TestOpenAISelectAccountWithLoadAwareness_MissingLoadInfo(t *testing.T) {
 	}
 	if selection == nil || selection.Account == nil || selection.Account.ID != 2 {
 		t.Fatalf("expected account 2")
+		return
 	}
 }
 
@@ -1211,6 +1232,7 @@ func TestOpenAISelectAccountForModelWithExclusions_LeastRecentlyUsed(t *testing.
 	}
 	if acc == nil || acc.ID != 2 {
 		t.Fatalf("expected account 2")
+		return
 	}
 }
 
@@ -1243,6 +1265,7 @@ func TestOpenAISelectAccountWithLoadAwareness_PreferNeverUsed(t *testing.T) {
 	}
 	if selection == nil || selection.Account == nil || selection.Account.ID != 2 {
 		t.Fatalf("expected account 2")
+		return
 	}
 }
 
@@ -1275,6 +1298,7 @@ func TestOpenAIStreamingTimeout(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "stream data interval timeout") {
 		t.Fatalf("expected stream timeout error, got %v", err)
+		return
 	}
 	if !strings.Contains(rec.Body.String(), "\"type\":\"error\"") || !strings.Contains(rec.Body.String(), "stream_timeout") {
 		t.Fatalf("expected OpenAI-compatible error SSE event, got %q", rec.Body.String())
@@ -1307,6 +1331,7 @@ func TestOpenAIStreamingContextCanceledReturnsIncompleteErrorWithoutInjectingErr
 	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "model", "model")
 	if err == nil || !strings.Contains(err.Error(), "stream usage incomplete") {
 		t.Fatalf("expected incomplete stream error, got %v", err)
+		return
 	}
 	if strings.Contains(rec.Body.String(), "event: error") || strings.Contains(rec.Body.String(), "stream_read_error") {
 		t.Fatalf("expected no injected SSE error event, got %q", rec.Body.String())
@@ -1928,6 +1953,7 @@ func TestOpenAIStreamingClientDisconnectDrainsUpstreamUsage(t *testing.T) {
 	}
 	if result == nil || result.usage == nil {
 		t.Fatalf("expected usage result")
+		return
 	}
 	if result.usage.InputTokens != 3 || result.usage.OutputTokens != 5 || result.usage.CacheReadInputTokens != 1 {
 		t.Fatalf("unexpected usage: %+v", *result.usage)
@@ -1968,6 +1994,7 @@ func TestOpenAIStreamingMissingTerminalEventReturnsIncompleteError(t *testing.T)
 	_ = pr.Close()
 	if err == nil || !strings.Contains(err.Error(), "missing terminal event") {
 		t.Fatalf("expected missing terminal event error, got %v", err)
+		return
 	}
 }
 
@@ -2000,6 +2027,7 @@ func TestOpenAIStreamingPassthroughMissingTerminalEventReturnsIncompleteError(t 
 	_ = pr.Close()
 	if err == nil || !strings.Contains(err.Error(), "missing terminal event") {
 		t.Fatalf("expected missing terminal event error, got %v", err)
+		return
 	}
 }
 
@@ -2484,6 +2512,7 @@ func TestOpenAIInvalidBaseURLWhenAllowlistDisabled(t *testing.T) {
 	_, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte("{}"), "token", false, "", false)
 	if err == nil {
 		t.Fatalf("expected error for invalid base_url when allowlist disabled")
+		return
 	}
 }
 
@@ -2497,6 +2526,7 @@ func TestOpenAIValidateUpstreamBaseURLDisabledRequiresHTTPS(t *testing.T) {
 
 	if _, err := svc.validateUpstreamBaseURL("http://not-https.example.com"); err == nil {
 		t.Fatalf("expected http to be rejected when allow_insecure_http is false")
+		return
 	}
 	normalized, err := svc.validateUpstreamBaseURL("https://example.com")
 	if err != nil {
@@ -2543,6 +2573,7 @@ func TestOpenAIValidateUpstreamBaseURLEnabledEnforcesAllowlist(t *testing.T) {
 	}
 	if _, err := svc.validateUpstreamBaseURL("https://evil.com"); err == nil {
 		t.Fatalf("expected non-allowlisted host to fail")
+		return
 	}
 }
 

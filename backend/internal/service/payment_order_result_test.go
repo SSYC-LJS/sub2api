@@ -138,6 +138,7 @@ func TestBuildCreateOrderResponseCopiesJSAPIPayload(t *testing.T) {
 	}
 	if resp.JSAPI == nil || resp.JSAPIPayload == nil {
 		t.Fatal("expected jsapi payload aliases to be populated")
+		return
 	}
 	if resp.JSAPI != jsapiPayload || resp.JSAPIPayload != jsapiPayload {
 		t.Fatal("expected jsapi aliases to preserve the original pointer")
@@ -188,6 +189,7 @@ func TestValidateSelectedCreateOrderAmountCurrencyRejectsFractionalZeroDecimal(t
 	})
 	if err == nil {
 		t.Fatal("expected fractional JPY amount to fail")
+		return
 	}
 	if appErr := infraerrors.FromError(err); appErr.Reason != "INVALID_AMOUNT" {
 		t.Fatalf("reason = %q, want INVALID_AMOUNT", appErr.Reason)
@@ -297,6 +299,7 @@ func TestCalculateCreateOrderPayAmountRejectsFractionalZeroDecimal(t *testing.T)
 	_, _, err := calculateCreateOrderPayAmount(100.5, 0, "JPY")
 	if err == nil {
 		t.Fatal("expected fractional JPY amount to fail")
+		return
 	}
 	if appErr := infraerrors.FromError(err); appErr.Reason != "INVALID_AMOUNT" {
 		t.Fatalf("reason = %q, want INVALID_AMOUNT", appErr.Reason)
@@ -398,6 +401,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponse(t *testing.T) {
 	}
 	if resp.OAuth == nil {
 		t.Fatal("expected oauth payload, got nil")
+		return
 	}
 	if resp.OAuth.AppID != "wx123456" {
 		t.Fatalf("appid = %q, want %q", resp.OAuth.AppID, "wx123456")
@@ -430,6 +434,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponseRequiresMPConfigInWeChat(t *testin
 	}
 	if err == nil {
 		t.Fatal("expected error, got nil")
+		return
 	}
 
 	appErr := infraerrors.FromError(err)
@@ -469,6 +474,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponseRequiresResumeSigningKey(t *testin
 	}
 	if err == nil {
 		t.Fatal("expected error, got nil")
+		return
 	}
 
 	appErr := infraerrors.FromError(err)
@@ -513,6 +519,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponseFallsBackToConfiguredLegacySigning
 	}
 	if resp.OAuth == nil || strings.TrimSpace(resp.OAuth.AuthorizeURL) == "" {
 		t.Fatalf("expected oauth redirect payload, got %+v", resp.OAuth)
+		return
 	}
 }
 

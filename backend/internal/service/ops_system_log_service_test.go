@@ -35,6 +35,7 @@ func TestOpsServiceListSystemLogs_DefaultClampAndSuccess(t *testing.T) {
 	}
 	if gotFilter == nil {
 		t.Fatalf("expected repository to receive filter")
+		return
 	}
 	if gotFilter.Page != 1 || gotFilter.PageSize != 200 {
 		t.Fatalf("filter normalized unexpectedly: page=%d pageSize=%d", gotFilter.Page, gotFilter.PageSize)
@@ -54,6 +55,7 @@ func TestOpsServiceListSystemLogs_MonitoringDisabled(t *testing.T) {
 	_, err := svc.ListSystemLogs(context.Background(), &OpsSystemLogFilter{})
 	if err == nil {
 		t.Fatalf("expected disabled error")
+		return
 	}
 }
 
@@ -65,6 +67,7 @@ func TestOpsServiceListSystemLogs_NilRepoReturnsEmpty(t *testing.T) {
 	}
 	if out == nil || out.Page != 1 || out.PageSize != 50 || out.Total != 0 || len(out.Logs) != 0 {
 		t.Fatalf("unexpected nil-repo result: %+v", out)
+		return
 	}
 }
 
@@ -78,6 +81,7 @@ func TestOpsServiceListSystemLogs_RepoErrorMapped(t *testing.T) {
 	_, err := svc.ListSystemLogs(context.Background(), &OpsSystemLogFilter{})
 	if err == nil {
 		t.Fatalf("expected mapped internal error")
+		return
 	}
 	if !strings.Contains(err.Error(), "OPS_SYSTEM_LOG_LIST_FAILED") {
 		t.Fatalf("unexpected error: %v", err)
@@ -119,6 +123,7 @@ func TestOpsServiceCleanupSystemLogs_SuccessAndAudit(t *testing.T) {
 	}
 	if audit == nil {
 		t.Fatalf("expected cleanup audit")
+		return
 	}
 	if !strings.Contains(audit.Conditions, `"host":"api-node-1"`) {
 		t.Fatalf("audit conditions should include host: %s", audit.Conditions)
@@ -138,11 +143,13 @@ func TestOpsServiceCleanupSystemLogs_RepoUnavailableAndInvalidOperator(t *testin
 	svc := NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if _, err := svc.CleanupSystemLogs(context.Background(), &OpsSystemLogCleanupFilter{RequestID: "r"}, 1); err == nil {
 		t.Fatalf("expected repo unavailable error")
+		return
 	}
 
 	svc = NewOpsService(&opsRepoMock{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if _, err := svc.CleanupSystemLogs(context.Background(), &OpsSystemLogCleanupFilter{RequestID: "r"}, 0); err == nil {
 		t.Fatalf("expected invalid operator error")
+		return
 	}
 }
 
@@ -156,6 +163,7 @@ func TestOpsServiceCleanupSystemLogs_FilterRequired(t *testing.T) {
 	_, err := svc.CleanupSystemLogs(context.Background(), &OpsSystemLogCleanupFilter{}, 1)
 	if err == nil {
 		t.Fatalf("expected filter required error")
+		return
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "filter") {
 		t.Fatalf("unexpected error: %v", err)
@@ -173,6 +181,7 @@ func TestOpsServiceCleanupSystemLogs_InvalidRange(t *testing.T) {
 	}, 1)
 	if err == nil {
 		t.Fatalf("expected invalid range error")
+		return
 	}
 }
 
@@ -197,6 +206,7 @@ func TestOpsServiceCleanupSystemLogs_NoRowsAndInternalError(t *testing.T) {
 		RequestID: "req-1",
 	}, 1); err == nil {
 		t.Fatalf("expected internal cleanup error")
+		return
 	}
 }
 

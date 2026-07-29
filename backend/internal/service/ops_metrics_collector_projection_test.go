@@ -123,6 +123,7 @@ func BenchmarkOpsMetricsCollectorCollectConcurrencyQueueDepth(b *testing.B) {
 	for range b.N {
 		if depth := collector.collectConcurrencyQueueDepth(context.Background()); depth == nil || *depth != 0 {
 			b.Fatalf("unexpected queue depth: %v", depth)
+			return
 		}
 	}
 }

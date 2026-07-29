@@ -95,6 +95,7 @@ func TestCanonicalizeReturnURLRejectsRelativeURL(t *testing.T) {
 
 	if _, err := CanonicalizeReturnURL("/payment/result", "example.com", ""); err == nil {
 		t.Fatal("CanonicalizeReturnURL should reject relative URLs")
+		return
 	}
 }
 
@@ -103,6 +104,7 @@ func TestCanonicalizeReturnURLRejectsExternalHost(t *testing.T) {
 
 	if _, err := CanonicalizeReturnURL("https://evil.example/payment/result", "app.example.com", ""); err == nil {
 		t.Fatal("CanonicalizeReturnURL should reject external hosts")
+		return
 	}
 }
 
@@ -127,6 +129,7 @@ func TestCanonicalizeReturnURLRejectsNonCanonicalPath(t *testing.T) {
 
 	if _, err := CanonicalizeReturnURL("https://app.example.com/orders/42", "app.example.com", ""); err == nil {
 		t.Fatal("CanonicalizeReturnURL should reject non-canonical result paths")
+		return
 	}
 }
 
@@ -238,6 +241,7 @@ func TestCreateTokenRejectsMissingSigningKey(t *testing.T) {
 	_, err := svc.CreateToken(ResumeTokenClaims{OrderID: 42})
 	if err == nil {
 		t.Fatal("CreateToken should reject missing signing key")
+		return
 	}
 }
 
@@ -249,6 +253,7 @@ func TestParseTokenRejectsFallbackSignedTokenWhenSigningKeyMissing(t *testing.T)
 	_, err := svc.ParseToken(token)
 	if err == nil {
 		t.Fatal("ParseToken should reject tokens when signing key is missing")
+		return
 	}
 }
 
@@ -269,6 +274,7 @@ func TestParseTokenRejectsExpiredToken(t *testing.T) {
 	_, err = svc.ParseToken(token)
 	if err == nil {
 		t.Fatal("ParseToken should reject expired tokens")
+		return
 	}
 }
 
@@ -312,6 +318,7 @@ func TestCreateWeChatPaymentResumeTokenRejectsMissingSigningKey(t *testing.T) {
 	_, err := svc.CreateWeChatPaymentResumeToken(WeChatPaymentResumeClaims{OpenID: "openid-123"})
 	if err == nil {
 		t.Fatal("CreateWeChatPaymentResumeToken should reject missing signing key")
+		return
 	}
 }
 
@@ -327,6 +334,7 @@ func TestParseWeChatPaymentResumeTokenRejectsFallbackSignedTokenWhenSigningKeyMi
 	_, err := svc.ParseWeChatPaymentResumeToken(token)
 	if err == nil {
 		t.Fatal("ParseWeChatPaymentResumeToken should reject tokens when signing key is missing")
+		return
 	}
 }
 
@@ -347,6 +355,7 @@ func TestParseWeChatPaymentResumeTokenRejectsExpiredToken(t *testing.T) {
 	_, err = svc.ParseWeChatPaymentResumeToken(token)
 	if err == nil {
 		t.Fatal("ParseWeChatPaymentResumeToken should reject expired tokens")
+		return
 	}
 }
 
@@ -769,6 +778,7 @@ func TestVisibleMethodLoadBalancerRejectsInvalidSourceWhenMultipleProvidersEnabl
 			_, err = lb.SelectInstance(ctx, "", tt.method, payment.StrategyRoundRobin, 9.9)
 			if err == nil {
 				t.Fatal("SelectInstance should reject invalid visible method source configuration")
+				return
 			}
 			if infraerrors.Reason(err) != "INVALID_PAYMENT_VISIBLE_METHOD_SOURCE" {
 				t.Fatalf("Reason(err) = %q, want %q", infraerrors.Reason(err), "INVALID_PAYMENT_VISIBLE_METHOD_SOURCE")
@@ -791,6 +801,7 @@ func TestVisibleMethodLoadBalancerRejectsMissingEnabledVisibleMethodProvider(t *
 
 	if _, err := lb.SelectInstance(context.Background(), "", payment.TypeWxpay, payment.StrategyRoundRobin, 9.9); err == nil {
 		t.Fatal("SelectInstance should reject when no enabled provider instance exists")
+		return
 	}
 }
 

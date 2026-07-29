@@ -124,6 +124,7 @@ func TestValidatePeakRateConfig(t *testing.T) {
 			err := ValidatePeakRateConfig(c.subType, c.enabled, c.start, c.end, c.mult)
 			if c.wantErr && err == nil {
 				t.Fatalf("expect error, got nil")
+				return
 			}
 			if !c.wantErr && err != nil {
 				t.Fatalf("expect no error, got %v", err)
@@ -217,10 +218,12 @@ func TestPeakMultiplier_SnapshotRoundTrip(t *testing.T) {
 	snapshot := svc.snapshotFromAPIKey(context.Background(), apiKey)
 	if snapshot == nil || snapshot.Group == nil {
 		t.Fatalf("snapshot or snapshot.Group must not be nil")
+		return
 	}
 	restored := svc.snapshotToAPIKey("k", snapshot)
 	if restored.Group == nil {
 		t.Fatalf("restored.Group must not be nil")
+		return
 	}
 
 	if !restored.Group.PeakRateEnabled ||

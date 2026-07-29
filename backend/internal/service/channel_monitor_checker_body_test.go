@@ -207,9 +207,11 @@ func TestGrokMonitorConfiguration(t *testing.T) {
 	}
 	if err := validateAPIMode(MonitorProviderGrok, MonitorAPIModeResponses); err == nil {
 		t.Fatal("grok responses mode should be rejected by channel monitoring")
+		return
 	}
 	if err := validateReplaceRequestBody(MonitorProviderGrok, MonitorAPIModeChatCompletions, map[string]any{}); err == nil {
 		t.Fatal("grok replace-mode body should require messages")
+		return
 	}
 }
 
@@ -224,6 +226,7 @@ func TestRunCheckForModel_Grok_DefaultChatRequest(t *testing.T) {
 	}
 	if res.LatencyMs == nil {
 		t.Fatal("Grok request should record latency")
+		return
 	}
 	if h.lastPath != providerGrokPath {
 		t.Fatalf("expected Grok chat completions path %q, got %q", providerGrokPath, h.lastPath)
@@ -256,6 +259,7 @@ func TestRunCheckForModel_Grok_UpstreamFailure(t *testing.T) {
 	}
 	if res.LatencyMs == nil {
 		t.Fatal("Grok failure should still record latency")
+		return
 	}
 }
 

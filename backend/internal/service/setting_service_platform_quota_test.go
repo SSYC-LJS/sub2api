@@ -180,6 +180,7 @@ func TestSystemPlatformQuotas_WriteReadRoundTrip(t *testing.T) {
 	// 写入值正确往返
 	if v := got["anthropic"].DailyLimitUSD; v == nil || *v != ten {
 		t.Fatalf("anthropic daily round-trip failed: got %v, want 10", v)
+		return
 	}
 	// 未写入的平台字段为 nil
 	if got["openai"].DailyLimitUSD != nil {

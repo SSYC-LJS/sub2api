@@ -65,6 +65,7 @@ func TestWebhookServiceReturnsFeishuBusinessError(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "19024") {
 		t.Fatalf("expected feishu business error, got %v", err)
+		return
 	}
 }
 
@@ -73,6 +74,7 @@ func TestWebhookServiceNotifyRequiresEnabledConfig(t *testing.T) {
 	err := svc.Notify(context.Background(), WebhookEvent{Event: WebhookEventRedeemUsed, Title: "test"})
 	if err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatalf("expected disabled error, got %v", err)
+		return
 	}
 }
 

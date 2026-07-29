@@ -49,6 +49,7 @@ func TestListUserErrorRequests_ForcesScopeAndRedacts(t *testing.T) {
 	// 强制按用户
 	if stub.gotFilter.UserID == nil || *stub.gotFilter.UserID != uid {
 		t.Fatalf("UserID not forced: %+v", stub.gotFilter.UserID)
+		return
 	}
 	// 强制 View=all（含业务限流/余额）
 	if stub.gotFilter.View != "all" {
@@ -65,6 +66,7 @@ func TestListUserErrorRequests_ForcesScopeAndRedacts(t *testing.T) {
 	// APIKeyID 透传保留（用户可按自己 key 过滤；越权由 user_id AND api_key_id 双重防护）
 	if stub.gotFilter.APIKeyID == nil || *stub.gotFilter.APIKeyID != kid {
 		t.Fatalf("APIKeyID should be preserved, got %v", stub.gotFilter.APIKeyID)
+		return
 	}
 	// 调用方传入的 filter 不应被原地篡改（验证 shallow copy 隔离生效）
 	if in.View != "errors" || in.UserID != nil || in.Phase != "upstream" {
@@ -105,6 +107,7 @@ func TestGetUserErrorRequestDetail_OwnershipEnforced(t *testing.T) {
 	got, err := svc.GetUserErrorRequestDetail(context.Background(), callerUID, 42)
 	if err == nil {
 		t.Fatal("expected error for unauthorized access, got nil")
+		return
 	}
 	if got != nil {
 		t.Fatalf("expected nil detail for unauthorized access, got %+v", got)
@@ -144,6 +147,7 @@ func TestGetUserErrorRequestDetail_NotFound(t *testing.T) {
 	got, err := svc.GetUserErrorRequestDetail(context.Background(), 1, 999)
 	if err == nil {
 		t.Fatal("expected error for not found, got nil")
+		return
 	}
 	if got != nil {
 		t.Fatalf("expected nil detail, got %+v", got)
@@ -157,9 +161,11 @@ func TestGetUserErrorRequestDetail_InvalidID(t *testing.T) {
 	_, err := svc.GetUserErrorRequestDetail(context.Background(), 1, 0)
 	if err == nil {
 		t.Fatal("expected error for id=0")
+		return
 	}
 	_, err = svc.GetUserErrorRequestDetail(context.Background(), 1, -5)
 	if err == nil {
 		t.Fatal("expected error for id=-5")
+		return
 	}
 }
