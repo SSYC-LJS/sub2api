@@ -1313,7 +1313,9 @@ func (r *userRepository) loadActiveChildParentQuotaRemaining(ctx context.Context
 		}
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	if rows.Next() {
 		if err := rows.Scan(&remaining); err != nil {
 			return 0, err
@@ -1344,7 +1346,9 @@ func (r *userRepository) loadActiveChildParents(ctx context.Context, userIDs []i
 		}
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	for rows.Next() {
 		var childID, parentID int64
 		if err := rows.Scan(&childID, &parentID); err != nil {

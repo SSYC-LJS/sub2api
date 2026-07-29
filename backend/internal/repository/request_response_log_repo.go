@@ -76,7 +76,9 @@ func (r *requestResponseLogRepository) List(ctx context.Context, page, pageSize 
 	if err != nil {
 		return nil, 0, fmt.Errorf("list request response logs: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	items, err := scanRequestResponseLogRows(rows)
 	if err != nil {
 		return nil, 0, err
@@ -98,7 +100,9 @@ func (r *requestResponseLogRepository) GetByID(ctx context.Context, id int64) (*
 	if err != nil {
 		return nil, fmt.Errorf("get request response log: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	items, err := scanRequestResponseLogRows(rows)
 	if err != nil {
 		return nil, err
@@ -129,7 +133,9 @@ func (r *requestResponseLogRepository) ListForExport(ctx context.Context, filter
 	if err != nil {
 		return nil, fmt.Errorf("list request response logs for export: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	return scanRequestResponseLogRows(rows)
 }
 

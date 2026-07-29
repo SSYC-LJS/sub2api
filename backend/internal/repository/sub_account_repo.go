@@ -52,7 +52,9 @@ func (r *subAccountRepository) ListByParent(ctx context.Context, parentUserID in
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	items := make([]service.SubAccountRelation, 0)
 	for rows.Next() {
 		var rel service.SubAccountRelation

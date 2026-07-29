@@ -172,7 +172,9 @@ func (s *WebhookService) notifyWithConfig(ctx context.Context, cfg config.Webhoo
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	var responseBody map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&responseBody)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -289,24 +291,28 @@ func webhookResponseMessage(body map[string]any) string {
 func feishuText(event WebhookEvent) string {
 	var b strings.Builder
 	if strings.TrimSpace(event.Title) != "" {
-		b.WriteString(event.Title)
-		b.WriteString("\n")
+		appendWebhookText(&b, event.Title)
+		appendWebhookText(&b, "\n")
 	}
-	b.WriteString("事件：")
-	b.WriteString(event.Event)
-	b.WriteString("\n时间：")
-	b.WriteString(event.Timestamp.Format(time.RFC3339))
+	appendWebhookText(&b, "事件：")
+	appendWebhookText(&b, event.Event)
+	appendWebhookText(&b, "\n时间：")
+	appendWebhookText(&b, event.Timestamp.Format(time.RFC3339))
 	if event.Severity != "" {
-		b.WriteString("\n级别：")
-		b.WriteString(event.Severity)
+		appendWebhookText(&b, "\n级别：")
+		appendWebhookText(&b, event.Severity)
 	}
 	for _, key := range sortedWebhookKeys(event.Data) {
-		b.WriteString("\n")
-		b.WriteString(key)
-		b.WriteString("：")
-		b.WriteString(fmt.Sprint(event.Data[key]))
+		appendWebhookText(&b, "\n")
+		appendWebhookText(&b, key)
+		appendWebhookText(&b, "：")
+		appendWebhookText(&b, fmt.Sprint(event.Data[key]))
 	}
 	return b.String()
+}
+
+func appendWebhookText(builder *strings.Builder, value string) {
+	_, _ = builder.WriteString(value)
 }
 
 func feishuTemplate(severity string) string {
@@ -324,19 +330,19 @@ func feishuTemplate(severity string) string {
 
 func feishuMarkdown(event WebhookEvent) string {
 	var b strings.Builder
-	b.WriteString("**事件**：")
-	b.WriteString(escapeFeishuText(event.Event))
-	b.WriteString("\n**时间**：")
-	b.WriteString(event.Timestamp.Format(time.RFC3339))
+	appendWebhookText(&b, "**事件**：")
+	appendWebhookText(&b, escapeFeishuText(event.Event))
+	appendWebhookText(&b, "\n**时间**：")
+	appendWebhookText(&b, event.Timestamp.Format(time.RFC3339))
 	if event.Severity != "" {
-		b.WriteString("\n**级别**：")
-		b.WriteString(escapeFeishuText(event.Severity))
+		appendWebhookText(&b, "\n**级别**：")
+		appendWebhookText(&b, escapeFeishuText(event.Severity))
 	}
 	for _, key := range sortedWebhookKeys(event.Data) {
-		b.WriteString("\n**")
-		b.WriteString(escapeFeishuText(key))
-		b.WriteString("**：")
-		b.WriteString(escapeFeishuText(fmt.Sprint(event.Data[key])))
+		appendWebhookText(&b, "\n**")
+		appendWebhookText(&b, escapeFeishuText(key))
+		appendWebhookText(&b, "**：")
+		appendWebhookText(&b, escapeFeishuText(fmt.Sprint(event.Data[key])))
 	}
 	return b.String()
 }

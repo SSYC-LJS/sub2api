@@ -13,7 +13,9 @@ import (
 func TestSubAccountUpdateQuotaTreatsPermanentQuotaAsCurrentAvailable(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	require.NoError(t, err)
-	defer db.Close()
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
 
 	repo := &subAccountRepository{db: db}
 	now := time.Now()

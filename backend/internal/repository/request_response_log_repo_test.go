@@ -15,7 +15,9 @@ func TestRequestResponseLogRepositoryCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
 
 	groupID := int64(30)
 	createdAt := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
@@ -65,7 +67,9 @@ func TestRequestResponseLogRepositoryCreateEmptyStringsAsNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	defer db.Close()
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
 
 	createdAt := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
 	log := &service.RequestResponseLog{

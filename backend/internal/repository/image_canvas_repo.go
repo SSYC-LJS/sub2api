@@ -83,7 +83,9 @@ func (r *imageCanvasHistoryRepository) ListByUser(ctx context.Context, userID in
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	items := make([]service.ImageCanvasHistory, 0)
 	for rows.Next() {
 		var item service.ImageCanvasHistory
