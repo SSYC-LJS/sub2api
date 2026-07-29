@@ -207,7 +207,9 @@ jobs:
         uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
-          args: release --clean --skip=validate ${{ steps.goreleaser_config.outputs.config }}
+          # Skip legacy tag hooks too, so a workflow-dispatch retry can safely
+          # release an existing tag whose config still contains `go mod tidy`.
+          args: release --clean --skip=validate,before ${{ steps.goreleaser_config.outputs.config }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
