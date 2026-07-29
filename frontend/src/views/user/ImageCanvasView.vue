@@ -632,7 +632,8 @@ async function saveFailedHistory(node: CanvasNode) {
     })
     node.historyId = saved.id
     node.createdAt = saved.created_at || node.createdAt
-  } catch {
+  } catch (error) {
+    console.warn('Failed to save image task failure history:', error)
   }
 }
 
