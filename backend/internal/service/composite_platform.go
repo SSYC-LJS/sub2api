@@ -147,36 +147,6 @@ func hasOpenAISeriesPrefix(model string) bool {
 	return false
 }
 
-func (s *GatewayService) resolveCompositeRouteDecision(ctx context.Context, group *Group, requestedModel, endpoint string) (CompositeRouteDecision, bool, error) {
-	if group == nil || group.Platform != PlatformComposite {
-		return CompositeRouteDecision{}, false, nil
-	}
-	if platform, ok := ResolvedTargetPlatformFromContext(ctx); ok {
-		upstreamModel := requestedModel
-		if resolvedModel, modelOK := ResolvedUpstreamModelFromContext(ctx); modelOK {
-			upstreamModel = resolvedModel
-		}
-		source := CompositeRouteSourceDetector
-		if resolvedSource, sourceOK := CompositeRouteSourceFromContext(ctx); sourceOK {
-			source = resolvedSource
-		}
-		return CompositeRouteDecision{
-			Matched:        true,
-			Source:         source,
-			GroupID:        group.ID,
-			PublicModel:    requestedModel,
-			TargetPlatform: platform,
-			UpstreamModel:  upstreamModel,
-			Endpoint:       normalizeCompositeRouteEndpoint(endpoint),
-		}, true, nil
-	}
-	decision, err := s.compositeResolver.Resolve(ctx, group.ID, requestedModel, endpoint)
-	if err != nil {
-		return decision, false, err
-	}
-	return decision, decision.Matched, nil
-}
-
 func isConcreteRequestPlatform(platform string) bool {
 	switch platform {
 	case PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity, PlatformGrok:

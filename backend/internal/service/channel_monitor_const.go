@@ -74,11 +74,7 @@ const (
 	// monitorAvailability12Hours is the availability window shown in the UI.
 	monitorAvailability12Hours = 12
 
-	// Legacy day windows are retained for historical repository callers.
-	monitorAvailability7Days  = 7
-	monitorAvailability15Days = 15
-	monitorAvailability30Days = 30
-
+	// Availability is calculated only from the trailing 12-hour window.
 	// MonitorHistoryDefaultLimit 历史查询默认返回条数（handler 层共享）。
 	MonitorHistoryDefaultLimit = 100
 	// MonitorHistoryMaxLimit 历史查询最大返回条数（handler 层共享）。

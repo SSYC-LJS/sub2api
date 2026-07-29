@@ -51,6 +51,12 @@ func (s *WebhookService) SetSettingRepository(repo SettingRepository) {
 }
 
 func (s *WebhookService) effectiveConfig(ctx context.Context) config.WebhookConfig {
+	if s == nil {
+		return config.WebhookConfig{
+			Events:         DefaultWebhookEvents(),
+			TimeoutSeconds: int(defaultWebhookTimeout / time.Second),
+		}
+	}
 	cfg := s.cfg
 	if len(cfg.Events) == 0 {
 		cfg.Events = DefaultWebhookEvents()
@@ -58,7 +64,7 @@ func (s *WebhookService) effectiveConfig(ctx context.Context) config.WebhookConf
 	if cfg.TimeoutSeconds <= 0 {
 		cfg.TimeoutSeconds = int(defaultWebhookTimeout / time.Second)
 	}
-	if s == nil || s.settingRepo == nil {
+	if s.settingRepo == nil {
 		return cfg
 	}
 	settings, err := s.settingRepo.GetMultiple(ctx, []string{
@@ -186,10 +192,6 @@ func (s *WebhookService) notifyWithConfig(ctx context.Context, cfg config.Webhoo
 	return nil
 }
 
-func (s *WebhookService) buildPayload(event WebhookEvent) ([]byte, error) {
-	return s.buildPayloadWithConfig(s.cfg, event)
-}
-
 func (s *WebhookService) buildPayloadWithConfig(cfg config.WebhookConfig, event WebhookEvent) ([]byte, error) {
 	format := strings.ToLower(strings.TrimSpace(cfg.Format))
 	if format == "" || format == "feishu" || format == "lark" {
@@ -245,13 +247,6 @@ func buildFeishuCardField(title, value string) map[string]any {
 	}
 }
 
-func (s *WebhookService) timeout() time.Duration {
-	if s == nil || s.httpClient == nil || s.httpClient.Timeout <= 0 {
-		return defaultWebhookTimeout
-	}
-	return s.httpClient.Timeout
-}
-
 func webhookResponseCode(body map[string]any) (int, bool) {
 	if body == nil {
 		return 0, false
@@ -288,33 +283,6 @@ func webhookResponseMessage(body map[string]any) string {
 	return ""
 }
 
-func feishuText(event WebhookEvent) string {
-	var b strings.Builder
-	if strings.TrimSpace(event.Title) != "" {
-		appendWebhookText(&b, event.Title)
-		appendWebhookText(&b, "\n")
-	}
-	appendWebhookText(&b, "事件：")
-	appendWebhookText(&b, event.Event)
-	appendWebhookText(&b, "\n时间：")
-	appendWebhookText(&b, event.Timestamp.Format(time.RFC3339))
-	if event.Severity != "" {
-		appendWebhookText(&b, "\n级别：")
-		appendWebhookText(&b, event.Severity)
-	}
-	for _, key := range sortedWebhookKeys(event.Data) {
-		appendWebhookText(&b, "\n")
-		appendWebhookText(&b, key)
-		appendWebhookText(&b, "：")
-		appendWebhookText(&b, fmt.Sprint(event.Data[key]))
-	}
-	return b.String()
-}
-
-func appendWebhookText(builder *strings.Builder, value string) {
-	_, _ = builder.WriteString(value)
-}
-
 func feishuTemplate(severity string) string {
 	switch strings.ToLower(strings.TrimSpace(severity)) {
 	case "error", "critical":
@@ -326,25 +294,6 @@ func feishuTemplate(severity string) string {
 	default:
 		return "blue"
 	}
-}
-
-func feishuMarkdown(event WebhookEvent) string {
-	var b strings.Builder
-	appendWebhookText(&b, "**事件**：")
-	appendWebhookText(&b, escapeFeishuText(event.Event))
-	appendWebhookText(&b, "\n**时间**：")
-	appendWebhookText(&b, event.Timestamp.Format(time.RFC3339))
-	if event.Severity != "" {
-		appendWebhookText(&b, "\n**级别**：")
-		appendWebhookText(&b, escapeFeishuText(event.Severity))
-	}
-	for _, key := range sortedWebhookKeys(event.Data) {
-		appendWebhookText(&b, "\n**")
-		appendWebhookText(&b, escapeFeishuText(key))
-		appendWebhookText(&b, "**：")
-		appendWebhookText(&b, escapeFeishuText(fmt.Sprint(event.Data[key])))
-	}
-	return b.String()
 }
 
 func sortedWebhookKeys(data map[string]any) []string {
