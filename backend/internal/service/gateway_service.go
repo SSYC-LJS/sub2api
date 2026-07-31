@@ -10742,6 +10742,9 @@ func sanitizeCountTokensRequestBody(body []byte) []byte {
 		"stream",
 		"stop_sequences",
 		"stop",
+		// Anthropic's /v1/messages/count_tokens accepts request-input fields only.
+		// max_tokens is a generation parameter and must not reach this endpoint.
+		"max_tokens",
 	} {
 		if gjson.GetBytes(out, path).Exists() {
 			if next, ok := deleteJSONPathBytes(out, path); ok {
