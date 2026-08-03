@@ -143,6 +143,7 @@ type SystemSettings struct {
 	DocURL                      string
 	ActivationCodePurchaseURL   string
 	HomeContent                 string
+	CompactHomeEnabled          bool
 	HideCcsImportButton         bool
 	PurchaseSubscriptionEnabled bool
 	PurchaseSubscriptionURL     string
@@ -322,6 +323,7 @@ type PublicSettings struct {
 	DocURL                           string
 	ActivationCodePurchaseURL        string
 	HomeContent                      string
+	CompactHomeEnabled               bool
 	HideCcsImportButton              bool
 
 	PurchaseSubscriptionEnabled bool

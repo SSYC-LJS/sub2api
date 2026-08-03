@@ -1,15 +1,10 @@
 package service
 
 import (
-	"context"
 	"maps"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
-
-type accountProbeEnabledAtomicUpdater interface {
-	UpdateWithUpstreamBillingProbeEnabled(context.Context, *Account, bool) error
-}
 
 func ValidateOpenAILongContextBillingExtra(platform string, extra map[string]any) error {
 	if platform != PlatformOpenAI {
