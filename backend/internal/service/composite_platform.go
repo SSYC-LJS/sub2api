@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 )
 
@@ -106,6 +107,16 @@ func DetectModelPlatform(model string) (string, bool) {
 			return PlatformGemini, true
 		case "xai", "x-ai", "grok":
 			return PlatformGrok, true
+		case "kimi", "moonshot":
+			return PlatformKimi, true
+		case "zhipu", "glm", "bigmodel":
+			return PlatformZhipu, true
+		case "deepseek":
+			return PlatformDeepseek, true
+		case "minimax":
+			return PlatformMiniMax, true
+		case "typesafe", "jev":
+			return PlatformTypeSafe, true
 		}
 		if rest != "" {
 			normalized = strings.TrimPrefix(rest, "models/")
@@ -133,6 +144,22 @@ func DetectModelPlatform(model string) (string, bool) {
 		return PlatformGemini, true
 	case normalized == "grok" || strings.HasPrefix(normalized, "grok-"):
 		return PlatformGrok, true
+	case normalized == "k3",
+		normalized == "k3-256k",
+		strings.HasPrefix(normalized, "kimi-"),
+		strings.HasPrefix(normalized, "moonshot-"):
+		return PlatformKimi, true
+	case strings.HasPrefix(normalized, "glm-"):
+		return PlatformZhipu, true
+	case strings.HasPrefix(normalized, "deepseek-"):
+		return PlatformDeepseek, true
+	case strings.HasPrefix(normalized, "minimax-"),
+		strings.HasPrefix(normalized, "abab5"),
+		strings.HasPrefix(normalized, "abab6"),
+		strings.HasPrefix(normalized, "abab7"):
+		return PlatformMiniMax, true
+	case normalized == "jev-latest" || strings.HasPrefix(normalized, "jev-"):
+		return PlatformTypeSafe, true
 	default:
 		return "", false
 	}
@@ -147,11 +174,36 @@ func hasOpenAISeriesPrefix(model string) bool {
 	return false
 }
 
-func isConcreteRequestPlatform(platform string) bool {
-	switch platform {
-	case PlatformAnthropic, PlatformOpenAI, PlatformGemini, PlatformAntigravity, PlatformGrok:
-		return true
-	default:
-		return false
+func (s *GatewayService) resolveCompositeRouteDecision(ctx context.Context, group *Group, requestedModel, endpoint string) (CompositeRouteDecision, bool, error) {
+	if group == nil || group.Platform != PlatformComposite {
+		return CompositeRouteDecision{}, false, nil
 	}
+	if platform, ok := ResolvedTargetPlatformFromContext(ctx); ok {
+		upstreamModel := requestedModel
+		if resolvedModel, modelOK := ResolvedUpstreamModelFromContext(ctx); modelOK {
+			upstreamModel = resolvedModel
+		}
+		source := CompositeRouteSourceDetector
+		if resolvedSource, sourceOK := CompositeRouteSourceFromContext(ctx); sourceOK {
+			source = resolvedSource
+		}
+		return CompositeRouteDecision{
+			Matched:        true,
+			Source:         source,
+			GroupID:        group.ID,
+			PublicModel:    requestedModel,
+			TargetPlatform: platform,
+			UpstreamModel:  upstreamModel,
+			Endpoint:       normalizeCompositeRouteEndpoint(endpoint),
+		}, true, nil
+	}
+	decision, err := s.compositeResolver.Resolve(ctx, group.ID, requestedModel, endpoint)
+	if err != nil {
+		return decision, false, err
+	}
+	return decision, decision.Matched, nil
+}
+
+func isConcreteRequestPlatform(platform string) bool {
+	return domain.IsConcretePlatform(platform)
 }

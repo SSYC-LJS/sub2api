@@ -33,6 +33,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/cespare/xxhash/v2"
@@ -85,8 +86,9 @@ const (
 )
 
 const (
-	cacheTTLTarget5m = "5m"
-	cacheTTLTarget1h = "1h"
+	cacheTTLTarget5m                   = "5m"
+	cacheTTLTarget1h                   = "1h"
+	compositeModelOwnershipCachePrefix = "composite-owner|"
 )
 
 // ForceCacheBillingContextKey 强制缓存计费上下文键
@@ -206,8 +208,8 @@ func openAIStreamEventIsTerminalWithType(data, eventType string) bool {
 }
 
 func openAIStreamEventTypeIsTerminal(eventType string) bool {
-	switch eventType {
-	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
+	switch strings.TrimSpace(eventType) {
+	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled", "error":
 		return true
 	default:
 		return false
@@ -457,10 +459,17 @@ func claudeCodeNeedsNoopDeltaKeepalive(userAgent string) bool {
 }
 
 func anthropicNoopDeltaKeepaliveEvent(index int, blockType string) string {
-	if blockType == "tool_use" {
+	// delta 类型必须与当前已打开的内容块类型一致（对齐上游
+	// claudeCodeKeepaliveDeltaTypeForContentBlock），否则客户端会收到与
+	// content_block_start 不匹配的 delta。
+	switch blockType {
+	case "tool_use":
 		return fmt.Sprintf("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":%d,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}\n\n", index)
+	case "thinking":
+		return fmt.Sprintf("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":%d,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"\"}}\n\n", index)
+	default:
+		return fmt.Sprintf("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":%d,\"delta\":{\"type\":\"text_delta\",\"text\":\"\"}}\n\n", index)
 	}
-	return fmt.Sprintf("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":%d,\"delta\":{\"type\":\"text_delta\",\"text\":\"\"}}\n\n", index)
 }
 
 // ErrNoAvailableAccounts 表示没有可用的账号
@@ -499,6 +508,10 @@ var allowedHeaders = map[string]bool{
 // cache implementation (e.g. redis.Nil), mirroring ErrRefreshTokenNotFound.
 var ErrStickySessionNotFound = errors.New("sticky session not found")
 
+// ErrReasoningContentNotFound is returned by GatewayCache.GetReasoningContent
+// when no cached reasoning content exists for the reasoning item ID.
+var ErrReasoningContentNotFound = errors.New("reasoning content not found")
+
 // GatewayCache 定义网关服务的缓存操作接口。
 // 提供粘性会话（Sticky Session）的存储、查询、刷新和删除功能。
 //
@@ -522,6 +535,27 @@ type GatewayCache interface {
 	// DeleteSessionAccountID 删除粘性会话绑定，用于账号不可用时主动清理
 	// Delete sticky session binding, used to proactively clean up when account becomes unavailable
 	DeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string) error
+
+	// Grok async video billing snapshot (create → status success).
+	// SetGrokVideoPendingBilling stores create-time model/duration/resolution for status billing.
+	SetGrokVideoPendingBilling(ctx context.Context, key string, payload []byte, ttl time.Duration) error
+	// GetGrokVideoPendingBilling returns the create-time billing snapshot; miss → nil, nil.
+	GetGrokVideoPendingBilling(ctx context.Context, key string) ([]byte, error)
+	// ClaimGrokVideoBilled atomically marks a video request as billed (SetNX).
+	// Returns true when this caller won the claim; false when already billed or claim unavailable.
+	ClaimGrokVideoBilled(ctx context.Context, key string, ttl time.Duration) (bool, error)
+	// ReleaseGrokVideoBilled clears a claim so a failed RecordUsage can retry billing.
+	ReleaseGrokVideoBilled(ctx context.Context, key string) error
+
+	// Reasoning content cache (Responses→Chat Completions 桥接）。
+	// SetReasoningContent 按 reasoning item id 缓存 reasoning 全文，供后续请求
+	// 在客户端不回传明文 summary 时回注 reasoning_content（DeepSeek thinking
+	// mode 要求回传，否则 400）。
+	SetReasoningContent(ctx context.Context, itemID string, content string, ttl time.Duration) error
+	// GetReasoningContent 返回缓存的 reasoning 全文；未命中返回
+	// ErrReasoningContentNotFound，使 service 层无需依赖具体缓存实现即可
+	// 区分"未缓存"与真实读取失败。
+	GetReasoningContent(ctx context.Context, itemID string) (string, error)
 }
 
 // derefGroupID safely dereferences *int64 to int64, returning 0 if nil
@@ -548,6 +582,10 @@ func resolveModelsListCacheTTL(cfg *config.Config) time.Duration {
 
 func modelsListCacheKey(groupID *int64, platform string) string {
 	return fmt.Sprintf("%d|%s", derefGroupID(groupID), strings.TrimSpace(platform))
+}
+
+func compositeModelOwnershipCacheKey(groupID int64, model string) string {
+	return fmt.Sprintf("%s%d|%s", compositeModelOwnershipCachePrefix, groupID, strings.TrimSpace(model))
 }
 
 func prefetchedStickyGroupIDFromContext(ctx context.Context) (int64, bool) {
@@ -597,6 +635,8 @@ type AccountSelectionResult struct {
 	Acquired    bool
 	ReleaseFunc func()
 	WaitPlan    *AccountWaitPlan // nil means no wait allowed
+	// stickySessionHit 标记账号来自会话粘性绑定命中，供非高级调度路径回填决策标签。
+	stickySessionHit bool
 	// profitGate 携带本次选号真实生效的利润门（无门为 nil）。门安装在调度栈的
 	// 局部 ctx 上，handler 必须经 ContextWithSelectionProfitGate 重放后才能在
 	// 调度栈之外做抢槽后终检与准入后粘性绑定。
@@ -620,18 +660,39 @@ type ClaudeUsage struct {
 }
 
 // ForwardResult 转发结果
+type AudioUsage struct {
+	Mode            string  // realtime | tts | stt
+	DurationOrUnits float64 // minutes / million-chars / hours
+}
+
 type ForwardResult struct {
 	RequestID string
-	Usage     ClaudeUsage
-	Model     string
+	// UpstreamHeaders 是直接上游的响应头，用于按账户配置解析上游请求标识。
+	UpstreamHeaders http.Header
+	Usage           ClaudeUsage
+	Model           string
 	// UpstreamModel is the actual upstream model after mapping.
 	// Prefer empty when it is identical to Model; persistence normalizes equal values away as no-op mappings.
-	UpstreamModel    string
-	Stream           bool
-	Duration         time.Duration
-	FirstTokenMs     *int // 首字时间（流式请求）
-	ClientDisconnect bool // 客户端是否在流式传输过程中断开
-	ReasoningEffort  *string
+	UpstreamModel string
+	// UpstreamResponseModel is captured from the raw successful upstream
+	// response before any client-facing rewrite or protocol conversion.
+	UpstreamResponseModel         string
+	UpstreamResponseModelConflict bool
+	// UpstreamResponseServiceTier is the tier the upstream reports having used
+	// (Anthropic usage.speed: "fast" / "standard"); "" when not declared.
+	UpstreamResponseServiceTier string
+	Stream                      bool
+	Duration                    time.Duration
+	FirstTokenMs                *int // 首字时间（流式请求）
+	ClientDisconnect            bool // 客户端是否在流式传输过程中断开
+	ReasoningEffort             *string
+	// RequestedReasoningEffort is the client-requested effort before mapping.
+	RequestedReasoningEffort *string
+	// ServiceTier records the tier requested by the client. OpenAI uses
+	// service_tier; Anthropic speed=fast is normalized to "fast". Usage recording
+	// lowers it to UpstreamResponseServiceTier when the upstream reports a
+	// cheaper tier (see ResolveBillingServiceTier).
+	ServiceTier *string
 
 	// 图片生成计费字段（图片生成模型使用）
 	ImageCount         int    // 生成的图片数量
@@ -641,6 +702,11 @@ type ForwardResult struct {
 	ImageOutputSizes   []string
 	ImageSizeSource    string
 	ImageSizeBreakdown map[string]int
+	SearchCount        int
+	AudioUsage         *AudioUsage
+	// CacheStorageTokenHours 显式上下文缓存的存储量（缓存 token 数 × 存储小时数），按计费模型的
+	// 存储单价折算为费用后叠加在 token 费用之上。
+	CacheStorageTokenHours float64
 }
 
 // GatewayFailureStage identifies which request stage failed. The zero value is
@@ -679,11 +745,16 @@ type GatewayFailureReason string
 // source-compatible and preserves their legacy retry-next-account behavior.
 type UpstreamFailoverError struct {
 	StatusCode               int
-	ResponseBody             []byte      // 上游响应体，用于错误透传规则匹配
-	ResponseHeaders          http.Header // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
-	ForceCacheBilling        bool        // Antigravity 粘性会话切换时设为 true
-	RetryableOnSameAccount   bool        // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
-	SafeToFailoverAfterWrite bool        // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
+	ResponseBody             []byte        // 上游响应体，用于错误透传规则匹配
+	ResponseHeaders          http.Header   // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
+	ForceCacheBilling        bool          // Antigravity 粘性会话切换时设为 true
+	RetryableOnSameAccount   bool          // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
+	SameAccountRetryDelay    time.Duration // 同账号重试的最小间隔；零值使用 handler 默认值
+	SameAccountRetryDeadline time.Time     // 同账号重试截止时间；零值表示仅受 retryLimit 限制
+	SameAccountRetryMax      int           // 可选的错误级同账号重试上限，低于 handler 默认预算时优先采用
+	RequestScopedTransient   bool          // 故障因素与账号无关（如上游按客户端身份/模型容量降载）：可同账号重试，但不得据此对账号做临时封禁
+	SafeToFailoverAfterWrite bool          // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
+	BoundUpstreamPassthrough bool          // 绑定显式缓存的请求在上游网关账号上收到的 429 / 5xx：反映持有缓存的上游账号状态，原样回写不走错误映射
 	Stage                    GatewayFailureStage
 	Scope                    GatewayFailureScope
 	Reason                   GatewayFailureReason
@@ -732,6 +803,11 @@ func (e *sseStreamErrorEventError) Error() string { return "have error in stream
 // 由 handler 层在同账号重试全部用尽、切换账号时调用。
 func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accountID int64, failoverErr *UpstreamFailoverError) {
 	if failoverErr == nil || !failoverErr.RetryableOnSameAccount {
+		return
+	}
+	// 请求级瞬时故障与账号健康无关：封禁只会把与故障无关的账号一并摘掉，
+	// 而故障因素（客户端身份、模型容量）在下一个账号上完全相同。
+	if failoverErr.RequestScopedTransient {
 		return
 	}
 	// 根据状态码选择封禁策略
@@ -851,6 +927,9 @@ func NewGatewayService(
 		compositeResolver:     compositeResolver,
 		balanceNotifyService:  balanceNotifyService,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
+	}
+	if compositeResolver != nil {
+		compositeResolver.SetModelOwnershipResolver(svc.resolveCompositeModelOwnership)
 	}
 	svc.userGroupRateResolver = newUserGroupRateResolver(
 		userGroupRateRepo,
@@ -1246,9 +1325,8 @@ func (s *GatewayService) replaceModelInBody(body []byte, newModel string) []byte
 }
 
 type claudeOAuthNormalizeOptions struct {
-	injectMetadata          bool
-	metadataUserID          string
-	stripSystemCacheControl bool
+	injectMetadata bool
+	metadataUserID string
 }
 
 // sanitizeSystemText rewrites only the fixed OpenCode identity sentence (if present).
@@ -1345,7 +1423,14 @@ func deleteJSONPathBytes(body []byte, path string) ([]byte, bool) {
 	return next, true
 }
 
-func normalizeClaudeOAuthSystemBody(body []byte, opts claudeOAuthNormalizeOptions) ([]byte, bool) {
+// normalizeClaudeOAuthSystemBody 只做 system 文本的规范化，**不动 cache_control**。
+//
+// 这里曾经按 opts 剥离客户端打在 system 上的断点。那个动作是「system 必然被整个
+// 重写」时代的配套：内容都搬进 messages 了，残留断点指着空气。system 注入变成
+// 可配置之后前提就没了——注入开启时留在 system 上的断点是我们自己拼的稳定锚点，
+// 注入关闭时它是客户端的缓存意图，两种情形都没有删它的理由。
+// 4 块上限属于上游硬约束，由 enforceCacheControlLimit 在各条出口兜底。
+func normalizeClaudeOAuthSystemBody(body []byte) ([]byte, bool) {
 	sys := gjson.GetBytes(body, "system")
 	if !sys.Exists() {
 		return body, false
@@ -1377,13 +1462,6 @@ func normalizeClaudeOAuthSystemBody(body []byte, opts claudeOAuthNormalizeOption
 							modified = true
 						}
 					}
-				}
-			}
-
-			if opts.stripSystemCacheControl && item.Get("cache_control").Exists() {
-				if next, ok := deleteJSONPathBytes(out, fmt.Sprintf("system.%d.cache_control", index)); ok {
-					out = next
-					modified = true
 				}
 			}
 
@@ -1433,7 +1511,7 @@ func normalizeClaudeOAuthRequestBody(body []byte, modelID string, opts claudeOAu
 	out := body
 	modified := false
 
-	if next, changed := normalizeClaudeOAuthSystemBody(out, opts); changed {
+	if next, changed := normalizeClaudeOAuthSystemBody(out); changed {
 		out = next
 		modified = true
 	}
@@ -1468,7 +1546,11 @@ func normalizeClaudeOAuthRequestBody(body []byte, modelID string, opts claudeOAu
 	// temperature：真实 Claude Code CLI 总是发送 temperature（默认 1，客户端可覆盖）。
 	// 之前的实现直接 delete 会导致 payload 缺字段，与真实 CLI 字节级不一致。
 	// 策略：客户端传了什么就透传；没传则补默认 1。
-	if !gjson.GetBytes(out, "temperature").Exists() {
+	// 例外：采样锁定的模型（sonnet-5-5/haiku-5-5）上 temperature+top_p 共存即 400，
+	// 客户端只传 top_p 时不得再补 temperature，否则网关自己制造 400（issue #7919）。
+	samplingLocked := claude.IsSonnet55(modelID) || claude.IsHaiku55(modelID)
+	if !gjson.GetBytes(out, "temperature").Exists() && !claude.IsOpus55(modelID) &&
+		(!samplingLocked || !gjson.GetBytes(out, "top_p").Exists()) {
 		if next, ok := setJSONValueBytes(out, "temperature", 1); ok {
 			out = next
 			modified = true
@@ -1509,7 +1591,7 @@ func normalizeClaudeOAuthRequestBody(body []byte, modelID string, opts claudeOAu
 	// - 其他形态（auto/any/none）原样透传
 	// 如果 body 里完全没有 tools（空数组），tool_choice 没意义时才删除
 	if !gjson.GetBytes(out, "tools").IsArray() || len(gjson.GetBytes(out, "tools").Array()) == 0 {
-		if gjson.GetBytes(out, "tool_choice").Exists() {
+		if !isClaude55SignedThinkingModel(modelID) && gjson.GetBytes(out, "tool_choice").Exists() {
 			if next, ok := deleteJSONPathBytes(out, "tool_choice"); ok {
 				out = next
 				modified = true
@@ -1593,13 +1675,12 @@ func (s *GatewayService) applyClaudeCodeOAuthMimicryToBody(
 	}
 
 	systemPromptInjectionEnabled, systemPrompt, systemPromptBlocks := s.claudeOAuthSystemPromptInjectionSettings(ctx)
-	systemRewritten := false
 	if systemPromptInjectionEnabled {
+		systemPromptBlocks = claudeOAuthSystemPromptBlocksForModel(model, systemPromptBlocks)
 		body = rewriteSystemForNonClaudeCodeWithPromptBlocks(body, normalizeSystemParam(systemRaw), systemPrompt, systemPromptBlocks)
-		systemRewritten = true
 	}
 
-	normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: !systemRewritten}
+	normalizeOpts := claudeOAuthNormalizeOptions{}
 
 	if s.identityService != nil && c != nil && c.Request != nil {
 		if fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, c.Request.Header); err == nil && fp != nil {
@@ -1749,9 +1830,24 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 		if err != nil {
 			return nil, err
 		}
+		if group == nil {
+			return nil, ErrGroupNotFound
+		}
 		groupID = resolvedGroupID
 		ctx = s.withGroupContext(ctx, group)
 		platform = group.Platform
+		if group.Platform == PlatformComposite {
+			decision, ok, err := s.resolveCompositeRouteDecision(ctx, group, requestedModel, CompositeRouteEndpointAny)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, fmt.Errorf("%w supporting model: %s (composite target platform unknown)", ErrNoAvailableAccounts, requestedModel)
+			}
+			platform = decision.TargetPlatform
+			requestedModel = decision.UpstreamModel
+			ctx = WithCompositeRouteDecision(ctx, decision)
+		}
 	} else {
 		// 无分组时只使用原生 anthropic 平台
 		platform = PlatformAnthropic
@@ -1903,12 +1999,12 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		}
 	}
 
-	platform, hasForcePlatform, err := s.resolvePlatform(ctx, groupID, group)
+	platform, hasForcePlatform, err := s.resolvePlatform(ctx, groupID, group, requestedModel)
 	if err != nil {
 		return nil, err
 	}
 	preferOAuth := platform == PlatformGemini
-	if s.debugModelRoutingEnabled() && platform == PlatformAnthropic && requestedModel != "" {
+	if s.debugModelRoutingEnabled() && requestedModel != "" && modelRoutingAppliesToTargetPlatform(platform) {
 		logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] load-aware enabled: group_id=%v model=%s session=%s platform=%s", derefGroupID(groupID), requestedModel, shortSessionHash(sessionHash), platform)
 	}
 
@@ -1935,9 +2031,17 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		return excluded
 	}
 
-	// 获取模型路由配置（仅 anthropic 平台）
+	// upstream 计费基准的渠道模型限制以账号映射后的上游模型为准，只能逐账号判定；
+	// 负载感知各层的候选过滤与粘性 gate 共用这一判定。
+	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
+	isChannelRestricted := func(account *Account) bool {
+		return needsUpstreamCheck && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, account, requestedModel)
+	}
+
+	// 获取模型路由配置（anthropic / openai 目标平台；composite 分组按目标平台判断）
 	var routingAccountIDs []int64
-	if group != nil && requestedModel != "" && group.Platform == PlatformAnthropic {
+	if group != nil && requestedModel != "" &&
+		modelRoutingAppliesToPlatform(platform, group.Platform) {
 		routingAccountIDs = group.GetRoutingAccountIDs(requestedModel)
 		if s.debugModelRoutingEnabled() {
 			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] context group routing: group_id=%d model=%s enabled=%v rules=%d matched_ids=%v session=%s sticky_account=%d",
@@ -1961,7 +2065,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 	if len(routingAccountIDs) > 0 && s.concurrencyService != nil {
 		// 1. 过滤出路由列表中可调度的账号
 		var routingCandidates []*Account
-		var filteredExcluded, filteredMissing, filteredUnsched, filteredPlatform, filteredModelScope, filteredModelMapping, filteredWindowCost int
+		var filteredExcluded, filteredMissing, filteredUnsched, filteredPlatform, filteredModelScope, filteredModelMapping, filteredChannelRestricted, filteredWindowCost int
 		var modelScopeSkippedIDs []int64 // 记录因模型限流被跳过的账号 ID
 		for _, routingAccountID := range routingAccountIDs {
 			if isExcluded(routingAccountID) {
@@ -1988,6 +2092,10 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 				filteredModelMapping++
 				continue
 			}
+			if isChannelRestricted(account) {
+				filteredChannelRestricted++
+				continue
+			}
 			if !s.isAccountSchedulableForModelSelection(ctx, account, requestedModel) {
 				filteredModelScope++
 				modelScopeSkippedIDs = append(modelScopeSkippedIDs, account.ID)
@@ -2010,9 +2118,9 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		}
 
 		if s.debugModelRoutingEnabled() {
-			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] routed candidates: group_id=%v model=%s routed=%d candidates=%d filtered(excluded=%d missing=%d unsched=%d platform=%d model_scope=%d model_mapping=%d window_cost=%d)",
+			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] routed candidates: group_id=%v model=%s routed=%d candidates=%d filtered(excluded=%d missing=%d unsched=%d platform=%d model_scope=%d model_mapping=%d channel_restricted=%d window_cost=%d)",
 				derefGroupID(groupID), requestedModel, len(routingAccountIDs), len(routingCandidates),
-				filteredExcluded, filteredMissing, filteredUnsched, filteredPlatform, filteredModelScope, filteredModelMapping, filteredWindowCost)
+				filteredExcluded, filteredMissing, filteredUnsched, filteredPlatform, filteredModelScope, filteredModelMapping, filteredChannelRestricted, filteredWindowCost)
 			if len(modelScopeSkippedIDs) > 0 {
 				logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] model_rate_limited accounts skipped: group_id=%v model=%s account_ids=%v",
 					derefGroupID(groupID), requestedModel, modelScopeSkippedIDs)
@@ -2038,6 +2146,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 							s.isGatewayAccountProfitEligible(ctx, stickyAccount) &&
 							s.isAccountAllowedForPlatform(stickyAccount, platform, useMixed) &&
 							(requestedModel == "" || s.isModelSupportedByAccountWithContext(ctx, stickyAccount, requestedModel)) &&
+							!isChannelRestricted(stickyAccount) &&
 							s.isAccountSchedulableForModelSelection(ctx, stickyAccount, requestedModel) &&
 							s.isAccountSchedulableForQuota(stickyAccount) &&
 							s.isAccountSchedulableForWindowCost(ctx, stickyAccount, true)
@@ -2222,6 +2331,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 				platformOK := s.isAccountAllowedForPlatform(account, platform, useMixed)
 				profitOK := s.isGatewayAccountProfitEligible(ctx, account)
 				modelSupported := requestedModel == "" || s.isModelSupportedByAccountWithContext(ctx, account, requestedModel)
+				channelOK := !isChannelRestricted(account)
 				modelSchedulable := s.isAccountSchedulableForModelSelection(ctx, account, requestedModel)
 				quotaOK := s.isAccountSchedulableForQuota(account)
 				windowCostOK := s.isAccountSchedulableForWindowCost(ctx, account, true)
@@ -2236,13 +2346,14 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 					"platform_ok", platformOK,
 					"profit_ok", profitOK,
 					"model_supported", modelSupported,
+					"channel_ok", channelOK,
 					"model_schedulable", modelSchedulable,
 					"quota_ok", quotaOK,
 					"window_cost_ok", windowCostOK,
 					"rpm_ok", rpmOK,
 				)
 
-				if !clearSticky && platformOK && profitOK && modelSupported && modelSchedulable && quotaOK && windowCostOK && rpmOK && schedulable {
+				if !clearSticky && platformOK && profitOK && modelSupported && channelOK && modelSchedulable && quotaOK && windowCostOK && rpmOK && schedulable {
 					result, err := s.tryAcquireAccountSlot(ctx, accountID, account.Concurrency)
 					if err == nil && result.Acquired {
 						// 会话数量限制检查
@@ -2327,6 +2438,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		"total_accounts", len(accounts),
 	)
 	candidates := make([]*Account, 0, len(accounts))
+	channelRestrictedCount := 0
 	for i := range accounts {
 		acc := &accounts[i]
 		if isExcluded(acc.ID) {
@@ -2345,6 +2457,10 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 			continue
 		}
 		if requestedModel != "" && !s.isModelSupportedByAccountWithContext(ctx, acc, requestedModel) {
+			continue
+		}
+		if isChannelRestricted(acc) {
+			channelRestrictedCount++
 			continue
 		}
 		if !s.isAccountSchedulableForModelSelection(ctx, acc, requestedModel) {
@@ -2366,6 +2482,14 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 	}
 
 	if len(candidates) == 0 {
+		if channelRestrictedCount > 0 {
+			slog.Warn("channel pricing restriction blocked request",
+				"group_id", derefGroupID(groupID),
+				"model", requestedModel,
+				"restricted_accounts", channelRestrictedCount,
+				"total_accounts", len(accounts))
+			return nil, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+		}
 		return nil, ErrNoAvailableAccounts
 	}
 
@@ -2529,8 +2653,35 @@ func (s *GatewayService) ResolveGroupByID(ctx context.Context, groupID int64) (*
 	return s.resolveGroupByID(ctx, groupID)
 }
 
+// modelRoutingAppliesToPlatform 判定模型路由规则是否适用于本次请求。
+//
+// 路由规则的存储与查表（Group.ModelRouting / GetRoutingAccountIDs）本身与平台无关，
+// 早期只有 Anthropic 目标平台会读取它。OpenAI 分组同样存在“同一个公开别名由不同账号
+// 映射到不同上游模型”的故障转移写法，需要显式路由来指定谁是主、谁是备，因此这里把
+// Anthropic 与 OpenAI 一并放行。
+//
+// targetPlatform 是请求解析后的目标平台；groupPlatform 是分组自身的平台。composite
+// 分组不限定自身平台，只要目标平台落在放行集合内即可复用其规则。
+func modelRoutingAppliesToPlatform(targetPlatform, groupPlatform string) bool {
+	if !modelRoutingAppliesToTargetPlatform(targetPlatform) {
+		return false
+	}
+	return groupPlatform == targetPlatform || groupPlatform == PlatformComposite
+}
+
+// modelRoutingAppliesToTargetPlatform 是放行平台集合的唯一定义处：新增平台只改这里。
+// 在只知道目标平台、还没取到分组的位置（调试日志、取分组前的短路）单独判定用。
+func modelRoutingAppliesToTargetPlatform(targetPlatform string) bool {
+	switch targetPlatform {
+	case PlatformAnthropic, PlatformOpenAI:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *GatewayService) routingAccountIDsForRequest(ctx context.Context, groupID *int64, requestedModel string, platform string) []int64 {
-	if groupID == nil || requestedModel == "" || platform != PlatformAnthropic {
+	if groupID == nil || requestedModel == "" || !modelRoutingAppliesToTargetPlatform(platform) {
 		return nil
 	}
 	group, err := s.resolveGroupByID(ctx, *groupID)
@@ -2540,10 +2691,11 @@ func (s *GatewayService) routingAccountIDsForRequest(ctx context.Context, groupI
 		}
 		return nil
 	}
-	// Preserve existing behavior: model routing only applies to anthropic groups.
-	if group.Platform != PlatformAnthropic {
+	// 路由规则适用于解析到 Anthropic 或 OpenAI 的请求；composite 分组在其模型解析到
+	// 上述平台后同样可以复用这些规则。
+	if !modelRoutingAppliesToPlatform(platform, group.Platform) {
 		if s.debugModelRoutingEnabled() {
-			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] skip: non-anthropic group platform: group_id=%d group_platform=%s model=%s", group.ID, group.Platform, requestedModel)
+			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] skip: group platform not eligible: group_id=%d group_platform=%s target_platform=%s model=%s", group.ID, group.Platform, platform, requestedModel)
 		}
 		return nil
 	}
@@ -2606,18 +2758,41 @@ func (s *GatewayService) checkClaudeCodeRestriction(ctx context.Context, groupID
 	return group, resolvedID, nil
 }
 
-func (s *GatewayService) resolvePlatform(ctx context.Context, groupID *int64, group *Group) (string, bool, error) {
+func (s *GatewayService) resolvePlatform(ctx context.Context, groupID *int64, group *Group, requestedModel string) (string, bool, error) {
 	forcePlatform, hasForcePlatform := ctx.Value(ctxkey.ForcePlatform).(string)
 	if hasForcePlatform && forcePlatform != "" {
 		return forcePlatform, true, nil
 	}
+	if platform, ok := ResolvedTargetPlatformFromContext(ctx); ok {
+		return platform, false, nil
+	}
 	if group != nil {
+		if group.Platform == PlatformComposite {
+			decision, ok, err := s.resolveCompositeRouteDecision(ctx, group, requestedModel, CompositeRouteEndpointAny)
+			if err != nil {
+				return "", false, err
+			}
+			if !ok {
+				return "", false, fmt.Errorf("%w supporting model: %s (composite target platform unknown)", ErrNoAvailableAccounts, requestedModel)
+			}
+			return decision.TargetPlatform, false, nil
+		}
 		return group.Platform, false, nil
 	}
 	if groupID != nil {
 		group, err := s.resolveGroupByID(ctx, *groupID)
 		if err != nil {
 			return "", false, err
+		}
+		if group.Platform == PlatformComposite {
+			decision, ok, err := s.resolveCompositeRouteDecision(ctx, group, requestedModel, CompositeRouteEndpointAny)
+			if err != nil {
+				return "", false, err
+			}
+			if !ok {
+				return "", false, fmt.Errorf("%w supporting model: %s (composite target platform unknown)", ErrNoAvailableAccounts, requestedModel)
+			}
+			return decision.TargetPlatform, false, nil
 		}
 		return group.Platform, false, nil
 	}
@@ -2628,6 +2803,10 @@ func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *i
 	if s.schedulerSnapshot != nil {
 		accounts, useMixed, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
 		if err == nil {
+			accounts = s.filterAccountsBySchedulingThreshold(ctx, accounts)
+			if platform == PlatformGrok || strings.EqualFold(platform, PlatformGrok) {
+				accounts = s.filterGrokFreeQuotaAccountsForGateway(ctx, accounts)
+			}
 			slog.Debug("account_scheduling_list_snapshot",
 				"group_id", derefGroupID(groupID),
 				"platform", platform,
@@ -2689,7 +2868,7 @@ func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *i
 					"tls_fingerprint", acc.IsTLSFingerprintEnabled())
 			}
 		}
-		return filtered, useMixed, nil
+		return s.filterAccountsBySchedulingThreshold(ctx, filtered), useMixed, nil
 	}
 
 	var accounts []Account
@@ -2723,6 +2902,10 @@ func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *i
 				"status", acc.Status,
 				"tls_fingerprint", acc.IsTLSFingerprintEnabled())
 		}
+	}
+	accounts = s.filterAccountsBySchedulingThreshold(ctx, accounts)
+	if platform == PlatformGrok || strings.EqualFold(platform, PlatformGrok) {
+		accounts = s.filterGrokFreeQuotaAccountsForGateway(ctx, accounts)
 	}
 	return accounts, useMixed, nil
 }
@@ -3094,11 +3277,73 @@ func (s *GatewayService) checkAndRegisterSession(ctx context.Context, account *A
 	return allowed
 }
 
-func (s *GatewayService) getSchedulableAccount(ctx context.Context, accountID int64) (*Account, error) {
-	if s.schedulerSnapshot != nil {
-		return s.schedulerSnapshot.GetAccount(ctx, accountID)
+// ReleaseAccountSession 立即释放会话槽（不等待空闲超时）
+// 供 handler 在请求最终失败（选号成功但转发失败/客户端中断）时调用：
+// 上游从未真正服务该会话，若继续占槽，max_sessions 受限的账号会被失败请求的
+// session hash 卡满整个空闲窗口，后续新会话全部被拒。
+// 适用条件与 checkAndRegisterSession 对齐；不适用账号为 no-op，幂等可安全重复调用。
+func (s *GatewayService) ReleaseAccountSession(ctx context.Context, account *Account, sessionID string) {
+	if s == nil || s.sessionLimitCache == nil || account == nil || sessionID == "" {
+		return
 	}
-	return s.accountRepo.GetByID(ctx, accountID)
+	if !account.IsAnthropicOAuthOrSetupToken() {
+		return
+	}
+	if account.GetMaxSessions() <= 0 {
+		return
+	}
+	if err := s.sessionLimitCache.UnregisterSession(ctx, account.ID, sessionID); err != nil {
+		slog.Debug("session_limit.release_failed",
+			"account_id", account.ID,
+			"error", err)
+	}
+}
+
+func (s *GatewayService) getSchedulableAccount(ctx context.Context, accountID int64) (*Account, error) {
+	var (
+		account *Account
+		err     error
+	)
+	if s.schedulerSnapshot != nil {
+		account, err = s.schedulerSnapshot.GetAccount(ctx, accountID)
+	} else {
+		account, err = s.accountRepo.GetByID(ctx, accountID)
+	}
+	if err != nil || account == nil {
+		return account, err
+	}
+	if s.isAccountBlockedBySchedulingThreshold(ctx, account) {
+		return nil, nil
+	}
+	// Sticky / non-list selection must honor free soft-gate (same as listSchedulableAccounts).
+	if account.IsGrok() {
+		if gated := s.filterGrokFreeQuotaAccountsForGateway(ctx, []Account{*account}); len(gated) == 0 {
+			return nil, nil
+		}
+	}
+	return account, nil
+}
+
+func (s *GatewayService) filterAccountsBySchedulingThreshold(ctx context.Context, accounts []Account) []Account {
+	if len(accounts) == 0 {
+		return accounts
+	}
+
+	filtered := make([]Account, 0, len(accounts))
+	for i := range accounts {
+		if s.isAccountBlockedBySchedulingThreshold(ctx, &accounts[i]) {
+			continue
+		}
+		filtered = append(filtered, accounts[i])
+	}
+	return filtered
+}
+
+func (s *GatewayService) isAccountBlockedBySchedulingThreshold(ctx context.Context, account *Account) bool {
+	if s == nil || s.rateLimitService == nil || account == nil {
+		return false
+	}
+	return s.rateLimitService.ApplyAccountSchedulingThreshold(ctx, account)
 }
 
 func (s *GatewayService) hydrateSelectedAccount(ctx context.Context, account *Account) (*Account, error) {
@@ -3436,10 +3681,10 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 	preferOAuth := platform == PlatformGemini
 	routingAccountIDs := s.routingAccountIDsForRequest(ctx, groupID, requestedModel, platform)
 
-	// require_privacy_set: 获取分组信息
+	// require_privacy_set: 获取分组配置。GetByID 会聚合账号计数，旧选号路径不能用它。
 	var schedGroup *Group
 	if groupID != nil && s.groupRepo != nil {
-		schedGroup, _ = s.groupRepo.GetByID(ctx, *groupID)
+		schedGroup, _ = s.groupRepo.GetByIDLite(ctx, *groupID)
 	}
 
 	var accounts []Account
@@ -3702,10 +3947,10 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 	preferOAuth := nativePlatform == PlatformGemini
 	routingAccountIDs := s.routingAccountIDsForRequest(ctx, groupID, requestedModel, nativePlatform)
 
-	// require_privacy_set: 获取分组信息
+	// require_privacy_set: 获取分组配置。GetByID 会聚合账号计数，旧选号路径不能用它。
 	var schedGroup *Group
 	if groupID != nil && s.groupRepo != nil {
-		schedGroup, _ = s.groupRepo.GetByID(ctx, *groupID)
+		schedGroup, _ = s.groupRepo.GetByIDLite(ctx, *groupID)
 	}
 
 	var accounts []Account
@@ -4151,6 +4396,11 @@ func summarizeSelectionFailureStats(stats selectionFailureStats) string {
 // isModelSupportedByAccountWithContext 根据账户平台检查模型支持（带 context）
 // 对于 Antigravity 平台，会先获取映射后的最终模型名（包括 thinking 后缀）再检查支持
 func (s *GatewayService) isModelSupportedByAccountWithContext(ctx context.Context, account *Account, requestedModel string) bool {
+	if source, ok := CompositeRouteSourceFromContext(ctx); ok && source == CompositeRouteSourceAccount {
+		if publicModel, modelOK := RequestedPublicModelFromContext(ctx); modelOK && !explicitModelMappingClaims(*account, publicModel) {
+			return false
+		}
+	}
 	if account.Platform == PlatformAntigravity {
 		if strings.TrimSpace(requestedModel) == "" {
 			return true
@@ -4238,6 +4488,15 @@ func (s *GatewayService) getOAuthToken(ctx context.Context, account *Account) (s
 		accessToken, err := s.claudeTokenProvider.GetAccessToken(ctx, account)
 		if err != nil {
 			return "", "", err
+		}
+		return accessToken, "oauth", nil
+	}
+
+	// Grok OAuth: prefer access_token from credentials (background refresher keeps it warm).
+	if account.Platform == PlatformGrok && account.Type == AccountTypeOAuth {
+		accessToken := account.GetGrokAccessToken()
+		if accessToken == "" {
+			return "", "", errors.New("grok access_token not found in credentials")
 		}
 		return accessToken, "oauth", nil
 	}
@@ -4509,6 +4768,24 @@ type claudeOAuthSystemPromptBlocksEnvelope struct {
 	Blocks []claudeOAuthSystemPromptBlockConfig `json:"blocks"`
 }
 
+// claudeFableOAuthSystemPromptBlocks keeps the Claude Code identity required by
+// OAuth credentials without the generic CLI expansion block. Fable 5 rejects
+// that expansion upstream with stop_reason=refusal and zero output tokens,
+// while the native billing + identity shape is accepted. Original client
+// system instructions are still migrated into the message history by
+// rewriteSystemForNonClaudeCodeWithPromptBlocks.
+const claudeFableOAuthSystemPromptBlocks = `[
+	{"type":"text","text":"{billing_header}"},
+	{"type":"text","text":"{claude_code_system_prompt}"}
+]`
+
+func claudeOAuthSystemPromptBlocksForModel(model, configured string) string {
+	if isAnthropicFableModel(model) {
+		return claudeFableOAuthSystemPromptBlocks
+	}
+	return configured
+}
+
 func defaultClaudeOAuthExpansionPrompt(expansionPrompt string) string {
 	expansionPrompt = strings.TrimSpace(expansionPrompt)
 	if expansionPrompt == "" {
@@ -4562,14 +4839,17 @@ func expandClaudeOAuthSystemPromptTextTemplate(body []byte, text string, expansi
 		return "", nil
 	}
 	expansionPrompt = defaultClaudeOAuthExpansionPrompt(expansionPrompt)
-	billingText, err := buildBillingAttributionText(body, claude.CLICurrentVersion)
+	// 同一次展开内只取一次版本号，billing attribution / 指纹 / 占位符三处共用，
+	// 避免运行期版本翻转瞬间取到不同值。
+	cliVersion := claude.EffectiveCLIVersion()
+	billingText, err := buildBillingAttributionText(body, cliVersion)
 	if err != nil {
 		return "", err
 	}
-	fp := computeClaudeCodeFingerprint(body, claude.CLICurrentVersion)
+	fp := computeClaudeCodeFingerprint(body, cliVersion)
 	replacer := strings.NewReplacer(
 		"{billing_header}", billingText,
-		"{cc_version}", claude.CLICurrentVersion,
+		"{cc_version}", cliVersion,
 		"{fp}", fp,
 		"{claude_code_system_prompt}", claudeCodeSystemPrompt,
 		"{claude_code_expansion_prompt}", expansionPrompt,
@@ -4841,9 +5121,15 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath, 
 	return invalidThinking, messagePaths, toolPaths, systemPaths
 }
 
-// enforceCacheControlLimit 强制执行 cache_control 块数量限制（最多 4 个）
-// 超限时优先移除工具断点，再移除 messages 断点，最后才移除 system 断点。
+// enforceCacheControlLimit 让出站 cache_control 满足上游约束：
+// 先执行块数量限制，再修正 TTL 顺序。
 func enforceCacheControlLimit(body []byte) []byte {
+	return normalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
+}
+
+// enforceCacheControlBlockLimit 强制执行 cache_control 块数量限制（最多 4 个）
+// 超限时优先移除工具断点，再移除 messages 断点，最后才移除 system 断点。
+func enforceCacheControlBlockLimit(body []byte) []byte {
 	if len(body) == 0 {
 		return body
 	}
@@ -4924,6 +5210,46 @@ func enforceCacheControlLimit(body []byte) []byte {
 		return out
 	}
 	return body
+}
+
+// normalizeCacheControlTTLOrder raises earlier ephemeral breakpoints to 1h when
+// a later breakpoint uses 1h. Anthropic processes tools, system, then messages,
+// and rejects a ttl=1h breakpoint that follows a 5m one; an omitted ttl means 5m.
+// The mimic path adds its own 5m breakpoints to tools and system, so a client
+// 1h breakpoint in messages would otherwise turn a valid request into a 400.
+//
+// Raising keeps the client's choice. Tokens before a 1h breakpoint are already
+// written at the 1h rate, so the earlier breakpoints add no cache write cost.
+// Requests with a valid order are returned unchanged.
+func normalizeCacheControlTTLOrder(body []byte) []byte {
+	_, messagePaths, toolPaths, systemPaths := collectCacheControlPaths(body)
+	paths := make([]string, 0, len(toolPaths)+len(systemPaths)+len(messagePaths)+1)
+	paths = append(paths, toolPaths...)
+	paths = append(paths, systemPaths...)
+	paths = append(paths, messagePaths...)
+	// A top-level cache_control applies to the last cacheable block.
+	if gjson.GetBytes(body, "cache_control").Exists() {
+		paths = append(paths, "cache_control")
+	}
+
+	last1h := -1
+	for i, path := range paths {
+		if gjson.GetBytes(body, path+".ttl").String() == cacheTTLTarget1h {
+			last1h = i
+		}
+	}
+
+	out := body
+	for _, path := range paths[:last1h+1] {
+		cc := gjson.GetBytes(out, path)
+		if cc.Get("type").String() != "ephemeral" || cc.Get("ttl").String() == cacheTTLTarget1h {
+			continue
+		}
+		if next, err := sjson.SetBytes(out, path+".ttl", cacheTTLTarget1h); err == nil {
+			out = next
+		}
+	}
+	return out
 }
 
 // injectAnthropicCacheControlTTL1h 将已有 ephemeral cache_control 块的 ttl 强制写为 1h。
@@ -5041,11 +5367,39 @@ func (s *GatewayService) claudeOAuthSystemPromptInjectionSettings(ctx context.Co
 }
 
 // Forward 转发请求到Claude API
-func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (*ForwardResult, error) {
+func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (result *ForwardResult, err error) {
 	startTime := time.Now()
 	if parsed == nil {
 		return nil, fmt.Errorf("parse request: empty request")
 	}
+	// API-key mappings and OAuth native IDs are resolved before mimicry.
+	validationModel := parsed.Model
+	if account != nil {
+		if account.IsBedrock() {
+			if resolved, ok := ResolveBedrockModelID(account, validationModel); ok {
+				validationModel = resolved
+			}
+		} else if account.Type == AccountTypeAPIKey {
+			validationModel = account.GetMappedModel(validationModel)
+		}
+	}
+	if account != nil && account.Platform == PlatformAnthropic {
+		if err := validateClaude55Request(parsed.Body.Bytes(), validationModel); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"type": "error", "error": gin.H{"type": "invalid_request_error", "message": err.Error()}})
+			return nil, err
+		}
+	}
+	// Anthropic Fast is requested with speed=fast rather than OpenAI's
+	// service_tier. Attach it at this shared boundary so passthrough, OAuth and
+	// partial-stream results all use the same billing and usage-log path.
+	defer func() {
+		if result != nil {
+			if tier := anthropicSpeedServiceTier(account, parsed.Speed, anthropicSpeedModel(parsed, result)); tier != nil {
+				result.ServiceTier = tier
+			}
+		}
+	}()
+	beginUpstreamResponseModelObservation(c)
 
 	// Web Search 模拟：纯 web_search 请求时，直接调用搜索 API 构造响应
 	if account != nil && s.shouldEmulateWebSearch(ctx, account, parsed.GroupID, parsed.Body.Bytes()) {
@@ -5135,20 +5489,18 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		// Code..." system prompt 但缺少 billing attribution block，导致 Anthropic
 		// 检测到"有 CC prompt 但无 billing block"的不一致而判为 third-party。
 		// Parrot 的 transform_request 从不检查客户端 system 内容，直接覆盖。
-		systemRewritten := false
 		systemRaw, _ := parsed.SystemValue()
 		systemPromptInjectionEnabled, systemPrompt, systemPromptBlocks := s.claudeOAuthSystemPromptInjectionSettings(ctx)
 		if systemPromptInjectionEnabled {
+			systemPromptBlocks = claudeOAuthSystemPromptBlocksForModel(reqModel, systemPromptBlocks)
 			if err := replaceBody(rewriteSystemForNonClaudeCodeWithPromptBlocks(body, systemRaw, systemPrompt, systemPromptBlocks)); err != nil {
 				return nil, err
 			}
-			systemRewritten = true
 		}
 
-		// system 被重写时保留 CC prompt 的 cache_control: ephemeral（匹配真实 Claude Code 行为）；
-		// 未重写时（注入开关关闭）剥离客户端 cache_control，与原有行为一致。
-		// 两种情况下 enforceCacheControlLimit 都会兜底处理上限。
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: !systemRewritten}
+		// system 上的 cache_control 一律保留：注入开启时它是我们自己拼的稳定锚点，
+		// 注入关闭时它是客户端的缓存意图。4 块上限由 enforceCacheControlLimit 兜底。
+		normalizeOpts := claudeOAuthNormalizeOptions{}
 		if s.identityService != nil {
 			fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, c.Request.Header)
 			if err == nil && fp != nil {
@@ -5347,6 +5699,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 
 				if s.shouldRectifySignatureError(ctx, account, respBody, reqModel) {
 					appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+						ProxyID:            opsUpstreamProxyID(account),
+						ProxyName:          opsUpstreamProxyName(account),
 						Platform:           account.Platform,
 						AccountID:          account.ID,
 						AccountName:        account.Name,
@@ -5408,6 +5762,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 							_ = retryResp.Body.Close()
 							if retryReadErr == nil && retryResp.StatusCode == 400 && s.isSignatureErrorPattern(ctx, account, retryRespBody) {
 								appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+									ProxyID:            opsUpstreamProxyID(account),
+									ProxyName:          opsUpstreamProxyName(account),
 									Platform:           account.Platform,
 									AccountID:          account.ID,
 									AccountName:        account.Name,
@@ -5448,6 +5804,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 											_ = retryResp2.Body.Close()
 										}
 										appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+											ProxyID:            opsUpstreamProxyID(account),
+											ProxyName:          opsUpstreamProxyName(account),
 											Platform:           account.Platform,
 											AccountID:          account.ID,
 											AccountName:        account.Name,
@@ -5487,6 +5845,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				errMsg := extractUpstreamErrorMessage(respBody)
 				if isThinkingBudgetConstraintError(errMsg) && s.settingService.IsBudgetRectifierEnabled(ctx) {
 					appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+						ProxyID:            opsUpstreamProxyID(account),
+						ProxyName:          opsUpstreamProxyName(account),
 						Platform:           account.Platform,
 						AccountID:          account.ID,
 						AccountName:        account.Name,
@@ -5557,6 +5917,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				respBody, _ := s.readUpstreamErrorBody(resp)
 				_ = resp.Body.Close()
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+					ProxyID:            opsUpstreamProxyID(account),
+					ProxyName:          opsUpstreamProxyName(account),
 					Platform:           account.Platform,
 					AccountID:          account.ID,
 					AccountName:        account.Name,
@@ -5609,8 +5971,10 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			logger.LegacyPrintf("service.gateway", "[Forward] Upstream error (retry exhausted, failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
 				account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
-			s.handleRetryExhaustedSideEffects(ctx, resp, account)
+			s.handleRetryExhaustedSideEffects(ctx, resp, account, reqModel)
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				ProxyID:            opsUpstreamProxyID(account),
+				ProxyName:          opsUpstreamProxyName(account),
 				Platform:           account.Platform,
 				AccountID:          account.ID,
 				AccountName:        account.Name,
@@ -5631,7 +5995,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
-		return s.handleRetryExhaustedError(ctx, resp, c, account)
+		return s.handleRetryExhaustedError(ctx, resp, c, account, reqModel)
 	}
 
 	// 处理可切换账号的错误
@@ -5646,6 +6010,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 
 		s.handleFailoverSideEffects(ctx, resp, account, reqModel)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			ProxyID:            opsUpstreamProxyID(account),
+			ProxyName:          opsUpstreamProxyName(account),
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			UpstreamStatusCode: resp.StatusCode,
@@ -5688,6 +6054,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 					upstreamDetail = truncateString(string(respBody), maxBytes)
 				}
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+					ProxyID:            opsUpstreamProxyID(account),
+					ProxyName:          opsUpstreamProxyName(account),
 					Platform:           account.Platform,
 					AccountID:          account.ID,
 					AccountName:        account.Name,
@@ -5732,14 +6100,23 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	var firstTokenMs *int
 	var clientDisconnect bool
 	if reqStream {
+		writerSizeBeforeStream := c.Writer.Size()
 		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, reqModel, shouldMimicClaudeCode)
 		if err != nil {
 			var sseErr *sseStreamErrorEventError
 			if errors.As(err, &sseErr) {
 				// 上游 HTTP 200 + SSE 流体内出现 event:error 帧。
-				// 保留 StatusCode=403 以兼容既有 failover/客户端响应语义，
-				// 但补全 ResponseBody 与 ops 上下文，让运维日志能反映上游真实错误。
 				body := []byte(sseErr.RawData)
+				semanticStatus := http.StatusForbidden
+				if c.Writer.Size() == writerSizeBeforeStream && gjson.GetBytes(body, "error.type").String() == "overloaded_error" {
+					semanticStatus = 529
+					syntheticResp := &http.Response{
+						StatusCode: semanticStatus,
+						Header:     resp.Header.Clone(),
+						Body:       io.NopCloser(bytes.NewReader(body)),
+					}
+					s.handleFailoverSideEffects(ctx, syntheticResp, account, reqModel)
+				}
 
 				upstreamMsg := sanitizeUpstreamErrorMessage(
 					strings.TrimSpace(extractUpstreamErrorMessage(body)),
@@ -5755,10 +6132,12 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				}
 
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+					ProxyID:            opsUpstreamProxyID(account),
+					ProxyName:          opsUpstreamProxyName(account),
 					Platform:           account.Platform,
 					AccountID:          account.ID,
 					AccountName:        account.Name,
-					UpstreamStatusCode: 403,
+					UpstreamStatusCode: semanticStatus,
 					UpstreamRequestID:  resp.Header.Get("x-request-id"),
 					Kind:               "stream_error",
 					Message:            upstreamMsg,
@@ -5772,13 +6151,13 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				)
 
 				return nil, &UpstreamFailoverError{
-					StatusCode:   403,
+					StatusCode:   semanticStatus,
 					ResponseBody: body,
 				}
 			}
 			// 流中断（缺失 terminal 事件、读错误、数据间隔超时等）时保留已观测到的
 			// usage 与错误一起返回，handler 在错误处理完成后照常提交 usage 记录。
-			if partial := partialStreamUsageResult(resp, streamResult, originalModel, mappedModel, startTime, err); partial != nil {
+			if partial := partialStreamUsageResult(c, resp, streamResult, originalModel, mappedModel, startTime, err); partial != nil {
 				return partial, err
 			}
 			return nil, err
@@ -5794,15 +6173,64 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	}
 
 	return &ForwardResult{
-		RequestID:        resp.Header.Get("x-request-id"),
-		Usage:            *usage,
-		Model:            originalModel, // 使用原始模型用于计费和日志
-		UpstreamModel:    mappedModel,
-		Stream:           reqStream,
-		Duration:         time.Since(startTime),
-		FirstTokenMs:     firstTokenMs,
-		ClientDisconnect: clientDisconnect,
+		RequestID:                     resp.Header.Get("x-request-id"),
+		UpstreamHeaders:               resp.Header,
+		Usage:                         *usage,
+		Model:                         originalModel, // 使用原始模型用于计费和日志
+		UpstreamModel:                 mappedModel,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		Stream:                        reqStream,
+		Duration:                      time.Since(startTime),
+		FirstTokenMs:                  firstTokenMs,
+		ClientDisconnect:              clientDisconnect,
 	}, nil
+}
+
+func anthropicSpeedModel(parsed *ParsedRequest, result *ForwardResult) string {
+	if result != nil {
+		if upstreamModel := strings.TrimSpace(result.UpstreamModel); upstreamModel != "" {
+			return upstreamModel
+		}
+	}
+	if parsed == nil {
+		return ""
+	}
+	return parsed.Model
+}
+
+// anthropicSpeedServiceTier 把 Anthropic 的 speed=fast 归一成可计费的 "fast" tier。
+//
+// Fast mode 目前只在 Claude Opus 5 / Opus 4.8 上存在，且不支持 Bedrock 等第三方
+// 承载（Opus 4.7 的 fast mode 已被移除，传 speed=fast 会直接报错）。这里按模型和
+// 平台收紧，避免上游根本没跑 fast 时仍然按 2x 计费——宁可漏收也不能多收。
+//
+// 这里只决定请求侧的档位；上游响应里的 usage.speed 由 UpstreamResponseServiceTier
+// 带回，用量记录时经 ResolveBillingServiceTier 只降不升（usage.speed=standard 则按
+// 标准价计费）。
+func anthropicSpeedServiceTier(account *Account, speed, model string) *string {
+	if account == nil || account.Platform != PlatformAnthropic || speed != "fast" {
+		return nil
+	}
+	if account.IsBedrock() || !modelSupportsAnthropicFastMode(model) {
+		return nil
+	}
+	tier := "fast"
+	return &tier
+}
+
+// modelSupportsAnthropicFastMode 判断模型是否属于支持 fast mode 的 Opus 5 / Opus 4.8。
+func modelSupportsAnthropicFastMode(model string) bool {
+	modelLower := strings.ToLower(strings.TrimSpace(model))
+	if !strings.Contains(modelLower, "opus") {
+		return false
+	}
+	// "opus-5" 必须先判：不能用裸 "5" 匹配，否则 claude-opus-4-5 会被误判。
+	if strings.Contains(modelLower, "opus-5") || strings.Contains(modelLower, "opus5") {
+		return true
+	}
+	return strings.Contains(modelLower, "4.8") || strings.Contains(modelLower, "4-8")
 }
 
 type anthropicPassthroughForwardInput struct {
@@ -5889,29 +6317,10 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
 			}
-			if !errors.Is(err, context.Canceled) {
-				scheduleOllamaCloudUsageActivity(s.deferredService, account)
-			}
-			safeErr := sanitizeUpstreamErrorMessage(err.Error())
-			setOpsUpstreamError(c, 0, safeErr, "")
-			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-				Platform:           account.Platform,
-				AccountID:          account.ID,
-				AccountName:        account.Name,
-				UpstreamStatusCode: 0,
-				UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
-				Passthrough:        true,
-				Kind:               "request_error",
-				Message:            safeErr,
+			return nil, s.handleUpstreamTransportError(ctx, c, account, err, OpsUpstreamErrorEvent{
+				UpstreamURL: safeUpstreamURL(upstreamReq.URL.String()),
+				Passthrough: true,
 			})
-			c.JSON(http.StatusBadGateway, gin.H{
-				"type": "error",
-				"error": gin.H{
-					"type":    "upstream_error",
-					"message": "Upstream request failed",
-				},
-			})
-			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
 
 		// 透传分支禁止 400 请求体降级重试（该重试会改写请求体）
@@ -5976,8 +6385,10 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 			logger.LegacyPrintf("service.gateway", "[Anthropic Passthrough] Upstream error (retry exhausted, failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
 				account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
-			s.handleRetryExhaustedSideEffects(ctx, resp, account)
+			s.handleRetryExhaustedSideEffects(ctx, resp, account, input.RequestModel)
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				ProxyID:            opsUpstreamProxyID(account),
+				ProxyName:          opsUpstreamProxyName(account),
 				Platform:           account.Platform,
 				AccountID:          account.ID,
 				AccountName:        account.Name,
@@ -5999,7 +6410,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
-		return s.handleRetryExhaustedError(ctx, resp, c, account)
+		return s.handleRetryExhaustedError(ctx, resp, c, account, input.RequestModel)
 	}
 
 	if resp.StatusCode >= 400 && s.shouldFailoverUpstreamError(resp.StatusCode) {
@@ -6012,6 +6423,8 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 
 		s.handleFailoverSideEffects(ctx, resp, account, input.RequestModel)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			ProxyID:            opsUpstreamProxyID(account),
+			ProxyName:          opsUpstreamProxyName(account),
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
@@ -6046,7 +6459,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		if err != nil {
 			// 流中断时保留已观测到的 usage 与错误一起返回，避免上游已计量的请求
 			// 完全漏记漏计费（issue #5148）。
-			if partial := partialStreamUsageResult(resp, streamResult, input.OriginalModel, input.RequestModel, input.StartTime, err); partial != nil {
+			if partial := partialStreamUsageResult(c, resp, streamResult, input.OriginalModel, input.RequestModel, input.StartTime, err); partial != nil {
 				return partial, err
 			}
 			return nil, err
@@ -6065,14 +6478,18 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	}
 
 	return &ForwardResult{
-		RequestID:        resp.Header.Get("x-request-id"),
-		Usage:            *usage,
-		Model:            input.OriginalModel,
-		UpstreamModel:    input.RequestModel,
-		Stream:           input.RequestStream,
-		Duration:         time.Since(input.StartTime),
-		FirstTokenMs:     firstTokenMs,
-		ClientDisconnect: clientDisconnect,
+		RequestID:                     resp.Header.Get("x-request-id"),
+		UpstreamHeaders:               resp.Header,
+		Usage:                         *usage,
+		Model:                         input.OriginalModel,
+		UpstreamModel:                 input.RequestModel,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		Stream:                        input.RequestStream,
+		Duration:                      time.Since(input.StartTime),
+		FirstTokenMs:                  firstTokenMs,
+		ClientDisconnect:              clientDisconnect,
 	}, nil
 }
 
@@ -6083,6 +6500,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, []byte, error) {
+	body = stripDeferredToolCacheControl(body)
 	targetURL := claudeAPIURL
 	baseURL := account.GetBaseURL()
 	if baseURL != "" {
@@ -6103,6 +6521,10 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, clientBeta); changed {
 		body = sanitized
 	}
+
+	// Ollama Cloud DeepSeek 出站 max_tokens clamp：判定与上方 targetURL 的
+	// base 取值同源（GetBaseURL），详见 helper 注释。
+	body = clampOllamaCloudAnthropicMessagesMaxTokens(account, account.GetBaseURL(), body)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -6127,7 +6549,9 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Del("cookie")
-	setAnthropicAPIKeyAuthHeader(req.Header, account, token)
+	// Ollama Cloud Anthropic 兼容端点按实际 base_url 强制 Bearer（同上方
+	// targetURL 的 base 取值），其余保持 extra/default 行为。
+	setAnthropicAPIKeyAuthHeader(req.Header, account, token, account.GetBaseURL())
 
 	if getHeaderRaw(req.Header, "content-type") == "" {
 		setHeaderRaw(req.Header, "content-type", "application/json")
@@ -6135,6 +6559,10 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	if getHeaderRaw(req.Header, "anthropic-version") == "" {
 		setHeaderRaw(req.Header, "anthropic-version", "2023-06-01")
 	}
+
+	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+	account.ApplyHeaderOverrides(req.Header)
+	filterSonnet55ToolsetBetaHeader(req.Header, body, gjson.GetBytes(body, "model").String())
 
 	return req, body, nil
 }
@@ -6147,6 +6575,10 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	startTime time.Time,
 	model string,
 ) (*streamingResult, error) {
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = beginUpstreamResponseModelObservation(c)
+	}
 	if s.rateLimitService != nil {
 		s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 	}
@@ -6300,6 +6732,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 			line := ev.line
 			if data, ok := extractAnthropicSSEDataLine(line); ok {
 				trimmed := strings.TrimSpace(data)
+				observer.ObserveAnthropic([]byte(trimmed))
 				if anthropicStreamEventIsTerminal("", trimmed) {
 					sawTerminalEvent = true
 				}
@@ -6307,7 +6740,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 					ms := int(time.Since(startTime).Milliseconds())
 					firstTokenMs = &ms
 				}
-				s.parseSSEUsagePassthrough(data, usage)
+				parseSSEUsagePassthrough(data, usage)
 			} else {
 				trimmed := strings.TrimSpace(line)
 				if strings.HasPrefix(trimmed, "event:") && anthropicStreamEventIsTerminal(strings.TrimSpace(strings.TrimPrefix(trimmed, "event:")), "") {
@@ -6386,7 +6819,9 @@ func extractAnthropicSSEDataLine(line string) (string, bool) {
 	return line[start:], true
 }
 
-func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
+// parseSSEUsagePassthrough 从 Anthropic SSE data 行提取 usage（包级函数：
+// Anthropic 平台 passthrough 与国产供应商原生 Anthropic 直通共用）。
+func parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
 	if usage == nil || data == "" || data == "[DONE]" {
 		return
 	}
@@ -6426,10 +6861,10 @@ func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsag
 
 			cc5m := deltaUsage.Get("cache_creation.ephemeral_5m_input_tokens")
 			cc1h := deltaUsage.Get("cache_creation.ephemeral_1h_input_tokens")
-			if cc5m.Exists() && cc5m.Int() > 0 {
+			if cc5m.Exists() {
 				usage.CacheCreation5mTokens = int(cc5m.Int())
 			}
-			if cc1h.Exists() && cc1h.Int() > 0 {
+			if cc1h.Exists() {
 				usage.CacheCreation1hTokens = int(cc1h.Int())
 			}
 		}
@@ -6455,6 +6890,72 @@ func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsag
 			usage.CacheCreationInputTokens = int(total)
 		}
 	}
+
+	// Kimi's Anthropic-compatible stream uses input_tokens with two meanings:
+	// message_start reports total prompt input, while message_delta reports only
+	// uncached input. prompt_tokens remains the total in both events. Normalize
+	// to ClaudeUsage's mutually-exclusive buckets so downstream billing does not
+	// subtract cache tokens from an already-uncached value.
+	usageNode := parsed.Get("usage")
+	if parsed.Get("type").String() == "message_start" {
+		usageNode = parsed.Get("message.usage")
+	}
+	normalizeAnthropicCompatiblePromptUsage(usageNode, usage)
+}
+
+// normalizeAnthropicCompatiblePromptUsage converts provider-native OpenAI-style
+// prompt/cache fields into Claude's mutually-exclusive usage buckets. Native
+// Anthropic responses do not expose these aliases and are left alone.
+func normalizeAnthropicCompatiblePromptUsage(usageNode gjson.Result, usage *ClaudeUsage) bool {
+	if usage == nil || !usageNode.Exists() {
+		return false
+	}
+	promptTokens := usageNode.Get("prompt_tokens")
+	promptCacheHitTokens := usageNode.Get("prompt_cache_hit_tokens")
+	promptCacheMissTokens := usageNode.Get("prompt_cache_miss_tokens")
+	if (!promptTokens.Exists() || promptTokens.Int() <= 0) &&
+		!promptCacheHitTokens.Exists() && !promptCacheMissTokens.Exists() {
+		return false
+	}
+
+	cacheReadTokens := usage.CacheReadInputTokens
+	if v := usageNode.Get("cache_read_input_tokens"); v.Exists() {
+		cacheReadTokens = int(v.Int())
+	}
+	if cacheReadTokens == 0 {
+		if v := usageNode.Get("cached_tokens"); v.Exists() {
+			cacheReadTokens = int(v.Int())
+		}
+	}
+	if cacheReadTokens == 0 {
+		if v := usageNode.Get("prompt_tokens_details.cached_tokens"); v.Exists() {
+			cacheReadTokens = int(v.Int())
+		}
+	}
+	if cacheReadTokens == 0 && promptCacheHitTokens.Exists() {
+		cacheReadTokens = max(int(promptCacheHitTokens.Int()), 0)
+	}
+
+	cacheCreationTokens := usage.CacheCreationInputTokens
+	if v := usageNode.Get("cache_creation_input_tokens"); v.Exists() {
+		cacheCreationTokens = int(v.Int())
+	}
+	if cacheCreationTokens == 0 {
+		cc5m := usageNode.Get("cache_creation.ephemeral_5m_input_tokens").Int()
+		cc1h := usageNode.Get("cache_creation.ephemeral_1h_input_tokens").Int()
+		if cc5m > 0 || cc1h > 0 {
+			cacheCreationTokens = int(cc5m + cc1h)
+		}
+	}
+
+	if promptCacheMissTokens.Exists() {
+		usage.InputTokens = max(int(promptCacheMissTokens.Int()), 0)
+	} else {
+		usage.InputTokens = max(int(promptTokens.Int())-cacheReadTokens-cacheCreationTokens, 0)
+	}
+	usage.CacheReadInputTokens = cacheReadTokens
+	usage.CacheCreationInputTokens = cacheCreationTokens
+	return true
 }
 
 func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
@@ -6488,11 +6989,16 @@ func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 			usage.CacheReadInputTokens = int(cached)
 		}
 	}
+	normalizeAnthropicCompatiblePromptUsage(usageNode, usage)
 	return usage
 }
 
-func (s *GatewayService) invalidNonStreamingJSONFailoverError(
+// invalidNonStreamingJSONFailoverError 把"上游 2xx 返回非 JSON body"归一为
+// failover 错误（包级函数：Anthropic 平台 passthrough 与国产供应商原生
+// Anthropic 直通共用）。
+func invalidNonStreamingJSONFailoverError(
 	ctx context.Context,
+	rateLimitService *RateLimitService,
 	resp *http.Response,
 	account *Account,
 	body []byte,
@@ -6520,11 +7026,11 @@ func (s *GatewayService) invalidNonStreamingJSONFailoverError(
 		parseErr,
 	)
 
-	if s.rateLimitService != nil && account != nil {
+	if rateLimitService != nil && account != nil {
 		if len(requestedModel) > 0 {
-			s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body, requestedModel[0])
+			rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body, requestedModel[0])
 		} else {
-			s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body)
+			rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body)
 		}
 	}
 
@@ -6550,11 +7056,16 @@ func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
 	if err != nil {
 		return nil, err
 	}
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = beginUpstreamResponseModelObservation(c)
+	}
+	observer.ObserveAnthropic(body)
 
 	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
 		var raw json.RawMessage
 		if err := json.Unmarshal(body, &raw); err != nil {
-			return nil, s.invalidNonStreamingJSONFailoverError(ctx, resp, account, body, err)
+			return nil, invalidNonStreamingJSONFailoverError(ctx, s.rateLimitService, resp, account, body, err)
 		}
 	}
 
@@ -6610,6 +7121,9 @@ func writeAnthropicPassthroughResponseHeaders(dst http.Header, src http.Header, 
 func (s *GatewayService) ApplyBedrockCCCompat(c *gin.Context, body []byte, model string, account *Account, groupID *int64) []byte {
 	if !s.isBedrockCCCompatEnabled(c.Request.Context(), account, groupID) {
 		return body
+	}
+	if resolved, ok := ResolveBedrockModelID(account, model); ok {
+		model = resolved
 	}
 	body = sanitizeBedrockCCFields(body)
 	body = sanitizeBedrockThinking(body, model)
@@ -6713,7 +7227,9 @@ func (s *GatewayService) forwardBedrock(
 
 	// 错误/failover 处理
 	if resp.StatusCode >= 400 {
-		return s.handleBedrockUpstreamErrors(ctx, resp, c, account)
+		// 账号状态按模型隔离时用调度器的模型键（账号映射后的模型名），不是发往上游的 Bedrock 模型 ID；
+		// 两者不一致会让模型级冷却写到调度器不会读取的键上。
+		return s.handleBedrockUpstreamErrors(ctx, resp, c, account, account.GetMappedModel(reqModel))
 	}
 
 	// Bedrock 分支绕过通用 Forward 成功路径，这里保持上游接受回调语义一致。
@@ -6745,6 +7261,7 @@ func (s *GatewayService) forwardBedrock(
 
 	return &ForwardResult{
 		RequestID:        resp.Header.Get("x-amzn-requestid"),
+		UpstreamHeaders:  resp.Header,
 		Usage:            *usage,
 		Model:            reqModel,
 		UpstreamModel:    mappedModel,
@@ -6787,25 +7304,9 @@ func (s *GatewayService) executeBedrockUpstream(
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
 			}
-			safeErr := sanitizeUpstreamErrorMessage(err.Error())
-			setOpsUpstreamError(c, 0, safeErr, "")
-			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-				Platform:           account.Platform,
-				AccountID:          account.ID,
-				AccountName:        account.Name,
-				UpstreamStatusCode: 0,
-				UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
-				Kind:               "request_error",
-				Message:            safeErr,
+			return nil, s.handleUpstreamTransportError(ctx, c, account, err, OpsUpstreamErrorEvent{
+				UpstreamURL: safeUpstreamURL(upstreamReq.URL.String()),
 			})
-			c.JSON(http.StatusBadGateway, gin.H{
-				"type": "error",
-				"error": gin.H{
-					"type":    "upstream_error",
-					"message": "Upstream request failed",
-				},
-			})
-			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
 
 		if resp.StatusCode >= 400 && resp.StatusCode != 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
@@ -6859,12 +7360,14 @@ func (s *GatewayService) executeBedrockUpstream(
 	return resp, nil
 }
 
-// handleBedrockUpstreamErrors 处理 Bedrock 上游 4xx/5xx 错误（failover + 错误响应）
+// handleBedrockUpstreamErrors 处理 Bedrock 上游 4xx/5xx 错误（failover + 错误响应）；
+// modelKey 是调度器按模型隔离账号状态时使用的模型键（account.GetMappedModel 的结果）。
 func (s *GatewayService) handleBedrockUpstreamErrors(
 	ctx context.Context,
 	resp *http.Response,
 	c *gin.Context,
 	account *Account,
+	modelKey string,
 ) (*ForwardResult, error) {
 	// retry exhausted + failover
 	if s.shouldRetryUpstreamError(account, resp.StatusCode) {
@@ -6876,8 +7379,10 @@ func (s *GatewayService) handleBedrockUpstreamErrors(
 			logger.LegacyPrintf("service.gateway", "[Bedrock] Upstream error (retry exhausted, failover): Account=%d(%s) Status=%d Body=%s",
 				account.ID, account.Name, resp.StatusCode, truncateString(string(respBody), 1000))
 
-			s.handleRetryExhaustedSideEffects(ctx, resp, account)
+			s.handleRetryExhaustedSideEffects(ctx, resp, account, modelKey)
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				ProxyID:            opsUpstreamProxyID(account),
+				ProxyName:          opsUpstreamProxyName(account),
 				Platform:           account.Platform,
 				AccountID:          account.ID,
 				AccountName:        account.Name,
@@ -6891,7 +7396,7 @@ func (s *GatewayService) handleBedrockUpstreamErrors(
 				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
-		return s.handleRetryExhaustedError(ctx, resp, c, account)
+		return s.handleRetryExhaustedError(ctx, resp, c, account, modelKey)
 	}
 
 	// non-retryable failover
@@ -6900,8 +7405,10 @@ func (s *GatewayService) handleBedrockUpstreamErrors(
 		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 
-		s.handleFailoverSideEffects(ctx, resp, account)
+		s.handleFailoverSideEffects(ctx, resp, account, modelKey)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			ProxyID:            opsUpstreamProxyID(account),
+			ProxyName:          opsUpstreamProxyName(account),
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
@@ -6917,7 +7424,7 @@ func (s *GatewayService) handleBedrockUpstreamErrors(
 	}
 
 	// other errors
-	return s.handleErrorResponse(ctx, resp, c, account)
+	return s.handleErrorResponse(ctx, resp, c, account, modelKey)
 }
 
 // buildUpstreamRequestBedrock 构建 Bedrock 上游请求
@@ -7062,16 +7569,21 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
-	// 同步 billing header cc_version 与实际发送的 User-Agent 版本
-	if fingerprint != nil {
-		body = syncBillingHeaderVersion(body, fingerprint.UserAgent)
+	// 一致性铁律：同一次请求内只取一次 mimic UA，出站 User-Agent 头与
+	// 请求体 x-anthropic-billing-header 的 cc_version 都源自这一个字符串，
+	// 避免运行期版本缓存翻转瞬间头/体版本自相矛盾（会被判非正版客户端）。
+	mimicUserAgent := claude.DefaultUserAgent()
+
+	// Mimicry may override the cached User-Agent later, even without a fingerprint.
+	if billingUA := effectiveBillingUserAgent(mimicUserAgent, tokenType, mimicClaudeCode, fingerprint); billingUA != "" {
+		body = syncBillingHeaderVersion(body, billingUA)
 	}
 
 	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
 	//
 	// 顺序约束：
-	//   1) 算 finalBeta（纯函数，不依赖 req.Header；mimicry 路径会忽略客户端 beta，
-	//      与原“OAuth + mimicClaudeCode 跳过白名单透传”行为对齐）
+	//   1) 算 finalBeta（纯函数，不依赖 req.Header；mimicry 路径仅保留明确支持的
+	//      客户端兼容性 beta，其余使用固定列表）
 	//   2) 按 finalBeta 做能力维度 body sanitize（如 context-management beta 缺失 →
 	//      strip body.context_management，与 Bedrock 路径对称）
 	//   3) CCH 签名（必须使用 strip 后的 body，否则 hash 与最终 body 不一致 →
@@ -7084,10 +7596,22 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		tokenType, mimicClaudeCode, modelID, clientHeaders, body, effectiveDropSet,
 	)
 
+	// 账号覆写了 anthropic-beta 时，覆写值即最终上游值（由下方 ApplyHeaderOverrides 写入）：
+	// body 能力净化必须以覆写值为准，否则 header/body 不对称会被上游 400。
+	if beta, ok := account.HeaderOverrideValue("anthropic-beta"); ok {
+		finalBetaHeader, finalBetaShouldSet = beta, true
+	}
+	finalBetaHeader = filterSonnet55ToolsetBeta(finalBetaHeader, body, modelID)
+
 	// 能力维度 body sanitize：与最终 anthropic-beta header 对称
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBetaHeader); changed {
 		body = sanitized
 	}
+
+	// Ollama Cloud DeepSeek 出站 max_tokens clamp：判定与上方 targetURL 的
+	// base 取值同源（GetBaseURL），仅实际上游为 ollama.com 且映射后出站模型
+	// 为 DeepSeek 系时压到 cap，详见 helper 注释。
+	body = clampOllamaCloudAnthropicMessagesMaxTokens(account, account.GetBaseURL(), body)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -7098,7 +7622,9 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if tokenType == "oauth" {
 		setHeaderRaw(req.Header, "authorization", "Bearer "+token)
 	} else {
-		setHeaderRaw(req.Header, "x-api-key", token)
+		// Ollama Cloud Anthropic 兼容端点按实际 base_url 强制 Bearer，
+		// 与上方 targetURL 的 base 取值同源；其余平台保持 extra/default 行为。
+		setAnthropicAPIKeyAuthHeader(req.Header, account, token, account.GetBaseURL())
 	}
 
 	// 白名单透传 headers
@@ -7137,7 +7663,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	// OAuth + mimic Claude Code：强制注入 CLI 指纹相关 header
 	// （user-agent/x-stainless-*/x-app/Accept/x-stainless-helper-method/x-client-request-id）
 	if tokenType == "oauth" && mimicClaudeCode {
-		applyClaudeCodeMimicHeaders(req, reqStream)
+		applyClaudeCodeMimicHeaders(req, reqStream, mimicUserAgent)
 	}
 
 	// 写入最终 anthropic-beta header
@@ -7156,6 +7682,11 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 			}
 		}
 	}
+
+	// 账号级请求头覆写（仅 anthropic/openai api_key 账号启用时生效；OAuth 路径 no-op）。
+	// 放在所有 header 逻辑之后，确保配置值对同名头拥有最终决定权。
+	account.ApplyHeaderOverrides(req.Header)
+	filterSonnet55ToolsetBetaHeader(req.Header, body, modelID)
 
 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
@@ -7250,7 +7781,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	if policy.blockErr != nil {
 		return nil, policy.blockErr
 	}
-	finalBeta := filterVertexBetaTokens(clientBeta, mergeDropSets(policy.filterSet))
+	finalBeta := filterSonnet55ToolsetBeta(filterVertexBetaTokens(clientBeta, mergeDropSets(policy.filterSet)), vertexBody, modelID)
 
 	// 能力维度 sanitize：基于最终 beta（而非原始 client 值）决定是否保留 body 中的
 	// context_management，与 Anthropic 直连 / Bedrock 路径对称。
@@ -7371,6 +7902,41 @@ func defaultAPIKeyBetaHeader(body []byte) string {
 	return claude.APIKeyBetaHeader
 }
 
+// The legacy streaming beta is incompatible with the stable computer and
+// browser toolsets. The per-tool eager_input_streaming field remains available.
+// Applies to Sonnet 5.5 and Haiku 5.5, which share the computer_toolset_20260801
+// / browser_toolset_20260801 toolsets (Haiku 5.5 migration guide).
+func filterSonnet55ToolsetBeta(header string, body []byte, modelID string) string {
+	if at := strings.IndexByte(modelID, '@'); at >= 0 {
+		modelID = modelID[:at] // Vertex's dated model ID
+	}
+	if !claude.IsSonnet55(modelID) && !claude.IsHaiku55(modelID) {
+		return header
+	}
+	for _, tool := range gjson.GetBytes(body, "tools").Array() {
+		switch tool.Get("type").String() {
+		case "computer_toolset_20260801", "browser_toolset_20260801":
+			if !containsBetaToken(header, claude.BetaFineGrainedToolStreaming) {
+				return header
+			}
+			return stripBetaTokensWithSet(header, map[string]struct{}{claude.BetaFineGrainedToolStreaming: {}})
+		}
+	}
+	return header
+}
+
+func filterSonnet55ToolsetBetaHeader(headers http.Header, body []byte, modelID string) {
+	header := getHeaderRaw(headers, "anthropic-beta")
+	filtered := filterSonnet55ToolsetBeta(header, body, modelID)
+	if filtered == header {
+		return
+	}
+	deleteHeaderAllForms(headers, "anthropic-beta")
+	if filtered != "" {
+		setHeaderRaw(headers, "anthropic-beta", filtered)
+	}
+}
+
 func applyClaudeOAuthHeaderDefaults(req *http.Request) {
 	if req == nil {
 		return
@@ -7378,7 +7944,7 @@ func applyClaudeOAuthHeaderDefaults(req *http.Request) {
 	if getHeaderRaw(req.Header, "Accept") == "" {
 		setHeaderRaw(req.Header, "Accept", "application/json")
 	}
-	for key, value := range claude.DefaultHeaders {
+	for key, value := range claude.DefaultHeaders() {
 		if value == "" {
 			continue
 		}
@@ -7457,7 +8023,8 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 	clientHeaders http.Header,
 	body []byte,
 	effectiveDropSet map[string]struct{},
-) (string, bool) {
+) (beta string, shouldSet bool) {
+	defer func() { beta = filterSonnet55ToolsetBeta(beta, body, modelID) }()
 	clientBeta := ""
 	if clientHeaders != nil {
 		clientBeta = getHeaderRaw(clientHeaders, "anthropic-beta")
@@ -7465,10 +8032,20 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 
 	if tokenType == "oauth" {
 		if mimicClaudeCode {
-			// mimic 路径：原代码跳过白名单透传，incomingBeta 总是空字符串。
-			// 这里传空 string 以严格对齐原行为。
-			requiredBetas := claude.FullClaudeCodeMimicryBetas()
-			return mergeAnthropicBetaDropping(requiredBetas, "", effectiveDropSet), true
+			// Preserve explicitly requested compatibility tokens so the forwarded
+			// body and headers agree. Unknown betas remain excluded; policy drops
+			// still take precedence. Missing companion tokens are not inferred.
+			var incomingBetas []string
+			for _, token := range []string{
+				claude.BetaStructuredOutputs,
+				claude.BetaMidConversationToolChanges,
+				claude.BetaInlineTools,
+			} {
+				if containsBetaToken(clientBeta, token) {
+					incomingBetas = append(incomingBetas, token)
+				}
+			}
+			return mergeAnthropicBetaDropping(claude.FullClaudeCodeMimicryBetas(), strings.Join(incomingBetas, ","), effectiveDropSet), true
 		}
 		// 真 Claude Code 客户端透传路径
 		return stripBetaTokensWithSet(s.getBetaHeader(modelID, clientBeta), effectiveDropSet), true
@@ -7492,8 +8069,8 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 // 计算纯函数。语义与 computeFinalAnthropicBeta 对齐，但备份了 count_tokens 独有的
 // 两条特殊规则：
 //
-//   - OAuth mimic：requiredBetas 为 FullClaudeCodeMimicryBetas + BetaTokenCounting
-//     （与 messages 不同的是：不按 haiku 排除；count_tokens 始终携带 token-counting beta）
+//   - OAuth mimic：requiredBetas 为 FullClaudeCodeMimicryBetas + BetaTokenCounting；
+//     count_tokens 另外保留客户端 beta，而 messages mimic 仅保留明确支持的兼容性 token。
 //   - OAuth 透传 + 客户端未传 anthropic-beta：补齐 CountTokensBetaHeader
 //   - OAuth 透传 + 客户端传了：补齐 BetaTokenCounting（如果未含）
 //
@@ -7505,7 +8082,8 @@ func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
 	clientHeaders http.Header,
 	body []byte,
 	effectiveDropSet map[string]struct{},
-) (string, bool) {
+) (beta string, shouldSet bool) {
+	defer func() { beta = filterSonnet55ToolsetBeta(beta, body, modelID) }()
 	clientBeta := ""
 	if clientHeaders != nil {
 		clientBeta = getHeaderRaw(clientHeaders, "anthropic-beta")
@@ -7816,7 +8394,9 @@ var defaultDroppedBetasSet = buildBetaTokenSet(claude.DroppedBetas)
 // applyClaudeCodeMimicHeaders forces "Claude Code-like" request headers.
 // This mirrors opencode-anthropic-auth behavior: do not trust downstream
 // headers when using Claude Code-scoped OAuth credentials.
-func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool) {
+// mimicUserAgent 由调用方在同一请求内取一次传入，保证出站 User-Agent 头与
+// 请求体 billing attribution 的 cc_version 版本号严格一致。
+func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool, mimicUserAgent string) {
 	if req == nil {
 		return
 	}
@@ -7824,9 +8404,13 @@ func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool) {
 	applyClaudeOAuthHeaderDefaults(req)
 	// Then force key headers to match Claude Code fingerprint regardless of what the client sent.
 	// 使用 resolveWireCasing 确保 key 与真实 wire format 一致（如 "x-app" 而非 "X-App"）
-	for key, value := range claude.DefaultHeaders {
+	for key, value := range claude.DefaultHeaders() {
 		if value == "" {
 			continue
+		}
+		if key == "User-Agent" {
+			// 版本号与 billing 路径共用同一字符串（见 mimicUserAgent 注释）。
+			value = mimicUserAgent
 		}
 		setHeaderRaw(req.Header, resolveWireCasing(key), value)
 	}
@@ -8041,6 +8625,12 @@ func ExtractUpstreamErrorMessage(body []byte) string {
 	return extractUpstreamErrorMessage(body)
 }
 
+// SanitizeUpstreamErrorMessage redacts sensitive query parameter values before
+// an upstream error message is recorded or returned to a client.
+func SanitizeUpstreamErrorMessage(message string) string {
+	return sanitizeUpstreamErrorMessage(message)
+}
+
 func extractUpstreamErrorMessage(body []byte) string {
 	// Claude 风格：{"type":"error","error":{"type":"...","message":"..."}}
 	if m := gjson.GetBytes(body, "error.message").String(); strings.TrimSpace(m) != "" {
@@ -8112,7 +8702,9 @@ func (s *GatewayService) readUpstreamErrorBody(resp *http.Response) ([]byte, err
 }
 
 func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, requestedModel ...string) (*ForwardResult, error) {
+	// Upstream returned a non-success HTTP status; count Ollama Cloud / OpenCode Go activity.
 	scheduleOllamaCloudUsageActivity(s.deferredService, account)
+	scheduleOpenCodeGoUsageActivity(s.deferredService, account)
 	body, _ := s.readUpstreamErrorBody(resp)
 
 	// 调试日志：打印上游错误响应
@@ -8267,13 +8859,19 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 	return nil, fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
 }
 
-func (s *GatewayService) handleRetryExhaustedSideEffects(ctx context.Context, resp *http.Response, account *Account) {
+// handleRetryExhaustedSideEffects 在重试耗尽后标记账号状态；requestedModel 是实际发往上游的模型，
+// 临时不可调度规则据此按模型隔离。
+func (s *GatewayService) handleRetryExhaustedSideEffects(ctx context.Context, resp *http.Response, account *Account, requestedModel ...string) {
 	body, _ := s.readUpstreamErrorBody(resp)
 	statusCode := resp.StatusCode
 
 	// OAuth/Setup Token 账号的 403：标记账号异常
 	if account.IsOAuth() && statusCode == 403 {
-		s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body)
+		if len(requestedModel) > 0 {
+			s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body, requestedModel[0])
+		} else {
+			s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, body)
+		}
 		logger.LegacyPrintf("service.gateway", "Account %d: marked as error after %d retries for status %d", account.ID, maxRetryAttempts, statusCode)
 	} else {
 		// API Key 未配置错误码：不标记账号状态
@@ -8293,14 +8891,14 @@ func (s *GatewayService) handleFailoverSideEffects(ctx context.Context, resp *ht
 // handleRetryExhaustedError 处理重试耗尽后的错误
 // OAuth 403：标记账号异常
 // API Key 未配置错误码：仅返回错误，不标记账号
-func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *http.Response, c *gin.Context, account *Account) (*ForwardResult, error) {
+func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, requestedModel ...string) (*ForwardResult, error) {
 	MarkResponseCommitted(c)
 	// Capture upstream error body before side-effects consume the stream.
 	respBody, _ := s.readUpstreamErrorBody(resp)
 	_ = resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(respBody))
 
-	s.handleRetryExhaustedSideEffects(ctx, resp, account)
+	s.handleRetryExhaustedSideEffects(ctx, resp, account, requestedModel...)
 
 	upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 	upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
@@ -8414,7 +9012,7 @@ func (u *ClaudeUsage) hasObservedTokens() bool {
 //
 // 不变式：UpstreamFailoverError 必须保持 result=nil——failover 重试成功后按成功请求
 // 计费，若同时返回部分 usage 会造成双重计费，此处显式拦截兜底。
-func partialStreamUsageResult(resp *http.Response, streamResult *streamingResult, model, upstreamModel string, startTime time.Time, err error) *ForwardResult {
+func partialStreamUsageResult(c *gin.Context, resp *http.Response, streamResult *streamingResult, model, upstreamModel string, startTime time.Time, err error) *ForwardResult {
 	if streamResult == nil || !streamResult.usage.hasObservedTokens() {
 		return nil
 	}
@@ -8423,18 +9021,26 @@ func partialStreamUsageResult(resp *http.Response, streamResult *streamingResult
 		return nil
 	}
 	return &ForwardResult{
-		RequestID:        resp.Header.Get("x-request-id"),
-		Usage:            *streamResult.usage,
-		Model:            model,
-		UpstreamModel:    upstreamModel,
-		Stream:           true,
-		Duration:         time.Since(startTime),
-		FirstTokenMs:     streamResult.firstTokenMs,
-		ClientDisconnect: streamResult.clientDisconnect,
+		RequestID:                     resp.Header.Get("x-request-id"),
+		UpstreamHeaders:               resp.Header,
+		Usage:                         *streamResult.usage,
+		Model:                         model,
+		UpstreamModel:                 upstreamModel,
+		UpstreamResponseModel:         observedUpstreamResponseModel(c),
+		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
+		Stream:                        true,
+		Duration:                      time.Since(startTime),
+		FirstTokenMs:                  streamResult.firstTokenMs,
+		ClientDisconnect:              streamResult.clientDisconnect,
 	}
 }
 
 func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string, mimicClaudeCode bool) (*streamingResult, error) {
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = beginUpstreamResponseModelObservation(c)
+	}
 	// 更新5h窗口状态
 	s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 
@@ -8633,6 +9239,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 		}
 
 		eventType, _ := event["type"].(string)
+		observer.ObserveAnthropic([]byte(dataLine))
 		if eventName == "" {
 			eventName = eventType
 		}
@@ -8956,11 +9563,11 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 			patch.hasCacheReadInput = true
 		}
 		if cc, ok := usageObj["cache_creation"].(map[string]any); ok {
-			if v, exists := parseSSEUsageInt(cc["ephemeral_5m_input_tokens"]); exists && v > 0 {
+			if v, exists := parseSSEUsageInt(cc["ephemeral_5m_input_tokens"]); exists {
 				patch.cacheCreation5mTokens = v
 				patch.hasCacheCreation5m = true
 			}
-			if v, exists := parseSSEUsageInt(cc["ephemeral_1h_input_tokens"]); exists && v > 0 {
+			if v, exists := parseSSEUsageInt(cc["ephemeral_1h_input_tokens"]); exists {
 				patch.cacheCreation1hTokens = v
 				patch.hasCacheCreation1h = true
 			}
@@ -9103,6 +9710,11 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 	if err != nil {
 		return nil, err
 	}
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = beginUpstreamResponseModelObservation(c)
+	}
+	observer.ObserveAnthropic(body)
 
 	// 解析usage
 	var response struct {
@@ -9110,7 +9722,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
 		if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
-			return nil, s.invalidNonStreamingJSONFailoverError(ctx, resp, account, body, err, mappedModel)
+			return nil, invalidNonStreamingJSONFailoverError(ctx, s.rateLimitService, resp, account, body, err, mappedModel)
 		}
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
@@ -9252,6 +9864,16 @@ type postUsageBillingParams struct {
 	AccountRateMultiplier float64
 	APIKeyService         APIKeyQuotaUpdater
 	Platform              string // 来自 APIKey 关联 Group 的平台标识
+	// SimpleModeKeyRateLimitOnly opts the request into the simple-mode billing
+	// path that records only API-key 5h/1d/7d window usage. It must not trigger
+	// balance, subscription, account, platform, or lifetime-key-quota effects.
+	SimpleModeKeyRateLimitOnly bool
+}
+
+var ErrSimpleModeKeyRateLimitBillingUnavailable = errors.New("simple mode api key rate-limit billing unavailable")
+
+func simpleModeKeyRateLimitBillingEnabled(cfg *config.Config, apiKey *APIKey) bool {
+	return cfg != nil && cfg.RunMode == config.RunModeSimple && cfg.SimpleModeKeyRateLimitEnabled && apiKey != nil && apiKey.HasRateLimits()
 }
 
 // PlatformFromAPIKey 从 APIKey 关联的 Group 推导 platform 名称。
@@ -9374,6 +9996,13 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 }
 
 func resolveUsageBillingRequestID(ctx context.Context, upstreamRequestID string) string {
+	// Forced durable money-event IDs must win over client/local context IDs so
+	// standalone web_search / async video cannot collapse under a reused client id.
+	if requestID := strings.TrimSpace(upstreamRequestID); requestID != "" {
+		if isForcedUsageBillingRequestID(requestID) {
+			return requestID
+		}
+	}
 	if ctx != nil {
 		if clientRequestID, _ := ctx.Value(ctxkey.ClientRequestID).(string); strings.TrimSpace(clientRequestID) != "" {
 			return "client:" + strings.TrimSpace(clientRequestID)
@@ -9386,6 +10015,41 @@ func resolveUsageBillingRequestID(ctx context.Context, upstreamRequestID string)
 		return requestID
 	}
 	return "generated:" + generateRequestID()
+}
+
+func isForcedUsageBillingRequestID(requestID string) bool {
+	id := strings.TrimSpace(requestID)
+	return strings.HasPrefix(id, "web_search:") ||
+		strings.HasPrefix(id, "grok-video:") ||
+		strings.HasPrefix(id, "grok_audio:") ||
+		strings.HasPrefix(id, "grok_realtime:") ||
+		strings.HasPrefix(id, GeminiCachedContentUsageRequestIDPrefix)
+}
+
+// StableGrokAudioBillingRequestID is the durable usage_logs / dedup key for one
+// voice HTTP call (TTS/STT). Prefer an upstream request id when present.
+func StableGrokAudioBillingRequestID(upstreamRequestID string) string {
+	upstreamRequestID = strings.TrimSpace(upstreamRequestID)
+	if strings.HasPrefix(upstreamRequestID, "grok_audio:") {
+		return upstreamRequestID
+	}
+	if upstreamRequestID == "" {
+		upstreamRequestID = generateRequestID()
+	}
+	return "grok_audio:" + upstreamRequestID
+}
+
+// StableGrokRealtimeBillingRequestID is the durable usage_logs / dedup key for
+// one realtime WebSocket session.
+func StableGrokRealtimeBillingRequestID(sessionID string) string {
+	sessionID = strings.TrimSpace(sessionID)
+	if strings.HasPrefix(sessionID, "grok_realtime:") {
+		return sessionID
+	}
+	if sessionID == "" {
+		sessionID = generateRequestID()
+	}
+	return "grok_realtime:" + sessionID
 }
 
 func resolveUsageBillingPayloadFingerprint(ctx context.Context, requestPayloadHash string) string {
@@ -9435,6 +10099,14 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		}
 	}
 
+	if p.SimpleModeKeyRateLimitOnly {
+		if p.Cost.ActualCost > 0 && p.APIKey.HasRateLimits() {
+			cmd.APIKeyRateLimitCost = p.Cost.ActualCost
+		}
+		cmd.Normalize()
+		return cmd
+	}
+
 	// Record subscription / balance cost using ActualCost so the group (and any
 	// user-specific) rate multiplier consumes subscription quota at the expected
 	// speed. TotalCost remains the raw (pre-multiplier) value; downstream guards
@@ -9467,6 +10139,11 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
+		if p.SimpleModeKeyRateLimitOnly {
+			return false, ErrSimpleModeKeyRateLimitBillingUnavailable
+		}
+		// The legacy path is only a fallback for standard billing. Simple mode
+		// must retain request-id deduplication and never bill other balances.
 		postUsageBilling(ctx, p, deps)
 		return true, nil
 	}
@@ -9511,6 +10188,34 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 		return
 	}
 
+	if p.SimpleModeKeyRateLimitOnly {
+		// Simple-mode key windows are DB-authoritative during preflight. Clear
+		// any Redis snapshot after the committed increment as a best-effort aid
+		// when switching back to standard mode. Enforcement here never relies on
+		// successful cache invalidation.
+		if p.APIKey != nil && deps.billingCacheService != nil {
+			if err := deps.billingCacheService.InvalidateAPIKeyRateLimit(ctx, p.APIKey.ID); err != nil {
+				logger.LegacyPrintf("service.gateway", "Warning: invalidate simple-mode api key rate-limit cache failed for key %d: %v", p.APIKey.ID, err)
+			}
+		}
+		deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
+		return
+	}
+
+	if p.SimpleModeKeyRateLimitOnly {
+		// Simple-mode key windows are DB-authoritative during preflight. Clear
+		// any Redis snapshot after the committed increment as a best-effort aid
+		// when switching back to standard mode. Enforcement here never relies on
+		// successful cache invalidation.
+		if p.APIKey != nil && deps.billingCacheService != nil {
+			if err := deps.billingCacheService.InvalidateAPIKeyRateLimit(ctx, p.APIKey.ID); err != nil {
+				logger.LegacyPrintf("service.gateway", "Warning: invalidate simple-mode api key rate-limit cache failed for key %d: %v", p.APIKey.ID, err)
+			}
+		}
+		deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
+		return
+	}
+
 	if p.IsSubscriptionBill {
 		if p.Cost.ActualCost > 0 && p.User != nil && p.APIKey != nil && p.APIKey.GroupID != nil {
 			deps.billingCacheService.QueueUpdateSubscriptionUsage(p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
@@ -9519,7 +10224,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 		syncBalanceCacheAfterDeduction(ctx, p, deps, result)
 	}
 
-	if p.Cost.ActualCost > 0 && p.APIKey != nil && p.APIKey.HasRateLimits() {
+	if p.Cost.ActualCost > 0 && p.APIKey != nil && p.APIKey.HasRateLimits() && deps.billingCacheService != nil {
 		deps.billingCacheService.QueueUpdateAPIKeyRateLimitUsage(p.APIKey.ID, p.Cost.ActualCost)
 	}
 
@@ -9532,7 +10237,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 	//     限制在并发 in-flight 请求数量内（旧实现的异步入队会让超支无限累积直到 worker 处理）
 	//   - DB 异步(flusher_enabled=false):在独立 goroutine 中走 detached context,失败用 ALERT log 触发 oncall 对账
 	//   - flusher_enabled=true:不直写 DB,由 flusher 异步批量刷（markDirty 已在 IncrementUserPlatformQuotaUsage 内部完成）
-	if !p.IsSubscriptionBill && p.Platform != "" && p.Cost.ActualCost > 0 && p.User != nil && deps.userPlatformQuotaRepo != nil {
+	if !p.IsSubscriptionBill && p.Platform != "" && p.Cost.ActualCost > 0 && p.User != nil && deps.userPlatformQuotaRepo != nil && deps.billingCacheService != nil {
 		if deps.billingCacheService.HasUserPlatformQuotaLimit(ctx, p.User.ID, p.Platform) {
 			deps.billingCacheService.IncrementUserPlatformQuotaUsage(p.User.ID, p.Platform, p.Cost.ActualCost)
 			if deps.cfg == nil || !deps.cfg.Database.UserPlatformQuotaFlusherEnabled {
@@ -9583,6 +10288,15 @@ func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingPara
 			)
 		}
 		return
+	}
+	if deps.billingCacheService.InflightReservationEnabled() {
+		// 在途预留开启时同步扣减余额缓存：计费完成即释放预留额度，
+		// 避免残留预留把可扣余额压得过低；同步失败则回落到队列扣减。
+		if err := deps.billingCacheService.DeductBalanceCache(ctx, payerUserID, p.Cost.ActualCost); err == nil {
+			return
+		} else {
+			logger.LegacyPrintf("service.gateway", "Warning: sync deduct balance cache failed for user %d, falling back to queue: %v", payerUserID, err)
+		}
 	}
 	deps.billingCacheService.QueueDeductBalance(payerUserID, p.Cost.ActualCost)
 }
@@ -9837,8 +10551,81 @@ type recordUsageCoreInput struct {
 	ChannelUsageFields
 }
 
-// recordUsageCore 是 RecordUsage 和 RecordUsageWithLongContext 的统一实现。
-// LongContextThreshold > 0 时 Token 计费回退走 CalculateCostWithLongContext。
+// responseModelBillingCostEpsilon 吸收两次成本计算之间的浮点末位误差，
+// 避免同价模型因浮点误差被判成"更贵"而白白放弃采纳。
+const responseModelBillingCostEpsilon = 1e-12
+
+// responseModelBillingDeclaration 返回可用于计费的上游响应模型；返回空字符串表示
+// 必须沿用基线计费模型。两条计费主干（Anthropic 系 / OpenAI 系）共用本准入判断。
+//
+// 渠道把 billing_model_source 设为 response_model，等于把"按哪个模型计价"的一部分
+// 决定权交给上游，因此准入条件必须收紧：
+//   - 只在渠道显式开启该模式时生效，其余模式一律不看响应模型；
+//   - 一次请求内出现过互相冲突的模型声明时不采纳（无法确定上游究竟服务了哪个模型）；
+//   - 图片 / 视频 / 网页搜索 / 语音 / 搜索附加费这类按次按量计费的请求不采纳：它们按张、
+//     按秒、按次定价，与本模式的 token 定价准入检查不是同一套价格表，混用会让一个只验过
+//     token 价的模型名去决定媒体单价。新增按次计费形态时必须同步扩这个入参。
+//
+// 调用方还必须额外满足两条：模型能被价格表确定性识别（见
+// hasIdentifiedResponseModelPricing / hasIdentifiedOpenAIResponsePricing），以及通过
+// responseModelBillingAdoptable 的成本准入。
+func responseModelBillingDeclaration(source, responseModel string, conflict, mediaBilled bool) string {
+	if source != BillingModelSourceResponse || conflict || mediaBilled {
+		return ""
+	}
+	return strings.TrimSpace(responseModel)
+}
+
+// responseModelBillingAdoptable 判定按响应模型重算出的成本能否取代基线成本。
+// 三条不变式，任一不满足都必须沿用基线（即开启本模式前的既有行为）：
+//
+//  1. 不得更贵——上游声明永远不能抬高用户费用；epsilon 吸收两次计算之间的浮点末位误差。
+//  2. 不得把一笔本应计费的请求归零。价格表里存在把 token 价显式写成 0 的条目
+//     （TokenPricingAbsent 只在 input/output 价**都缺失**时才为真，显式 0 算"有价"因而
+//     能通过确定性识别那道门），放任归零等于让上游自报一个免费模型名就能白嫖。
+//     基线本身就是 0 时不受影响，采纳与否都不改变金额。
+//  3. 不得把计费从管理员显式配置的渠道定价切到全局价格表。渠道定价查表只做精确键与
+//     前缀通配、**不剥日期后缀**，而全局价格表的确定性识别**会剥** 8 位日期后缀；上游
+//     普遍自报带日期的模型 ID（如 claude-opus-4-5-20251101），若允许跨源比较，渠道加价
+//     会被这类自报名字静默绕过。管理员若确实想让降级目标享受折扣，为它显式配一条渠道
+//     定价即可——那是一次可审计的显式授权。
+func responseModelBillingAdoptable(baseline, response *CostBreakdown, baselineChannelPriced, responseChannelPriced bool) bool {
+	if baseline == nil || response == nil {
+		return false
+	}
+	if response.TotalCost > baseline.TotalCost+responseModelBillingCostEpsilon {
+		return false
+	}
+	if response.TotalCost <= 0 && baseline.TotalCost > 0 {
+		return false
+	}
+	return !baselineChannelPriced || responseChannelPriced
+}
+
+// logResponseModelBillingApplied 记录一次实际生效的响应模型计费切换。
+// 本模式下的少收由上游声明驱动，必须留下可审计痕迹；计费基准未变时不记录，避免刷屏。
+func logResponseModelBillingApplied(component string, account *Account, requestID, baselineModel, responseModel string, baselineCost, responseCost *CostBreakdown) {
+	baselineModel = strings.TrimSpace(baselineModel)
+	responseModel = strings.TrimSpace(responseModel)
+	if strings.EqualFold(baselineModel, responseModel) {
+		return
+	}
+	attrs := []any{
+		"component", component,
+		"request_id", strings.TrimSpace(requestID),
+		"baseline_model", baselineModel,
+		"response_model", responseModel,
+	}
+	if baselineCost != nil && responseCost != nil {
+		attrs = append(attrs, "baseline_cost", baselineCost.TotalCost, "billed_cost", responseCost.TotalCost)
+	}
+	if account != nil {
+		attrs = append(attrs, "platform", account.Platform, "account_id", account.ID)
+	}
+	slog.Info("billing.response_model_applied", attrs...)
+}
+
+// recordUsageCore 是 RecordUsage 的核心实现。
 func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsageCoreInput, opts *recordUsageOpts) error {
 	result := input.Result
 	apiKey := input.APIKey
@@ -9846,6 +10633,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	account := input.Account
 	subscription := input.Subscription
 	ApplyForwardImageBillingResolution(result)
+	logServiceTierBillingDowngrade("service.gateway", account, result.RequestID, ApplyForwardServiceTierBillingResolution(result))
 
 	// 强制缓存计费：将 input_tokens 转为 cache_read_input_tokens
 	// 用于粘性会话切换时的特殊计费处理
@@ -9864,34 +10652,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		cacheTTLOverridden = (result.Usage.CacheCreation5mTokens + result.Usage.CacheCreation1hTokens) > 0
 	}
 
-	// 获取费率倍数（优先级：用户专属 > 分组默认 > 系统默认）
-	multiplier := 1.0
-	if s.cfg != nil {
-		multiplier = s.cfg.Default.RateMultiplier
-	}
-	if apiKey.GroupID != nil && apiKey.Group != nil {
-		groupDefault := apiKey.Group.RateMultiplier
-		multiplier = s.getUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
-	}
-	pricingAt := input.PricingAt
-	if pricingAt.IsZero() {
-		pricingAt = timezone.Now()
-	}
-	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, multiplier, pricingAt)
-
-	// 确定计费模型
-	concreteBillingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
-	billingModel := concreteBillingModel
-	if input.BillingModelSource == BillingModelSourceChannelMapped && input.ChannelMappedModel != "" {
-		billingModel = input.ChannelMappedModel
-	}
-	if input.BillingModelSource == BillingModelSourceRequested && input.OriginalModel != "" {
-		billingModel = input.OriginalModel
-	}
-	if apiKey.Group != nil && apiKey.Group.Platform == PlatformComposite {
-		billingModel = s.compositeBillableModel(ctx, apiKey, billingModel, concreteBillingModel)
-	}
-	billingModel = s.billableModelWithFallback(ctx, apiKey, billingModel, result.UpstreamModel, result.Model)
+	multiplier, imageMultiplier, pricingAt := s.recordUsageMultipliers(ctx, apiKey, user, input.PricingAt)
+	billingModel := s.recordUsageBillingModel(ctx, apiKey, result, input.ChannelUsageFields)
+	cacheStorageCost := s.cacheStorageCost(result, billingModel)
 
 	// 确定 RequestedModel（渠道映射前的原始模型）
 	requestedModel := result.Model
@@ -9900,7 +10663,28 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	}
 
 	// 计算费用
-	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
+	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, pricingAt, opts)
+	// response_model：按上游成功响应自报的模型计费（渠道显式开启才生效）。
+	// 采纳条件见 responseModelBillingDeclaration + hasIdentifiedResponseModelPricing
+	// + responseModelBillingAdoptable。任一条件不满足都静默回落基线，即开启本模式前的
+	// 既有行为。响应模型与基线同名时直接跳过：重算必然同价，白跑一次定价解析。
+	if responseModel := responseModelBillingDeclaration(
+		input.BillingModelSource,
+		result.UpstreamResponseModel,
+		result.UpstreamResponseModelConflict,
+		result.ImageCount > 0 || result.AudioUsage != nil || result.SearchCount > 0 || result.CacheStorageTokenHours > 0,
+	); responseModel != "" && !strings.EqualFold(responseModel, strings.TrimSpace(billingModel)) {
+		if identified, responseChannelPriced := s.hasIdentifiedResponseModelPricing(ctx, responseModel, apiKey); identified {
+			responseCost := s.calculateRecordUsageCost(ctx, result, apiKey, responseModel, multiplier, imageMultiplier, pricingAt, opts)
+			baselineChannelPriced := s.resolveChannelPricing(ctx, billingModel, apiKey) != nil
+			if responseModelBillingAdoptable(cost, responseCost, baselineChannelPriced, responseChannelPriced) {
+				// billingModel 到此为止只是定价查表的入参，后续流程只消费 cost，
+				// 因此这里不改写它，改由日志记录实际生效的计费基准。
+				logResponseModelBillingApplied("service.gateway", account, result.RequestID, billingModel, responseModel, cost, responseCost)
+				cost = responseCost
+			}
+		}
+	}
 
 	// 判断计费方式：订阅模式 vs 余额模式
 	isSubscriptionBilling := subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
@@ -9912,10 +10696,11 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	// 创建使用日志
 	accountRateMultiplier := account.BillingRateMultiplier()
 	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
-		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost, opts)
+		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost)
 
-	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
-	if apiKey.GroupID != nil {
+	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）。纯存储费不是一次模型请求，
+	// 账号统计成本回落 total_cost（官方存储价）。
+	if apiKey.GroupID != nil && !isCacheStorageOnlyResult(result) {
 		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
 			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
 			// Anthropic's input_tokens excludes cache_read and cache_creation (billed separately);
@@ -9927,11 +10712,14 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 				CacheReadTokens:     result.Usage.CacheReadInputTokens,
 				ImageOutputTokens:   result.Usage.ImageOutputTokens,
 			},
-			cost.TotalCost,
+			cost.TotalCost-cacheStorageCost, pricingAt,
+			accountStatsLongContextPricingEnabled(nil),
 		)
+		addCacheStorageToAccountStatsCost(usageLog, cacheStorageCost)
 	}
 
-	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+	simpleModeKeyRateLimitOnly := simpleModeKeyRateLimitBillingEnabled(s.cfg, apiKey)
+	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple && !simpleModeKeyRateLimitOnly {
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.gateway")
 		logger.LegacyPrintf("service.gateway", "[SIMPLE MODE] Usage recorded (not billed): user=%d, tokens=%d", usageLog.UserID, usageLog.TotalTokens())
 		s.deferredService.ScheduleLastUsedUpdate(account.ID)
@@ -9947,16 +10735,17 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	}
 	requestID := usageLog.RequestID
 	_, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
-		Cost:                  cost,
-		User:                  user,
-		APIKey:                apiKey,
-		Account:               account,
-		Subscription:          subscription,
-		RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
-		IsSubscriptionBill:    isSubscriptionBilling,
-		AccountRateMultiplier: accountRateMultiplier,
-		APIKeyService:         input.APIKeyService,
-		Platform:              quotaPlatform,
+		Cost:                       cost,
+		User:                       user,
+		APIKey:                     apiKey,
+		Account:                    account,
+		Subscription:               subscription,
+		RequestPayloadHash:         resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
+		IsSubscriptionBill:         isSubscriptionBilling && !simpleModeKeyRateLimitOnly,
+		AccountRateMultiplier:      accountRateMultiplier,
+		APIKeyService:              input.APIKeyService,
+		Platform:                   quotaPlatform,
+		SimpleModeKeyRateLimitOnly: simpleModeKeyRateLimitOnly,
 	}, s.billingDeps(), s.usageBillingRepo)
 
 	if billingErr != nil {
@@ -9969,7 +10758,112 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	return nil
 }
 
-// calculateRecordUsageCost 根据请求类型和选项计算费用。
+// recordUsageMultipliers 返回 token / 图片售价倍率（用户专属 > 分组默认 > 系统默认，token 倍率叠加高峰因子）
+// 与计价时刻；pricingAt 为零值时取当前时刻。
+func (s *GatewayService) recordUsageMultipliers(ctx context.Context, apiKey *APIKey, user *User, pricingAt time.Time) (float64, float64, time.Time) {
+	multiplier := 1.0
+	if s.cfg != nil {
+		multiplier = s.cfg.Default.RateMultiplier
+	}
+	if apiKey.GroupID != nil && apiKey.Group != nil {
+		multiplier = apiKey.Group.RateMultiplier
+		if user != nil {
+			multiplier = s.ResolveUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, multiplier)
+		}
+	}
+	// 高峰因子按请求时刻现算，不并入 getUserGroupRateMultiplier，以免污染 user:group 倍率缓存。
+	if pricingAt.IsZero() {
+		pricingAt = timezone.Now()
+	}
+	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, multiplier, pricingAt)
+	return multiplier, imageMultiplier, pricingAt
+}
+
+// recordUsageBillingModel 按计费模型来源、composite 规则与无价兜底确定计费模型。
+func (s *GatewayService) recordUsageBillingModel(ctx context.Context, apiKey *APIKey, result *ForwardResult, fields ChannelUsageFields) string {
+	concreteBillingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
+	billingModel := concreteBillingModel
+	if fields.BillingModelSource == BillingModelSourceChannelMapped && fields.ChannelMappedModel != "" {
+		billingModel = fields.ChannelMappedModel
+	}
+	if fields.BillingModelSource == BillingModelSourceRequested && fields.OriginalModel != "" {
+		billingModel = fields.OriginalModel
+	}
+	// composite 分组的公开别名（如 all/claude）会经 OriginalModel/ChannelMappedModel
+	// 进入上面的来源覆盖：任意别名查无价会静默落 $0，含家族词的别名则被价格表的
+	// 家族模糊匹配错计（如 Opus 流量按 Sonnet 兜底价）。除非管理员为别名显式配置了
+	// 渠道定价（OpenRouter 式自定价），composite 请求一律按实际转发的具体模型计费。
+	if apiKey.Group != nil && apiKey.Group.Platform == PlatformComposite {
+		billingModel = s.compositeBillableModel(ctx, apiKey, billingModel, concreteBillingModel)
+	}
+	// 通用兜底（与 OpenAI 路径的 usageBillingModelCandidates 语义对齐）：
+	// 选定模型查不到任何价格时回退到实际转发的具体模型。已定价流量不受影响。
+	return s.billableModelWithFallback(ctx, apiKey, billingModel, result.UpstreamModel, result.Model)
+}
+
+// cacheStoragePrice 返回计费模型的显式缓存存储单价；计费模型未配置时依次回退到实际转发模型与请求模型。
+func (s *GatewayService) cacheStoragePrice(result *ForwardResult, billingModel string) float64 {
+	if s.billingService == nil {
+		return 0
+	}
+	for _, model := range []string{billingModel, result.UpstreamModel, result.Model} {
+		if strings.TrimSpace(model) == "" {
+			continue
+		}
+		if price := s.billingService.CacheStoragePricePerTokenHour(model); price > 0 {
+			return price
+		}
+	}
+	return 0
+}
+
+// cacheStorageCost 返回 result 的显式缓存存储费（USD，倍率前）。
+func (s *GatewayService) cacheStorageCost(result *ForwardResult, billingModel string) float64 {
+	if result.CacheStorageTokenHours <= 0 {
+		return 0
+	}
+	return result.CacheStorageTokenHours * s.cacheStoragePrice(result, billingModel)
+}
+
+// isCacheStorageOnlyResult 判断 result 是否只有显式缓存存储费（延长有效期）：不含 token 用量，不算一次模型请求。
+func isCacheStorageOnlyResult(result *ForwardResult) bool {
+	u := result.Usage
+	return result.CacheStorageTokenHours > 0 && u.InputTokens == 0 && u.OutputTokens == 0 &&
+		u.CacheCreationInputTokens == 0 && u.CacheReadInputTokens == 0 && u.ImageOutputTokens == 0 &&
+		result.ImageCount == 0 && result.AudioUsage == nil && result.SearchCount == 0
+}
+
+// CacheStoragePriced 判断 RecordUsage 对 input.Result 采用的计费模型（含回退候选）是否配置了显式缓存存储单价。
+func (s *GatewayService) CacheStoragePriced(ctx context.Context, input *RecordUsageInput) bool {
+	billingModel := s.recordUsageBillingModel(ctx, input.APIKey, input.Result, input.ChannelUsageFields)
+	return s.cacheStoragePrice(input.Result, billingModel) > 0
+}
+
+// QuoteUsageCost 按与 RecordUsage 相同的倍率、计费模型与定价计算 input.Result 的应付金额（倍率后 USD），不记录也不扣费。
+func (s *GatewayService) QuoteUsageCost(ctx context.Context, input *RecordUsageInput) float64 {
+	user := input.User
+	if user == nil {
+		user = input.APIKey.User
+	}
+	multiplier, imageMultiplier, pricingAt := s.recordUsageMultipliers(ctx, input.APIKey, user, input.PricingAt)
+	billingModel := s.recordUsageBillingModel(ctx, input.APIKey, input.Result, input.ChannelUsageFields)
+	cost := s.calculateRecordUsageCost(ctx, input.Result, input.APIKey, billingModel, multiplier, imageMultiplier, pricingAt, nil)
+	if cost == nil {
+		return 0
+	}
+	return cost.ActualCost
+}
+
+// addCacheStorageToAccountStatsCost 把显式缓存存储费按官方价叠加到账号统计成本。
+// 账号统计定价只覆盖 token 部分；统计成本为空时成本统计回落 total_cost，其中已含存储费。
+func addCacheStorageToAccountStatsCost(usageLog *UsageLog, storageCost float64) {
+	if usageLog == nil || usageLog.AccountStatsCost == nil || storageCost <= 0 {
+		return
+	}
+	cost := *usageLog.AccountStatsCost + storageCost
+	usageLog.AccountStatsCost = &cost
+}
+
 func (s *GatewayService) calculateRecordUsageCost(
 	ctx context.Context,
 	result *ForwardResult,
@@ -9977,18 +10871,66 @@ func (s *GatewayService) calculateRecordUsageCost(
 	billingModel string,
 	multiplier float64,
 	imageMultiplier float64,
+	pricingAt time.Time,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
 	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费
 	if result.ImageCount > 0 {
 		if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
-			return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, opts)
+			return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt, opts)
 		}
 		return s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier)
 	}
 
-	// Token 计费
-	return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, opts)
+	// Voice audio (TTS / STT / realtime) when present on the forward result.
+	if result.AudioUsage != nil {
+		if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil &&
+			resolved.Mode == BillingModePerRequest {
+			gid := apiKey.Group.ID
+			cost, err := s.billingService.CalculateCostUnified(CostInput{
+				Ctx: ctx, Model: billingModel, GroupID: &gid, Group: apiKey.Group,
+				UsageUnits: result.AudioUsage.DurationOrUnits, SizeTier: result.AudioUsage.Mode,
+				RateMultiplier: multiplier, Resolver: s.resolver, Resolved: resolved,
+				ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+			})
+			if err == nil {
+				return cost
+			}
+		}
+		cfg := groupAudioPriceConfigFromAPIKey(apiKey)
+		return s.billingService.CalculateAudioCost(result.AudioUsage.Mode, result.AudioUsage.DurationOrUnits, cfg, multiplier)
+	}
+
+	// Token 计费；SearchCount 为叠加 surcharge（不替代 token）。纯存储费不是一次模型请求，不计 token / 按次费用。
+	var tokenCost *CostBreakdown
+	if isCacheStorageOnlyResult(result) {
+		tokenCost = &CostBreakdown{}
+	} else {
+		tokenCost = s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt, opts)
+	}
+	if result.SearchCount > 0 {
+		price := groupSearchPricePer1kFromAPIKey(apiKey)
+		if price != nil && *price == 0 {
+			logger.LegacyPrintf("service.gateway", "[Billing] search_price_per_1k explicit 0; search free group_model=%s count=%d", billingModel, result.SearchCount)
+		}
+		searchCost := s.billingService.CalculateSearchCost(result.SearchCount, price, multiplier)
+		if searchCost != nil && (searchCost.TotalCost > 0 || searchCost.ActualCost > 0) {
+			if tokenCost == nil {
+				return searchCost
+			}
+			tokenCost.TotalCost += searchCost.TotalCost
+			tokenCost.ActualCost += searchCost.ActualCost
+		}
+	}
+	// 显式缓存存储费同为叠加 surcharge，与 token 费用使用同一计费模型与倍率。
+	if storageCost := s.cacheStorageCost(result, billingModel); storageCost > 0 {
+		if tokenCost == nil {
+			tokenCost = &CostBreakdown{}
+		}
+		tokenCost.TotalCost += storageCost
+		tokenCost.ActualCost += storageCost * multiplier
+	}
+	return tokenCost
 }
 
 // compositeBillableModel keeps composite aliases on an explicitly configured
@@ -10004,6 +10946,16 @@ func (s *GatewayService) compositeBillableModel(ctx context.Context, apiKey *API
 	return concreteBillingModel
 }
 
+func (s *GatewayService) hasIdentifiedResponseModelPricing(ctx context.Context, model string, apiKey *APIKey) (identified bool, channelPriced bool) {
+	if strings.TrimSpace(model) == "" {
+		return false, false
+	}
+	if s.resolveChannelPricing(ctx, model, apiKey) != nil {
+		return true, true
+	}
+	return s.billingService.HasIdentifiedTokenPricing(model), false
+}
+
 // resolveChannelPricing 检查指定模型是否存在渠道级别定价。
 // 返回非 nil 的 ResolvedPricing 表示有渠道定价，nil 表示走默认定价路径。
 func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel string, apiKey *APIKey) *ResolvedPricing {
@@ -10011,8 +10963,8 @@ func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel
 		return nil
 	}
 	gid := apiKey.Group.ID
-	resolved := s.resolver.Resolve(ctx, PricingInput{Model: billingModel, GroupID: &gid})
-	if resolved.Source == PricingSourceChannel {
+	resolved := s.resolver.Resolve(ctx, PricingInput{Model: billingModel, GroupID: &gid, Group: apiKey.Group})
+	if resolved.Source == PricingSourceGroup || resolved.Source == PricingSourceChannel {
 		return resolved
 	}
 	return nil
@@ -10046,15 +10998,17 @@ func (s *GatewayService) calculateImageCost(
 		}
 		gid := apiKey.Group.ID
 		cost, err := s.billingService.CalculateCostUnified(CostInput{
-			Ctx:            ctx,
-			Model:          billingModel,
-			GroupID:        &gid,
-			Tokens:         tokens,
-			RequestCount:   result.ImageCount,
-			SizeTier:       sizeTier,
-			RateMultiplier: multiplier,
-			Resolver:       s.resolver,
-			Resolved:       resolved,
+			Ctx:             ctx,
+			Model:           billingModel,
+			GroupID:         &gid,
+			Group:           apiKey.Group,
+			Tokens:          tokens,
+			RequestCount:    result.ImageCount,
+			SizeTier:        sizeTier,
+			ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+			RateMultiplier:  multiplier,
+			Resolver:        s.resolver,
+			Resolved:        resolved,
 		})
 		if err != nil {
 			logger.LegacyPrintf("service.gateway", "Calculate image token cost failed: %v", err)
@@ -10086,6 +11040,7 @@ func (s *GatewayService) calculateTokenCost(
 	apiKey *APIKey,
 	billingModel string,
 	multiplier float64,
+	pricingAt time.Time,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
 	tokens := UsageTokens{
@@ -10098,31 +11053,37 @@ func (s *GatewayService) calculateTokenCost(
 		ImageOutputTokens:     result.Usage.ImageOutputTokens,
 	}
 
-	var cost *CostBreakdown
-	var err error
-
-	// 优先尝试渠道定价 → CalculateCostUnified
-	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil {
-		gid := apiKey.Group.ID
-		cost, err = s.billingService.CalculateCostUnified(CostInput{
-			Ctx:            ctx,
-			Model:          billingModel,
-			GroupID:        &gid,
-			Tokens:         tokens,
-			RequestCount:   1,
-			RateMultiplier: multiplier,
-			Resolver:       s.resolver,
-			Resolved:       resolved,
-		})
-	} else if opts.LongContextThreshold > 0 {
-		// 长上下文双倍计费（如 Gemini 200K 阈值）
-		cost, err = s.billingService.CalculateCostWithLongContext(
+	// 本地分支：显式长上下文倍率（Gemini）优先，保持 fork 既有行为。
+	if opts != nil && opts.LongContextThreshold > 0 {
+		cost, err := s.billingService.CalculateCostWithLongContext(
 			billingModel, tokens, multiplier,
 			opts.LongContextThreshold, opts.LongContextMultiplier,
 		)
-	} else {
-		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
+		if err != nil {
+			logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
+			return &CostBreakdown{ActualCost: 0}
+		}
+		return cost
 	}
+
+	var resolved *ResolvedPricing
+	if s.resolver != nil && apiKey.Group != nil {
+		gid := apiKey.Group.ID
+		resolved = s.resolver.Resolve(ctx, PricingInput{Model: billingModel, GroupID: &gid, Group: apiKey.Group})
+	}
+
+	cost, err := s.billingService.CalculateTokenCostForRequest(TokenCostRequest{
+		Ctx:             ctx,
+		Model:           billingModel,
+		Group:           apiKey.Group,
+		Tokens:          tokens,
+		RateMultiplier:  multiplier,
+		PricingAt:       pricingAt,
+		ServiceTier:     optionalStringValue(result.ServiceTier),
+		ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+		Resolver:        s.resolver,
+		Resolved:        resolved,
+	})
 	if err != nil {
 		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
 		return &CostBreakdown{ActualCost: 0}
@@ -10146,50 +11107,64 @@ func (s *GatewayService) buildRecordUsageLog(
 	billingType int8,
 	cacheTTLOverridden bool,
 	cost *CostBreakdown,
-	opts *recordUsageOpts,
 ) *UsageLog {
 	durationMs := int(result.Duration.Milliseconds())
 	requestID := resolveUsageBillingRequestID(ctx, result.RequestID)
+	sentModel := upstreamSentModel(result.Model, result.UpstreamModel)
+	if result.UpstreamResponseModelConflict {
+		slog.Warn("upstream_response_model_conflict",
+			"platform", account.Platform,
+			"account_id", account.ID,
+			"request_id", requestID,
+			"sent_model", sentModel,
+			"selected_response_model", strings.TrimSpace(result.UpstreamResponseModel),
+		)
+	}
 	usageLog := &UsageLog{
-		UserID:                user.ID,
-		APIKeyID:              apiKey.ID,
-		AccountID:             account.ID,
-		RequestID:             requestID,
-		Model:                 result.Model,
-		RequestedModel:        requestedModel,
-		UpstreamModel:         optionalTrimmedStringPtr(result.UpstreamModel),
-		ReasoningEffort:       result.ReasoningEffort,
-		InboundEndpoint:       optionalTrimmedStringPtr(input.InboundEndpoint),
-		UpstreamEndpoint:      optionalTrimmedStringPtr(input.UpstreamEndpoint),
-		InputTokens:           result.Usage.InputTokens,
-		OutputTokens:          result.Usage.OutputTokens,
-		CacheCreationTokens:   result.Usage.CacheCreationInputTokens,
-		CacheReadTokens:       result.Usage.CacheReadInputTokens,
-		CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
-		CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
-		ImageOutputTokens:     result.Usage.ImageOutputTokens,
-		RateMultiplier:        multiplier,
-		AccountRateMultiplier: &accountRateMultiplier,
-		BillingType:           billingType,
-		BillingMode:           resolveBillingMode(result, cost),
-		Stream:                result.Stream,
-		DurationMs:            &durationMs,
-		FirstTokenMs:          result.FirstTokenMs,
-		ImageCount:            result.ImageCount,
-		ImageSize:             optionalTrimmedStringPtr(result.ImageSize),
-		ImageInputSize:        optionalTrimmedStringPtr(result.ImageInputSize),
-		ImageOutputSize:       optionalTrimmedStringPtr(result.ImageOutputSize),
-		ImageSizeSource:       optionalTrimmedStringPtr(result.ImageSizeSource),
-		ImageSizeBreakdown:    result.ImageSizeBreakdown,
-		CacheTTLOverridden:    cacheTTLOverridden,
-		ChannelID:             optionalInt64Ptr(input.ChannelID),
-		ModelMappingChain:     optionalTrimmedStringPtr(input.ModelMappingChain),
-		UserAgent:             optionalTrimmedStringPtr(input.UserAgent),
-		IPAddress:             optionalTrimmedStringPtr(input.IPAddress),
-		SessionID:             optionalTrimmedStringPtr(input.SessionID),
-		GroupID:               apiKey.GroupID,
-		SubscriptionID:        optionalSubscriptionID(subscription),
-		CreatedAt:             time.Now(),
+		UserID:                   user.ID,
+		APIKeyID:                 apiKey.ID,
+		AccountID:                account.ID,
+		RequestID:                requestID,
+		UpstreamRequestID:        usageUpstreamRequestIDPtr(account, result.UpstreamHeaders, false),
+		Model:                    result.Model,
+		RequestedModel:           requestedModel,
+		UpstreamModel:            optionalTrimmedStringPtr(result.UpstreamModel),
+		UpstreamResponseModel:    optionalTrimmedStringPtr(result.UpstreamResponseModel),
+		UpstreamModelMismatch:    upstreamModelMismatch(sentModel, result.UpstreamResponseModel),
+		ServiceTier:              result.ServiceTier,
+		ReasoningEffort:          result.ReasoningEffort,
+		RequestedReasoningEffort: coalesceRequestedReasoningEffort(result.RequestedReasoningEffort, result.ReasoningEffort),
+		InboundEndpoint:          optionalTrimmedStringPtr(input.InboundEndpoint),
+		UpstreamEndpoint:         optionalTrimmedStringPtr(input.UpstreamEndpoint),
+		InputTokens:              result.Usage.InputTokens,
+		OutputTokens:             result.Usage.OutputTokens,
+		CacheCreationTokens:      result.Usage.CacheCreationInputTokens,
+		CacheReadTokens:          result.Usage.CacheReadInputTokens,
+		CacheCreation5mTokens:    result.Usage.CacheCreation5mTokens,
+		CacheCreation1hTokens:    result.Usage.CacheCreation1hTokens,
+		ImageOutputTokens:        result.Usage.ImageOutputTokens,
+		RateMultiplier:           multiplier,
+		AccountRateMultiplier:    &accountRateMultiplier,
+		BillingType:              billingType,
+		BillingMode:              resolveBillingMode(result, cost),
+		Stream:                   result.Stream,
+		DurationMs:               &durationMs,
+		FirstTokenMs:             result.FirstTokenMs,
+		ImageCount:               result.ImageCount,
+		ImageSize:                optionalTrimmedStringPtr(result.ImageSize),
+		ImageInputSize:           optionalTrimmedStringPtr(result.ImageInputSize),
+		ImageOutputSize:          optionalTrimmedStringPtr(result.ImageOutputSize),
+		ImageSizeSource:          optionalTrimmedStringPtr(result.ImageSizeSource),
+		ImageSizeBreakdown:       result.ImageSizeBreakdown,
+		CacheTTLOverridden:       cacheTTLOverridden,
+		ChannelID:                optionalInt64Ptr(input.ChannelID),
+		ModelMappingChain:        optionalTrimmedStringPtr(input.ModelMappingChain),
+		UserAgent:                optionalTrimmedStringPtr(input.UserAgent),
+		IPAddress:                optionalTrimmedStringPtr(input.IPAddress),
+		SessionID:                optionalTrimmedStringPtr(input.SessionID),
+		GroupID:                  apiKey.GroupID,
+		SubscriptionID:           optionalSubscriptionID(subscription),
+		CreatedAt:                time.Now(),
 	}
 	if result.ImageCount > 0 && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
 		usageLog.RateMultiplier = imageMultiplier
@@ -10281,6 +11256,10 @@ func billingModelForRestriction(source, requestedModel, channelMappedModel strin
 		return requestedModel
 	case BillingModelSourceUpstream:
 		return ""
+	case BillingModelSourceResponse:
+		// The response is not available during dispatch; use mapped pricing
+		// for restriction prechecks and decide billing after the response.
+		return channelMappedModel
 	case BillingModelSourceChannelMapped:
 		return channelMappedModel
 	default:
@@ -10346,15 +11325,34 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 		return fmt.Errorf("parse request: empty request")
 	}
 
+	validationModel := parsed.Model
+	if account != nil {
+		if account.IsBedrock() {
+			if resolved, ok := ResolveBedrockModelID(account, validationModel); ok {
+				validationModel = resolved
+			}
+		} else if account.Type == AccountTypeAPIKey {
+			validationModel = account.GetMappedModel(validationModel)
+		}
+	}
+	if account != nil && account.Platform == PlatformAnthropic {
+		if err := validateClaude55Request(parsed.Body.Bytes(), validationModel); err != nil {
+			s.countTokensError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+			return err
+		}
+	}
+
 	if account != nil && account.IsAnthropicAPIKeyPassthroughEnabled() {
 		passthroughBody := parsed.Body.Bytes()
+		passthroughModel := parsed.Model
 		if reqModel := parsed.Model; reqModel != "" {
 			if mappedModel := account.GetMappedModel(reqModel); mappedModel != reqModel {
 				passthroughBody = s.replaceModelInBody(passthroughBody, mappedModel)
+				passthroughModel = mappedModel
 				logger.LegacyPrintf("service.gateway", "CountTokens passthrough model mapping: %s -> %s (account: %s)", reqModel, mappedModel, account.Name)
 			}
 		}
-		return s.forwardCountTokensAnthropicAPIKeyPassthrough(ctx, c, account, passthroughBody)
+		return s.forwardCountTokensAnthropicAPIKeyPassthrough(ctx, c, account, passthroughBody, passthroughModel)
 	}
 
 	// Bedrock 不支持 count_tokens 端点
@@ -10382,9 +11380,8 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCodeCT
 
 	if shouldMimicClaudeCode {
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: true}
 		var normalizedBody []byte
-		normalizedBody, reqModel = normalizeClaudeOAuthRequestBody(body, reqModel, normalizeOpts)
+		normalizedBody, reqModel = normalizeClaudeOAuthRequestBody(body, reqModel, claudeOAuthNormalizeOptions{})
 		if err := replaceBody(normalizedBody); err != nil {
 			return err
 		}
@@ -10400,6 +11397,13 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 			if err := replaceBody(applyToolsLastCacheBreakpoint(body)); err != nil {
 				return err
 			}
+		}
+
+		// 4 块上限的兜底：其余四条出口都在自己的转发路径上调过一次，只有这里没有。
+		// 不再剥离客户端 system 断点之后，「客户端 system + 客户端 messages +
+		// 上面刚注入的 tools[-1]」可以直接顶到 5 块，而上游对超限是 400。
+		if err := replaceBody(enforceCacheControlLimit(body)); err != nil {
+			return err
 		}
 	}
 
@@ -10520,8 +11524,8 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 
 	// 处理错误响应
 	if resp.StatusCode >= 400 {
-		// 标记账号状态（429/529等）
-		s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		// 标记账号状态（429/529等）；传入实际发往上游的模型，临时不可调度规则才能按模型隔离
+		s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, reqModel)
 
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
@@ -10567,7 +11571,9 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 	return nil
 }
 
-func (s *GatewayService) forwardCountTokensAnthropicAPIKeyPassthrough(ctx context.Context, c *gin.Context, account *Account, body []byte) error {
+// forwardCountTokensAnthropicAPIKeyPassthrough 透传 count_tokens 请求；upstreamModel 是 body 中实际发往上游的模型，
+// 仅用于上游错误处理按模型隔离。
+func (s *GatewayService) forwardCountTokensAnthropicAPIKeyPassthrough(ctx context.Context, c *gin.Context, account *Account, body []byte, upstreamModel string) error {
 	token, tokenType, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		s.countTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
@@ -10593,6 +11599,8 @@ func (s *GatewayService) forwardCountTokensAnthropicAPIKeyPassthrough(ctx contex
 	if err != nil {
 		setOpsUpstreamError(c, 0, sanitizeUpstreamErrorMessage(err.Error()), "")
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			ProxyID:            opsUpstreamProxyID(account),
+			ProxyName:          opsUpstreamProxyName(account),
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
@@ -10620,7 +11628,7 @@ func (s *GatewayService) forwardCountTokensAnthropicAPIKeyPassthrough(ctx contex
 
 	if resp.StatusCode >= 400 {
 		if s.rateLimitService != nil {
-			s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+			s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
 		}
 
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
@@ -10647,6 +11655,8 @@ func (s *GatewayService) forwardCountTokensAnthropicAPIKeyPassthrough(ctx contex
 		}
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			ProxyID:            opsUpstreamProxyID(account),
+			ProxyName:          opsUpstreamProxyName(account),
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
@@ -10689,6 +11699,7 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	body = stripDeferredToolCacheControl(body)
 	targetURL := claudeAPICountTokensURL
 	baseURL := account.GetBaseURL()
 	if baseURL != "" {
@@ -10731,7 +11742,9 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Del("cookie")
-	setAnthropicAPIKeyAuthHeader(req.Header, account, token)
+	// Ollama Cloud Anthropic 兼容端点按实际 base_url 强制 Bearer（同上方
+	// targetURL 的 base 取值），其余保持 extra/default 行为。
+	setAnthropicAPIKeyAuthHeader(req.Header, account, token, account.GetBaseURL())
 
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
@@ -10740,11 +11753,18 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 		req.Header.Set("anthropic-version", "2023-06-01")
 	}
 
+	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+	account.ApplyHeaderOverrides(req.Header)
+	filterSonnet55ToolsetBetaHeader(req.Header, body, gjson.GetBytes(body, "model").String())
+
 	return req, nil
 }
 
 // buildCountTokensRequest 构建 count_tokens 上游请求
 func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, mimicClaudeCode bool) (*http.Request, []byte, error) {
+	// Anthropic 不允许 defer_loading=true 的工具携带 cache_control，
+	// 与 buildUpstreamRequest / passthrough 路径保持一致的预处理。
+	body = stripDeferredToolCacheControl(body)
 	// 确定目标 URL
 	targetURL := claudeAPICountTokensURL
 	if account.Type == AccountTypeAPIKey {
@@ -10795,9 +11815,16 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 		}
 	}
 
-	// 同步 billing header cc_version 与实际发送的 User-Agent 版本
-	if ctFingerprint != nil && ctEnableFP {
-		body = syncBillingHeaderVersion(body, ctFingerprint.UserAgent)
+	// Disabled fingerprint unification does not disable forced mimicry headers.
+	var billingFingerprint *Fingerprint
+	if ctEnableFP {
+		billingFingerprint = ctFingerprint
+	}
+	// 一致性铁律：同一次请求内只取一次 mimic UA，billing cc_version 与出站
+	// User-Agent 头共用这一个字符串（同 buildUpstreamRequest）。
+	ctMimicUserAgent := claude.DefaultUserAgent()
+	if billingUA := effectiveBillingUserAgent(ctMimicUserAgent, tokenType, mimicClaudeCode, billingFingerprint); billingUA != "" {
+		body = syncBillingHeaderVersion(body, billingUA)
 	}
 
 	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
@@ -10806,6 +11833,12 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	finalBetaHeader, finalBetaShouldSet := s.computeFinalCountTokensAnthropicBeta(
 		tokenType, mimicClaudeCode, modelID, clientHeaders, body, ctEffectiveDropSet,
 	)
+
+	// 账号覆写了 anthropic-beta 时，覆写值即最终上游值：净化以覆写值为准
+	if beta, ok := account.HeaderOverrideValue("anthropic-beta"); ok {
+		finalBetaHeader, finalBetaShouldSet = beta, true
+	}
+	finalBetaHeader = filterSonnet55ToolsetBeta(finalBetaHeader, body, modelID)
 
 	// 能力维度 body sanitize：与最终 anthropic-beta header 对称
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBetaHeader); changed {
@@ -10823,7 +11856,9 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	if tokenType == "oauth" {
 		setHeaderRaw(req.Header, "authorization", "Bearer "+token)
 	} else {
-		setHeaderRaw(req.Header, "x-api-key", token)
+		// Ollama Cloud Anthropic 兼容端点按实际 base_url 强制 Bearer（同上方
+		// targetURL 的 base 取值），其余保持 extra/default 行为。
+		setAnthropicAPIKeyAuthHeader(req.Header, account, token, account.GetBaseURL())
 	}
 
 	// 白名单透传 headers（恢复真实 wire casing）
@@ -10855,7 +11890,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 
 	// OAuth + mimic Claude Code：强制注入 CLI 指纹 header
 	if tokenType == "oauth" && mimicClaudeCode {
-		applyClaudeCodeMimicHeaders(req, false)
+		applyClaudeCodeMimicHeaders(req, false, ctMimicUserAgent)
 	}
 
 	// 写入最终 anthropic-beta header（Del 一次避免白名单透传值残留）
@@ -10872,6 +11907,10 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 			}
 		}
 	}
+
+	// 账号级请求头覆写（仅 anthropic/openai api_key 账号启用时生效；OAuth 路径 no-op）
+	account.ApplyHeaderOverrides(req.Header)
+	filterSonnet55ToolsetBetaHeader(req.Header, body, modelID)
 
 	if c != nil && tokenType == "oauth" {
 		c.Set(claudeMimicDebugInfoKey, buildClaudeMimicDebugLine(req, body, account, tokenType, mimicClaudeCode))
@@ -10950,6 +11989,91 @@ func (s *GatewayService) validateUpstreamBaseURL(raw string) (string, error) {
 
 // GetAvailableModels returns the list of models available for a group
 // It aggregates model_mapping keys from all schedulable accounts in the group
+
+// DoGrokNativeResponsesJSON POSTs a non-streaming Responses body to the account's
+// Grok upstream and returns the raw JSON body. Used by /v1/web_search.
+// Gin-free: UA is always the pinned Grok CLI identity (resolveGrokUpstreamUserAgent ignores inbound).
+func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account *Account, body []byte) ([]byte, error) {
+	if s == nil || s.httpUpstream == nil {
+		return nil, errors.New("http upstream not configured")
+	}
+	if account == nil {
+		return nil, errors.New("account is required")
+	}
+	if !account.IsGrok() {
+		return nil, errors.New("grok account required")
+	}
+	token, _, err := s.GetAccessToken(ctx, account)
+	if err != nil {
+		// Credential/token failures should try the next Grok account in the pool.
+		return nil, &UpstreamFailoverError{
+			StatusCode: http.StatusUnauthorized,
+			Reason:     GatewayFailureReason("grok_search_token"),
+		}
+	}
+	targetURL, err := buildGrokResponsesURL(account, nil, s.settingService)
+	if err != nil {
+		return nil, err
+	}
+	if json.Valid(body) {
+		if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); model == "" {
+			if patched, patchErr := sjson.SetBytes(body, "model", xai.DefaultTextModel); patchErr == nil {
+				body = patched
+			}
+		}
+	}
+	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build grok responses request: %w", err)
+	}
+	upstreamReq.Header.Set("Authorization", "Bearer "+token)
+	upstreamReq.Header.Set("Content-Type", "application/json")
+	upstreamReq.Header.Set("Accept", "application/json")
+	upstreamReq.Header.Set("User-Agent", defaultGrokUpstreamUserAgent())
+	applyGrokCLIHeaders(upstreamReq.Header)
+	account.ApplyHeaderOverrides(upstreamReq.Header)
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	if err != nil {
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadGateway, Reason: GatewayFailureReason("grok_search_transport")}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if readErr != nil {
+		return nil, &UpstreamFailoverError{
+			StatusCode: http.StatusBadGateway,
+			Reason:     GatewayFailureReason("grok_search_read"),
+		}
+	}
+	if resp.StatusCode >= 400 {
+		msg := string(respBytes)
+		if len(msg) > 200 {
+			msg = msg[:200]
+		}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusPaymentRequired || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBytes}
+		}
+		return nil, fmt.Errorf("grok upstream %d: %s", resp.StatusCode, msg)
+	}
+	return respBytes, nil
+}
+
+// mixedListingAccountAllowed mirrors the mixed-scheduling rule in
+// GeminiMessagesCompatService.listSchedulableAccountsOnce: a gemini group may be
+// served by antigravity accounts, so model listing must consider them too.
+func mixedListingAccountAllowed(groupPlatform string, account *Account) bool {
+	return groupPlatform == PlatformGemini && account.IsMixedSchedulingEnabled()
+}
+
+// mixedListingModelAllowed limits what a mixed-scheduling account may advertise
+// on the group's platform: only gemini-* wire IDs are meaningful on a gemini group.
+func mixedListingModelAllowed(groupPlatform, model string) bool {
+	return groupPlatform == PlatformGemini && isAntigravityGeminiModel(model)
+}
+
 func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64, platform string) []string {
 	cacheKey := modelsListCacheKey(groupID, platform)
 	if s.modelsListCache != nil {
@@ -10975,11 +12099,13 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		return nil
 	}
 
-	// Filter by platform if specified
+	// Filter by platform if specified. Mixed scheduling (a gemini group routing
+	// to antigravity accounts) is honoured here as well, so the advertised list
+	// stays in sync with what the request path can actually serve.
 	if platform != "" {
 		filtered := make([]Account, 0)
 		for _, acc := range accounts {
-			if acc.Platform == platform {
+			if acc.Platform == platform || mixedListingAccountAllowed(platform, &acc) {
 				filtered = append(filtered, acc)
 			}
 		}
@@ -10991,12 +12117,25 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	hasAnyMapping := false
 
 	for _, acc := range accounts {
+		// Passthrough routing accepts models independently of model_mapping, so a
+		// stale mapping on a passthrough account must not narrow the public list.
+		// Treat it like an unmapped account: skip its mapping here and let
+		// supplementUnmappedOpenAIModels contribute the default set. Mappings on
+		// the ordinary accounts in the same group still count.
+		if platform == PlatformOpenAI && acc.IsOpenAIPassthroughEnabled() {
+			continue
+		}
+
 		mapping := acc.GetModelMapping()
-		if len(mapping) > 0 {
-			hasAnyMapping = true
-			for model := range mapping {
-				modelSet[model] = struct{}{}
+		for model := range mapping {
+			// Accounts pulled in through mixed scheduling only contribute the
+			// models that belong to the listing platform (e.g. an antigravity
+			// account's claude-* mappings must not surface on a gemini group).
+			if platform != "" && acc.Platform != platform && !mixedListingModelAllowed(platform, model) {
+				continue
 			}
+			modelSet[model] = struct{}{}
+			hasAnyMapping = true
 		}
 	}
 
@@ -11016,11 +12155,83 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	}
 	sort.Strings(models)
 
+	if platform == PlatformOpenAI {
+		models = supplementUnmappedOpenAIModels(accounts, models)
+	}
+
 	if s.modelsListCache != nil {
 		s.modelsListCache.Set(cacheKey, cloneStringSlice(models), s.modelsListCacheTTL)
 		modelsListCacheStoreTotal.Add(1)
 	}
 	return cloneStringSlice(models)
+}
+
+func (s *GatewayService) resolveCompositeModelOwnership(ctx context.Context, groupID int64, model string) (CompositeModelOwnership, error) {
+	model = strings.TrimSpace(model)
+	if s == nil || s.accountRepo == nil || groupID <= 0 || model == "" {
+		return CompositeModelOwnership{}, nil
+	}
+
+	cacheKey := compositeModelOwnershipCacheKey(groupID, model)
+	if s.modelsListCache != nil {
+		if cached, found := s.modelsListCache.Get(cacheKey); found {
+			if ownership, ok := cached.(CompositeModelOwnership); ok {
+				return ownership, nil
+			}
+		}
+	}
+
+	accounts, err := s.accountRepo.ListSchedulableByGroupID(ctx, groupID)
+	if err != nil {
+		return CompositeModelOwnership{}, err
+	}
+
+	platforms := make(map[string]struct{})
+	for _, account := range accounts {
+		platform := strings.TrimSpace(account.Platform)
+		if !isConcreteRequestPlatform(platform) || !explicitModelMappingClaims(account, model) {
+			continue
+		}
+		platforms[platform] = struct{}{}
+	}
+
+	ownership := CompositeModelOwnership{}
+	if len(platforms) == 1 {
+		for platform := range platforms {
+			ownership.TargetPlatform = platform
+		}
+		ownership.Matched = true
+	} else if len(platforms) > 1 {
+		ownership.Ambiguous = true
+	}
+
+	if s.modelsListCache != nil {
+		s.modelsListCache.Set(cacheKey, ownership, s.modelsListCacheTTL)
+	}
+	return ownership, nil
+}
+
+func explicitModelMappingClaims(account Account, model string) bool {
+	if account.Credentials == nil || model == "" {
+		return false
+	}
+	mapped, ok := stringMappingFromRaw(account.Credentials["model_mapping"])[model]
+	return ok && strings.TrimSpace(mapped) != ""
+}
+
+// GetCompositeRouteModels returns public IDs from enabled exact composite routes.
+func (s *GatewayService) GetCompositeRouteModels(ctx context.Context, groupID *int64, endpoint string, includeSystemOne bool) ([]string, error) {
+	if s == nil || s.compositeResolver == nil || groupID == nil {
+		return nil, nil
+	}
+	return s.compositeResolver.ListExactPublicModels(ctx, *groupID, endpoint, includeSystemOne)
+}
+
+func (s *GatewayService) FilterCompositeCodexModels(ctx context.Context, groupID int64, models []string) ([]string, error) {
+	if s == nil || s.compositeResolver == nil {
+		return models, nil
+	}
+	return s.compositeResolver.FilterCodexModels(ctx, groupID, models)
 }
 
 // GetSchedulablePlatforms returns the concrete platforms that currently have
@@ -11055,6 +12266,7 @@ func (s *GatewayService) InvalidateAvailableModelsCache(groupID *int64, platform
 	if s == nil || s.modelsListCache == nil {
 		return
 	}
+	s.invalidateCompositeModelOwnershipCache(groupID)
 
 	normalizedPlatform := strings.TrimSpace(platform)
 	// 完整匹配时精准失效；否则按维度批量失效。
@@ -11101,6 +12313,26 @@ func reconcileCachedTokens(usage map[string]any) bool {
 	return true
 }
 
+func (s *GatewayService) invalidateCompositeModelOwnershipCache(groupID *int64) {
+	for key := range s.modelsListCache.Items() {
+		if !strings.HasPrefix(key, compositeModelOwnershipCachePrefix) {
+			continue
+		}
+		if groupID == nil {
+			s.modelsListCache.Delete(key)
+			continue
+		}
+		parts := strings.SplitN(strings.TrimPrefix(key, compositeModelOwnershipCachePrefix), "|", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		cachedGroupID, err := strconv.ParseInt(parts[0], 10, 64)
+		if err == nil && cachedGroupID == *groupID {
+			s.modelsListCache.Delete(key)
+		}
+	}
+}
+
 const debugGatewayBodyDefaultFilename = "gateway_debug.log"
 
 // initDebugGatewayBodyFile 初始化网关调试日志文件。
@@ -11114,19 +12346,19 @@ func (s *GatewayService) initDebugGatewayBodyFile(path string) {
 	}
 
 	// 如果 path 指向一个已存在的目录，自动追加默认文件名
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
+	if info, err := os.Stat(path); err == nil && info.IsDir() { //nolint:gosec // G703: path 仅来自启动环境变量 SUB2API_DEBUG_GATEWAY_BODY（运维配置），非请求输入
 		path = filepath.Join(path, debugGatewayBodyDefaultFilename)
 	}
 
 	// 确保父目录存在
 	if dir := filepath.Dir(path); dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0755); err != nil { //nolint:gosec // G703: 同上
 			slog.Error("failed to create gateway debug log directory", "dir", dir, "error", err)
 			return
 		}
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644) //nolint:gosec // G703: 同上
 	if err != nil {
 		slog.Error("failed to open gateway debug log file", "path", path, "error", err)
 		return

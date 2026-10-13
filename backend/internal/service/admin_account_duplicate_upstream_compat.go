@@ -77,22 +77,24 @@ var duplicateAccountDiscardedExtraKeys = map[string]struct{}{
 	"drive_storage_limit":                    {},
 	"drive_storage_usage":                    {},
 	"drive_tier_updated_at":                  {},
-	"codex_primary_used_percent":             {},
-	"codex_primary_reset_after_seconds":      {},
-	"codex_primary_window_minutes":           {},
-	"codex_secondary_used_percent":           {},
-	"codex_secondary_reset_after_seconds":    {},
-	"codex_secondary_window_minutes":         {},
-	"codex_primary_over_secondary_percent":   {},
-	"codex_usage_updated_at":                 {},
-	"codex_5h_used_percent":                  {},
-	"codex_5h_reset_after_seconds":           {},
-	"codex_5h_window_minutes":                {},
-	"codex_5h_reset_at":                      {},
-	"codex_7d_used_percent":                  {},
-	"codex_7d_reset_after_seconds":           {},
-	"codex_7d_window_minutes":                {},
-	"codex_7d_reset_at":                      {},
+	// Codex fingerprint convergence uses a per-account random seed, never copied from another account.
+	codexFingerprintSeedExtraKey:           {},
+	"codex_primary_used_percent":           {},
+	"codex_primary_reset_after_seconds":    {},
+	"codex_primary_window_minutes":         {},
+	"codex_secondary_used_percent":         {},
+	"codex_secondary_reset_after_seconds":  {},
+	"codex_secondary_window_minutes":       {},
+	"codex_primary_over_secondary_percent": {},
+	"codex_usage_updated_at":               {},
+	"codex_5h_used_percent":                {},
+	"codex_5h_reset_after_seconds":         {},
+	"codex_5h_window_minutes":              {},
+	"codex_5h_reset_at":                    {},
+	"codex_7d_used_percent":                {},
+	"codex_7d_reset_after_seconds":         {},
+	"codex_7d_window_minutes":              {},
+	"codex_7d_reset_at":                    {},
 }
 
 func duplicateAccountExtra(value map[string]any) (map[string]any, error) {
@@ -231,6 +233,9 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 	}
 	autoPauseOnExpired := source.AutoPauseOnExpired
 	groups, groupIDs := duplicateAccountGroups(source)
+	if err := s.ValidateAccountGroupBindings(ctx, groupIDs); err != nil {
+		return nil, err
+	}
 	proxyID := source.ProxyID
 	if source.ProxyFallbackOriginID != nil {
 		// Proxy fallback is transient runtime state; duplicate the configured origin.
@@ -259,6 +264,9 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 		return nil, fmt.Errorf("normalize duplicate account extra: %w", err)
 	}
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
+		return nil, err
+	}
+	if err := NormalizeProtocolRulesCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
 	duplicate, err := buildAccountForCreate(input, accountExtra)

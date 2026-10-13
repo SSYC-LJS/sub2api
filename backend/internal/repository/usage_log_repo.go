@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,10 +28,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 	gocache "github.com/patrickmn/go-cache"
-	"golang.org/x/sync/errgroup"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, payer_user_id, parent_account_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, parent_quota_used, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, session_id, created_at"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, upstream_response_model, upstream_model_mismatch, group_id, subscription_id, payer_user_id, parent_account_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, parent_quota_used, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, requested_reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, upstream_request_id, session_id, native_compaction_v2, created_at"
 
 // usageLogInsertArgTypes must stay in the same order as:
 //  1. prepareUsageLogInsert().args
@@ -47,6 +47,8 @@ var usageLogInsertArgTypes = [...]string{
 	"text",        // model
 	"text",        // requested_model
 	"text",        // upstream_model
+	"text",        // upstream_response_model
+	"boolean",     // upstream_model_mismatch
 	"bigint",      // group_id
 	"bigint",      // subscription_id
 	"bigint",      // payer_user_id
@@ -89,6 +91,7 @@ var usageLogInsertArgTypes = [...]string{
 	"integer",     // video_duration_seconds
 	"text",        // service_tier
 	"text",        // reasoning_effort
+	"text",        // requested_reasoning_effort
 	"text",        // inbound_endpoint
 	"text",        // upstream_endpoint
 	"boolean",     // cache_ttl_overridden
@@ -98,7 +101,9 @@ var usageLogInsertArgTypes = [...]string{
 	"text",        // billing_tier
 	"text",        // billing_mode
 	"numeric",     // account_stats_cost
+	"text",        // upstream_request_id
 	"text",        // session_id
+	"boolean",     // native_compaction_v2
 	"timestamptz", // created_at
 }
 
@@ -416,6 +421,8 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			model,
 			requested_model,
 			upstream_model,
+			upstream_response_model,
+			upstream_model_mismatch,
 			group_id,
 			subscription_id,
 			payer_user_id,
@@ -458,6 +465,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			video_duration_seconds,
 			service_tier,
 			reasoning_effort,
+			requested_reasoning_effort,
 			inbound_endpoint,
 			upstream_endpoint,
 			cache_ttl_overridden,
@@ -467,19 +475,17 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11,
-			$12, $13, $14, $15,
-			$16, $17, $18, $19,
-			$20, $21, $22, $23, $24, $25, $26,
-			$27, $28, $29, $30, $31, $32, $33, $34,
-			$35, $36, $37, $38, $39, $40, $41, $42,
-			$43, $44, $45, $46, $47, $48, $49, $50,
-			$51, $52, $53, $54, $55, $56, $57, $58,
-			$59, $60
+			$1, $2, $3, $4, $5, $6, $7, $8, $9,
+			$10, $11,
+			$12, $13,
+			$14, $15, $16, $17,
+			$18, $19, $20, $21, $22, $23, $24, $25,
+			$26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -874,6 +880,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			model,
 			requested_model,
 			upstream_model,
+			upstream_response_model,
+			upstream_model_mismatch,
 			group_id,
 			subscription_id,
 			payer_user_id,
@@ -916,6 +924,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			video_duration_seconds,
 			service_tier,
 			reasoning_effort,
+			requested_reasoning_effort,
 			inbound_endpoint,
 			upstream_endpoint,
 			cache_ttl_overridden,
@@ -925,10 +934,13 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) AS (VALUES `)
 
+	// Each batch row prepends the synthetic input_index before the usage-log column values.
 	args := make([]any, 0, len(keys)*(len(usageLogInsertArgTypes)+1))
 	argPos := 1
 	for idx, key := range keys {
@@ -965,6 +977,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				model,
 				requested_model,
 				upstream_model,
+				upstream_response_model,
+				upstream_model_mismatch,
 				group_id,
 				subscription_id,
 				payer_user_id,
@@ -1007,6 +1021,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				video_duration_seconds,
 				service_tier,
 				reasoning_effort,
+				requested_reasoning_effort,
 				inbound_endpoint,
 				upstream_endpoint,
 				cache_ttl_overridden,
@@ -1016,7 +1031,9 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				billing_tier,
 				billing_mode,
 				account_stats_cost,
+				upstream_request_id,
 				session_id,
+				native_compaction_v2,
 				created_at
 			)
 			SELECT
@@ -1027,6 +1044,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				model,
 				requested_model,
 				upstream_model,
+				upstream_response_model,
+				upstream_model_mismatch,
 				group_id,
 				subscription_id,
 				payer_user_id,
@@ -1069,6 +1088,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				video_duration_seconds,
 				service_tier,
 				reasoning_effort,
+				requested_reasoning_effort,
 				inbound_endpoint,
 				upstream_endpoint,
 				cache_ttl_overridden,
@@ -1078,7 +1098,9 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				billing_tier,
 				billing_mode,
 				account_stats_cost,
+				upstream_request_id,
 				session_id,
+				native_compaction_v2,
 				created_at
 			FROM input
 			ON CONFLICT (request_id, api_key_id) DO NOTHING
@@ -1129,6 +1151,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			model,
 			requested_model,
 			upstream_model,
+			upstream_response_model,
+			upstream_model_mismatch,
 			group_id,
 			subscription_id,
 			payer_user_id,
@@ -1171,6 +1195,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			video_duration_seconds,
 			service_tier,
 			reasoning_effort,
+			requested_reasoning_effort,
 			inbound_endpoint,
 			upstream_endpoint,
 			cache_ttl_overridden,
@@ -1180,11 +1205,13 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) AS (VALUES `)
 
-	args := make([]any, 0, len(preparedList)*50)
+	args := make([]any, 0, len(preparedList)*len(usageLogInsertArgTypes))
 	argPos := 1
 	for idx, prepared := range preparedList {
 		if idx > 0 {
@@ -1217,6 +1244,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			model,
 			requested_model,
 			upstream_model,
+			upstream_response_model,
+			upstream_model_mismatch,
 			group_id,
 			subscription_id,
 			payer_user_id,
@@ -1259,6 +1288,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			video_duration_seconds,
 			service_tier,
 			reasoning_effort,
+			requested_reasoning_effort,
 			inbound_endpoint,
 			upstream_endpoint,
 			cache_ttl_overridden,
@@ -1268,7 +1298,9 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
+			native_compaction_v2,
 			created_at
 		)
 		SELECT
@@ -1279,6 +1311,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			model,
 			requested_model,
 			upstream_model,
+			upstream_response_model,
+			upstream_model_mismatch,
 			group_id,
 			subscription_id,
 			payer_user_id,
@@ -1321,6 +1355,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			video_duration_seconds,
 			service_tier,
 			reasoning_effort,
+			requested_reasoning_effort,
 			inbound_endpoint,
 			upstream_endpoint,
 			cache_ttl_overridden,
@@ -1330,7 +1365,9 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
+			native_compaction_v2,
 			created_at
 		FROM input
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
@@ -1349,6 +1386,8 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			model,
 			requested_model,
 			upstream_model,
+			upstream_response_model,
+			upstream_model_mismatch,
 			group_id,
 			subscription_id,
 			payer_user_id,
@@ -1391,6 +1430,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			video_duration_seconds,
 			service_tier,
 			reasoning_effort,
+			requested_reasoning_effort,
 			inbound_endpoint,
 			upstream_endpoint,
 			cache_ttl_overridden,
@@ -1400,19 +1440,17 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
+			upstream_request_id,
 			session_id,
+			native_compaction_v2,
 			created_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11,
-			$12, $13, $14, $15,
-			$16, $17, $18, $19,
-			$20, $21, $22, $23, $24, $25, $26,
-			$27, $28, $29, $30, $31, $32, $33, $34,
-			$35, $36, $37, $38, $39, $40, $41, $42,
-			$43, $44, $45, $46, $47, $48, $49, $50,
-			$51, $52, $53, $54, $55, $56, $57, $58,
-			$59, $60
+			$1, $2, $3, $4, $5, $6, $7, $8, $9,
+			$10, $11,
+			$12, $13,
+			$14, $15, $16, $17,
+			$18, $19, $20, $21, $22, $23, $24, $25,
+			$26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1449,18 +1487,22 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 	videoDurationSeconds := nullInt(log.VideoDurationSeconds)
 	serviceTier := nullString(log.ServiceTier)
 	reasoningEffort := nullString(log.ReasoningEffort)
+	requestedReasoningEffort := nullString(log.RequestedReasoningEffort)
 	inboundEndpoint := nullString(log.InboundEndpoint)
 	upstreamEndpoint := nullString(log.UpstreamEndpoint)
 	channelID := nullInt64(log.ChannelID)
 	modelMappingChain := nullString(log.ModelMappingChain)
 	billingTier := nullString(log.BillingTier)
 	billingMode := nullString(log.BillingMode)
+	upstreamRequestID := nullString(log.UpstreamRequestID)
 	sessionID := nullString(log.SessionID)
 	requestedModel := strings.TrimSpace(log.RequestedModel)
 	if requestedModel == "" {
 		requestedModel = strings.TrimSpace(log.Model)
 	}
 	upstreamModel := nullString(log.UpstreamModel)
+	upstreamResponseModel := nullString(log.UpstreamResponseModel)
+	upstreamModelMismatch := nullBool(log.UpstreamModelMismatch)
 
 	var requestIDArg any
 	if requestID != "" {
@@ -1480,6 +1522,8 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			log.Model,
 			nullString(&requestedModel),
 			upstreamModel,
+			upstreamResponseModel,
+			upstreamModelMismatch,
 			groupID,
 			subscriptionID,
 			payerUserID,
@@ -1522,6 +1566,7 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			videoDurationSeconds,
 			serviceTier,
 			reasoningEffort,
+			requestedReasoningEffort,
 			inboundEndpoint,
 			upstreamEndpoint,
 			log.CacheTTLOverridden,
@@ -1531,7 +1576,9 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			billingTier,
 			billingMode,
 			log.AccountStatsCost, // account_stats_cost
-			sessionID,
+			upstreamRequestID,    // upstream_request_id
+			sessionID,            // session_id
+			log.NativeCompactionV2,
 			createdAt,
 		},
 	}
@@ -2576,8 +2623,12 @@ func (r *usageLogRepository) GetAPIKeyUsageTrend(ctx context.Context, startTime,
 }
 
 // GetUserUsageTrend returns usage trend data grouped by user and date
-func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) (results []UserUsageTrendPoint, err error) {
+func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, startTime, endTime time.Time, granularity string, limit int, metric string) (results []UserUsageTrendPoint, err error) {
 	dateFormat := safeDateFormat(granularity)
+	rankExpr := "SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens)"
+	if metric == "actual_cost" {
+		rankExpr = "SUM(actual_cost)"
+	}
 
 	query := fmt.Sprintf(`
 		WITH top_users AS (
@@ -2585,7 +2636,7 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, startTime, e
 			FROM usage_logs
 			WHERE created_at >= $1 AND created_at < $2
 			GROUP BY user_id
-			ORDER BY SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens) DESC
+			ORDER BY %s DESC, user_id ASC
 			LIMIT $3
 		)
 		SELECT
@@ -2603,7 +2654,7 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, startTime, e
 		  AND u.created_at >= $4 AND u.created_at < $5
 		GROUP BY date, u.user_id, us.email, us.username
 		ORDER BY date ASC, tokens DESC
-	`, dateFormat)
+	`, rankExpr, dateFormat)
 
 	rows, err := r.sql.QueryContext(ctx, query, startTime, endTime, limit, startTime, endTime)
 	if err != nil {
@@ -3302,11 +3353,15 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 	}
 	conditions, args = appendUsageLogModelWhereCondition(conditions, args, filters.Model, filters.ModelFilterSource)
 	conditions, args = appendRequestTypeOrStreamWhereCondition(conditions, args, filters.RequestType, filters.Stream)
+	conditions, args = appendNativeCompactionV2WhereCondition(conditions, args, filters.NativeCompactionV2, "")
 	if filters.BillingType != nil {
 		conditions = append(conditions, fmt.Sprintf("billing_type = $%d", len(args)+1))
 		args = append(args, int16(*filters.BillingType))
 	}
 	conditions, args = appendUsageLogBillingModeWhereCondition(conditions, args, filters.BillingMode)
+	if filters.UpstreamModelMismatch != nil {
+		conditions = append(conditions, upstreamModelMismatchCondition("upstream_model_mismatch", *filters.UpstreamModelMismatch))
+	}
 	if filters.StartTime != nil {
 		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", len(args)+1))
 		args = append(args, *filters.StartTime)
@@ -3335,6 +3390,13 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 		return nil, nil, err
 	}
 	return logs, page, nil
+}
+
+func upstreamModelMismatchCondition(column string, mismatch bool) string {
+	if mismatch {
+		return column + " IS TRUE"
+	}
+	return column + " IS FALSE"
 }
 
 func shouldUseFastUsageLogTotal(filters UsageLogFilters) bool {
@@ -3512,15 +3574,15 @@ func (r *usageLogRepository) GetBatchAPIKeyUsageStats(ctx context.Context, apiKe
 
 // GetUsageTrendWithFilters returns usage trend data with optional filters
 func (r *usageLogRepository) GetUsageTrendWithFilters(ctx context.Context, startTime, endTime time.Time, granularity string, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8) (results []TrendDataPoint, err error) {
-	return r.getUsageTrendWithFilters(ctx, startTime, endTime, granularity, userID, apiKeyID, accountID, groupID, model, "", requestType, stream, billingType, "")
+	return r.getUsageTrendWithFilters(ctx, startTime, endTime, granularity, userID, apiKeyID, accountID, groupID, model, "", requestType, stream, billingType, "", nil, nil)
 }
 
 func (r *usageLogRepository) GetUsageTrendWithUsageFilters(ctx context.Context, startTime, endTime time.Time, granularity string, filters UsageLogFilters) (results []TrendDataPoint, err error) {
-	return r.getUsageTrendWithFilters(ctx, startTime, endTime, granularity, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.ModelFilterSource, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode)
+	return r.getUsageTrendWithFilters(ctx, startTime, endTime, granularity, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.ModelFilterSource, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode, filters.UpstreamModelMismatch, filters.NativeCompactionV2)
 }
 
-func (r *usageLogRepository) getUsageTrendWithFilters(ctx context.Context, startTime, endTime time.Time, granularity string, userID, apiKeyID, accountID, groupID int64, model string, modelSource string, requestType *int16, stream *bool, billingType *int8, billingMode string) (results []TrendDataPoint, err error) {
-	if shouldUsePreaggregatedTrend(granularity, userID, apiKeyID, accountID, groupID, model, requestType, stream, billingType, billingMode) {
+func (r *usageLogRepository) getUsageTrendWithFilters(ctx context.Context, startTime, endTime time.Time, granularity string, userID, apiKeyID, accountID, groupID int64, model string, modelSource string, requestType *int16, stream *bool, billingType *int8, billingMode string, upstreamModelMismatch *bool, nativeCompactionV2 *bool) (results []TrendDataPoint, err error) {
+	if shouldUsePreaggregatedTrend(granularity, userID, apiKeyID, accountID, groupID, model, requestType, stream, billingType, billingMode, upstreamModelMismatch, nativeCompactionV2) {
 		aggregated, aggregatedErr := r.getUsageTrendFromAggregates(ctx, startTime, endTime, granularity)
 		if aggregatedErr == nil && len(aggregated) > 0 {
 			return aggregated, nil
@@ -3563,11 +3625,15 @@ func (r *usageLogRepository) getUsageTrendWithFilters(ctx context.Context, start
 	}
 	query, args = appendUsageLogModelQueryFilter(query, args, model, modelSource)
 	query, args = appendRequestTypeOrStreamQueryFilter(query, args, requestType, stream)
+	query, args = appendNativeCompactionV2QueryFilter(query, args, nativeCompactionV2, "")
 	if billingType != nil {
 		query += fmt.Sprintf(" AND billing_type = $%d", len(args)+1)
 		args = append(args, int16(*billingType))
 	}
 	query, args = appendUsageLogBillingModeQueryFilter(query, args, billingMode, "")
+	if upstreamModelMismatch != nil {
+		query += " AND " + upstreamModelMismatchCondition("upstream_model_mismatch", *upstreamModelMismatch)
+	}
 	query += " GROUP BY date ORDER BY date ASC"
 
 	rows, err := r.sql.QueryContext(ctx, query, args...)
@@ -3590,7 +3656,7 @@ func (r *usageLogRepository) getUsageTrendWithFilters(ctx context.Context, start
 	return results, nil
 }
 
-func shouldUsePreaggregatedTrend(granularity string, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8, billingMode string) bool {
+func shouldUsePreaggregatedTrend(granularity string, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8, billingMode string, upstreamModelMismatch *bool, nativeCompactionV2 *bool) bool {
 	if granularity != "day" && granularity != "hour" {
 		return false
 	}
@@ -3602,7 +3668,9 @@ func shouldUsePreaggregatedTrend(granularity string, userID, apiKeyID, accountID
 		requestType == nil &&
 		stream == nil &&
 		billingType == nil &&
-		billingMode == ""
+		billingMode == "" &&
+		upstreamModelMismatch == nil &&
+		nativeCompactionV2 == nil
 }
 
 func (r *usageLogRepository) getUsageTrendFromAggregates(ctx context.Context, startTime, endTime time.Time, granularity string) (results []TrendDataPoint, err error) {
@@ -3667,20 +3735,20 @@ func (r *usageLogRepository) getUsageTrendFromAggregates(ctx context.Context, st
 
 // GetModelStatsWithFilters returns model statistics with optional filters
 func (r *usageLogRepository) GetModelStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, requestType *int16, stream *bool, billingType *int8) (results []ModelStat, err error) {
-	return r.getModelStatsWithFiltersBySource(ctx, startTime, endTime, userID, apiKeyID, accountID, groupID, "", requestType, stream, billingType, usagestats.ModelSourceRequested, "")
+	return r.getModelStatsWithFiltersBySource(ctx, startTime, endTime, userID, apiKeyID, accountID, groupID, "", requestType, stream, billingType, usagestats.ModelSourceRequested, "", nil, nil)
 }
 
 // GetModelStatsWithFiltersBySource returns model statistics with optional filters and model source dimension.
 // source: requested | upstream | mapping.
 func (r *usageLogRepository) GetModelStatsWithFiltersBySource(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, requestType *int16, stream *bool, billingType *int8, source string) (results []ModelStat, err error) {
-	return r.getModelStatsWithFiltersBySource(ctx, startTime, endTime, userID, apiKeyID, accountID, groupID, "", requestType, stream, billingType, source, "")
+	return r.getModelStatsWithFiltersBySource(ctx, startTime, endTime, userID, apiKeyID, accountID, groupID, "", requestType, stream, billingType, source, "", nil, nil)
 }
 
 func (r *usageLogRepository) GetModelStatsWithUsageFiltersBySource(ctx context.Context, startTime, endTime time.Time, filters UsageLogFilters, source string) (results []ModelStat, err error) {
-	return r.getModelStatsWithFiltersBySource(ctx, startTime, endTime, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.RequestType, filters.Stream, filters.BillingType, source, filters.BillingMode)
+	return r.getModelStatsWithFiltersBySource(ctx, startTime, endTime, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.RequestType, filters.Stream, filters.BillingType, source, filters.BillingMode, filters.UpstreamModelMismatch, filters.NativeCompactionV2)
 }
 
-func (r *usageLogRepository) getModelStatsWithFiltersBySource(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8, source string, billingMode string) (results []ModelStat, err error) {
+func (r *usageLogRepository) getModelStatsWithFiltersBySource(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8, source string, billingMode string, upstreamModelMismatch *bool, nativeCompactionV2 *bool) (results []ModelStat, err error) {
 	actualCostExpr := "COALESCE(SUM(actual_cost), 0) as actual_cost"
 	// 当仅按 account_id 聚合时，实际费用使用账号倍率（total_cost * account_rate_multiplier）。
 	if accountID > 0 && userID == 0 && apiKeyID == 0 {
@@ -3727,11 +3795,15 @@ func (r *usageLogRepository) getModelStatsWithFiltersBySource(ctx context.Contex
 		args = append(args, model)
 	}
 	query, args = appendRequestTypeOrStreamQueryFilter(query, args, requestType, stream)
+	query, args = appendNativeCompactionV2QueryFilter(query, args, nativeCompactionV2, "")
 	if billingType != nil {
 		query += fmt.Sprintf(" AND billing_type = $%d", len(args)+1)
 		args = append(args, int16(*billingType))
 	}
 	query, args = appendUsageLogBillingModeQueryFilter(query, args, billingMode, "")
+	if upstreamModelMismatch != nil {
+		query += " AND " + upstreamModelMismatchCondition("upstream_model_mismatch", *upstreamModelMismatch)
+	}
 	query += fmt.Sprintf(" GROUP BY %s ORDER BY total_tokens DESC", modelExpr)
 
 	rows, err := r.sql.QueryContext(ctx, query, args...)
@@ -3756,14 +3828,14 @@ func (r *usageLogRepository) getModelStatsWithFiltersBySource(ctx context.Contex
 
 // GetGroupStatsWithFilters returns group usage statistics with optional filters
 func (r *usageLogRepository) GetGroupStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, requestType *int16, stream *bool, billingType *int8) (results []usagestats.GroupStat, err error) {
-	return r.getGroupStatsWithFilters(ctx, startTime, endTime, userID, apiKeyID, accountID, groupID, "", requestType, stream, billingType, "")
+	return r.getGroupStatsWithFilters(ctx, startTime, endTime, userID, apiKeyID, accountID, groupID, "", requestType, stream, billingType, "", nil, nil)
 }
 
 func (r *usageLogRepository) GetGroupStatsWithUsageFilters(ctx context.Context, startTime, endTime time.Time, filters UsageLogFilters) (results []usagestats.GroupStat, err error) {
-	return r.getGroupStatsWithFilters(ctx, startTime, endTime, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode)
+	return r.getGroupStatsWithFilters(ctx, startTime, endTime, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode, filters.UpstreamModelMismatch, filters.NativeCompactionV2)
 }
 
-func (r *usageLogRepository) getGroupStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8, billingMode string) (results []usagestats.GroupStat, err error) {
+func (r *usageLogRepository) getGroupStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8, billingMode string, upstreamModelMismatch *bool, nativeCompactionV2 *bool) (results []usagestats.GroupStat, err error) {
 	query := `
 		SELECT
 			COALESCE(ul.group_id, 0) as group_id,
@@ -3801,11 +3873,15 @@ func (r *usageLogRepository) getGroupStatsWithFilters(ctx context.Context, start
 		args = append(args, model)
 	}
 	query, args = appendRequestTypeOrStreamQueryFilter(query, args, requestType, stream)
+	query, args = appendNativeCompactionV2QueryFilter(query, args, nativeCompactionV2, "ul")
 	if billingType != nil {
 		query += fmt.Sprintf(" AND ul.billing_type = $%d", len(args)+1)
 		args = append(args, int16(*billingType))
 	}
 	query, args = appendUsageLogBillingModeQueryFilter(query, args, billingMode, "ul")
+	if upstreamModelMismatch != nil {
+		query += " AND " + upstreamModelMismatchCondition("ul.upstream_model_mismatch", *upstreamModelMismatch)
+	}
 	query += " GROUP BY ul.group_id, g.name ORDER BY total_tokens DESC"
 
 	rows, err := r.sql.QueryContext(ctx, query, args...)
@@ -3891,6 +3967,7 @@ func (r *usageLogRepository) GetUserBreakdownStats(ctx context.Context, startTim
 		query += fmt.Sprintf(" AND ul.stream = $%d", len(args)+1)
 		args = append(args, *dim.Stream)
 	}
+	query, args = appendNativeCompactionV2QueryFilter(query, args, dim.NativeCompactionV2, "ul")
 	if dim.BillingType != nil {
 		query += fmt.Sprintf(" AND ul.billing_type = $%d", len(args)+1)
 		args = append(args, *dim.BillingType)
@@ -3934,39 +4011,9 @@ func (r *usageLogRepository) GetUserBreakdownStats(ctx context.Context, startTim
 	return results, nil
 }
 
-// GetAllGroupUsageSummary returns today's and cumulative actual_cost for every group.
-// todayStart is the start-of-day in the caller's timezone (UTC-based).
-// TODO(perf): This query scans ALL usage_logs rows for total_cost aggregation.
-// When usage_logs exceeds ~1M rows, consider adding a short-lived cache (30s)
-// or a materialized view / pre-aggregation table for cumulative costs.
+// GetAllGroupUsageSummary 返回所有分组在服务端配置时区内的今日、昨日与当前保留记录累计金额。
 func (r *usageLogRepository) GetAllGroupUsageSummary(ctx context.Context, todayStart time.Time) ([]usagestats.GroupUsageSummary, error) {
-	query := `
-		SELECT
-			g.id AS group_id,
-			COALESCE(SUM(ul.actual_cost), 0) AS total_cost,
-			COALESCE(SUM(CASE WHEN ul.created_at >= $1 THEN ul.actual_cost ELSE 0 END), 0) AS today_cost
-		FROM groups g
-		LEFT JOIN usage_logs ul ON ul.group_id = g.id
-		GROUP BY g.id
-	`
-
-	rows, err := r.sql.QueryContext(ctx, query, todayStart)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var results []usagestats.GroupUsageSummary
-	for rows.Next() {
-		var row usagestats.GroupUsageSummary
-		if err := rows.Scan(&row.GroupID, &row.TotalCost, &row.TodayCost); err != nil {
-			return nil, err
-		}
-		results = append(results, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return results, nil
+	return r.getAllGroupUsageSummaryFromRollups(ctx, todayStart)
 }
 
 // resolveModelDimensionExpression maps model source type to a safe SQL expression.
@@ -4062,11 +4109,15 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 	}
 	conditions, args = appendUsageLogModelWhereCondition(conditions, args, filters.Model, filters.ModelFilterSource)
 	conditions, args = appendRequestTypeOrStreamWhereCondition(conditions, args, filters.RequestType, filters.Stream)
+	conditions, args = appendNativeCompactionV2WhereCondition(conditions, args, filters.NativeCompactionV2, "")
 	if filters.BillingType != nil {
 		conditions = append(conditions, fmt.Sprintf("billing_type = $%d", len(args)+1))
 		args = append(args, int16(*filters.BillingType))
 	}
 	conditions, args = appendUsageLogBillingModeWhereCondition(conditions, args, filters.BillingMode)
+	if filters.UpstreamModelMismatch != nil {
+		conditions = append(conditions, upstreamModelMismatchCondition("upstream_model_mismatch", *filters.UpstreamModelMismatch))
+	}
 	if filters.StartTime != nil {
 		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", len(args)+1))
 		args = append(args, *filters.StartTime)
@@ -4077,108 +4128,131 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 	}
 
 	query := fmt.Sprintf(`
+		WITH scoped AS (
+			SELECT
+				COALESCE(NULLIF(TRIM(inbound_endpoint), ''), 'unknown') AS inbound_endpoint,
+				COALESCE(NULLIF(TRIM(upstream_endpoint), ''), 'unknown') AS upstream_endpoint,
+				input_tokens,
+				output_tokens,
+				cache_creation_tokens,
+				cache_read_tokens,
+				total_cost,
+				actual_cost,
+				COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1) AS account_cost,
+				duration_ms
+			FROM usage_logs
+			%s
+		)
 		SELECT
-			COUNT(*) as total_requests,
-			COALESCE(SUM(input_tokens), 0) as total_input_tokens,
-			COALESCE(SUM(output_tokens), 0) as total_output_tokens,
-			COALESCE(SUM(cache_creation_tokens + cache_read_tokens), 0) as total_cache_tokens,
-			COALESCE(SUM(cache_creation_tokens), 0) as total_cache_creation_tokens,
-			COALESCE(SUM(cache_read_tokens), 0) as total_cache_read_tokens,
-			COALESCE(SUM(total_cost), 0) as total_cost,
-			COALESCE(SUM(actual_cost), 0) as total_actual_cost,
-			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as total_account_cost,
-			COALESCE(AVG(duration_ms), 0) as avg_duration_ms
-		FROM usage_logs
-		%s
+			GROUPING(inbound_endpoint) AS inbound_grouped,
+			GROUPING(upstream_endpoint) AS upstream_grouped,
+			inbound_endpoint,
+			upstream_endpoint,
+			COUNT(*) AS requests,
+			COALESCE(SUM(input_tokens), 0) AS input_tokens,
+			COALESCE(SUM(output_tokens), 0) AS output_tokens,
+			COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
+			COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+			COALESCE(SUM(total_cost), 0) AS cost,
+			COALESCE(SUM(actual_cost), 0) AS actual_cost,
+			COALESCE(SUM(account_cost), 0) AS account_cost,
+			COALESCE(AVG(duration_ms), 0) AS avg_duration_ms
+		FROM scoped
+		GROUP BY GROUPING SETS (
+			(),
+			(inbound_endpoint),
+			(upstream_endpoint),
+			(inbound_endpoint, upstream_endpoint)
+		)
 	`, buildWhere(conditions))
 
 	stats := &UsageStats{}
 	var totalAccountCost float64
-
-	start := time.Unix(0, 0).UTC()
-	if filters.StartTime != nil {
-		start = *filters.StartTime
+	useAccountCostForEndpoint := filters.AccountID > 0 && filters.UserID == 0 && filters.APIKeyID == 0
+	rows, err := r.sql.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
 	}
-	end := time.Now().UTC()
-	if filters.EndTime != nil {
-		end = *filters.EndTime
-	}
+	defer func() { _ = rows.Close() }()
 
-	var endpoints, upstreamEndpoints, endpointPaths []EndpointStat
-
-	// 汇总查询:失败即致命。
-	runSummary := func(c context.Context) error {
-		return scanSingleRow(
-			c, r.sql, query, args,
-			&stats.TotalRequests,
-			&stats.TotalInputTokens,
-			&stats.TotalOutputTokens,
-			&stats.TotalCacheTokens,
-			&stats.TotalCacheCreationTokens,
-			&stats.TotalCacheReadTokens,
-			&stats.TotalCost,
-			&stats.TotalActualCost,
-			&totalAccountCost,
-			&stats.AverageDurationMs,
+	for rows.Next() {
+		var (
+			inboundGrouped, upstreamGrouped                                      int
+			inboundEndpoint, upstreamEndpoint                                    sql.NullString
+			requests, inputTokens, outputTokens, cacheCreationTokens, cacheReads int64
+			cost, actualCost, accountCost, averageDurationMs                     float64
 		)
-	}
-	// endpoint 明细:best-effort(失败 log + 返空),不致命。
-	runEndpoints := func(c context.Context) {
-		res, err := r.getEndpointStatsByColumnWithFilters(c, "inbound_endpoint", start, end, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.ModelFilterSource, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode)
-		if err != nil {
-			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				logger.LegacyPrintf("repository.usage_log", "GetEndpointStatsWithFilters failed in GetStatsWithFilters: %v", err)
-			}
-			res = []EndpointStat{}
+		if err := rows.Scan(
+			&inboundGrouped,
+			&upstreamGrouped,
+			&inboundEndpoint,
+			&upstreamEndpoint,
+			&requests,
+			&inputTokens,
+			&outputTokens,
+			&cacheCreationTokens,
+			&cacheReads,
+			&cost,
+			&actualCost,
+			&accountCost,
+			&averageDurationMs,
+		); err != nil {
+			return nil, err
 		}
-		endpoints = res
-	}
-	runUpstream := func(c context.Context) {
-		res, err := r.getEndpointStatsByColumnWithFilters(c, "upstream_endpoint", start, end, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.ModelFilterSource, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode)
-		if err != nil {
-			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				logger.LegacyPrintf("repository.usage_log", "GetUpstreamEndpointStatsWithFilters failed in GetStatsWithFilters: %v", err)
-			}
-			res = []EndpointStat{}
+
+		totalTokens := inputTokens + outputTokens + cacheCreationTokens + cacheReads
+		endpointActualCost := actualCost
+		if useAccountCostForEndpoint {
+			endpointActualCost = accountCost
 		}
-		upstreamEndpoints = res
-	}
-	runPaths := func(c context.Context) {
-		res, err := r.getEndpointPathStatsWithFilters(c, start, end, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.ModelFilterSource, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode)
-		if err != nil {
-			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				logger.LegacyPrintf("repository.usage_log", "getEndpointPathStatsWithFilters failed in GetStatsWithFilters: %v", err)
-			}
-			res = []EndpointStat{}
+
+		switch {
+		case inboundGrouped == 1 && upstreamGrouped == 1:
+			stats.TotalRequests = requests
+			stats.TotalInputTokens = inputTokens
+			stats.TotalOutputTokens = outputTokens
+			stats.TotalCacheCreationTokens = cacheCreationTokens
+			stats.TotalCacheReadTokens = cacheReads
+			stats.TotalCacheTokens = cacheCreationTokens + cacheReads
+			stats.TotalCost = cost
+			stats.TotalActualCost = actualCost
+			totalAccountCost = accountCost
+			stats.AverageDurationMs = averageDurationMs
+		case inboundGrouped == 0 && upstreamGrouped == 1:
+			stats.Endpoints = append(stats.Endpoints, EndpointStat{
+				Endpoint: inboundEndpoint.String, Requests: requests, TotalTokens: totalTokens,
+				Cost: cost, ActualCost: endpointActualCost,
+			})
+		case inboundGrouped == 1 && upstreamGrouped == 0:
+			stats.UpstreamEndpoints = append(stats.UpstreamEndpoints, EndpointStat{
+				Endpoint: upstreamEndpoint.String, Requests: requests, TotalTokens: totalTokens,
+				Cost: cost, ActualCost: endpointActualCost,
+			})
+		case inboundGrouped == 0 && upstreamGrouped == 0:
+			stats.EndpointPaths = append(stats.EndpointPaths, EndpointStat{
+				Endpoint: inboundEndpoint.String + " -> " + upstreamEndpoint.String,
+				Requests: requests, TotalTokens: totalTokens, Cost: cost, ActualCost: endpointActualCost,
+			})
 		}
-		endpointPaths = res
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
-	if r.db != nil {
-		// 生产路径:r.sql 是 *sql.DB 连接池,可并发。4 条查询并行,延迟取最大值。
-		g, gctx := errgroup.WithContext(ctx)
-		g.Go(func() error { return runSummary(gctx) })
-		g.Go(func() error { runEndpoints(gctx); return nil })
-		g.Go(func() error { runUpstream(gctx); return nil })
-		g.Go(func() error { runPaths(gctx); return nil })
-		if err := g.Wait(); err != nil {
-			return nil, err
-		}
-	} else {
-		// 事务路径(ent.Tx 不能并发查询):顺序执行,行为与重构前一致。
-		if err := runSummary(ctx); err != nil {
-			return nil, err
-		}
-		runEndpoints(ctx)
-		runUpstream(ctx)
-		runPaths(ctx)
+	sortEndpointStats := func(values []EndpointStat) {
+		sort.Slice(values, func(i, j int) bool {
+			if values[i].Requests != values[j].Requests {
+				return values[i].Requests > values[j].Requests
+			}
+			return values[i].Endpoint < values[j].Endpoint
+		})
 	}
+	sortEndpointStats(stats.Endpoints)
+	sortEndpointStats(stats.UpstreamEndpoints)
+	sortEndpointStats(stats.EndpointPaths)
 
 	stats.TotalAccountCost = &totalAccountCost
 	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheTokens
-	stats.Endpoints = endpoints
-	stats.UpstreamEndpoints = upstreamEndpoints
-	stats.EndpointPaths = endpointPaths
 
 	return stats, nil
 }
@@ -4792,67 +4866,72 @@ func (r *usageLogRepository) loadSubscriptions(ctx context.Context, ids []int64)
 
 func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, error) {
 	var (
-		id                    int64
-		userID                int64
-		apiKeyID              int64
-		accountID             int64
-		requestID             sql.NullString
-		model                 string
-		requestedModel        sql.NullString
-		upstreamModel         sql.NullString
-		groupID               sql.NullInt64
-		subscriptionID        sql.NullInt64
-		payerUserID           sql.NullInt64
-		parentAccountID       sql.NullInt64
-		inputTokens           int
-		outputTokens          int
-		cacheCreationTokens   int
-		cacheReadTokens       int
-		cacheCreation5m       int
-		cacheCreation1h       int
-		imageOutputTokens     int
-		imageOutputCost       float64
-		imageInputTokens      int
-		imageInputCost        float64
-		inputCost             float64
-		outputCost            float64
-		cacheCreationCost     float64
-		cacheReadCost         float64
-		totalCost             float64
-		actualCost            float64
-		parentQuotaUsed       float64
-		rateMultiplier        float64
-		accountRateMultiplier sql.NullFloat64
-		billingType           int16
-		requestTypeRaw        int16
-		stream                bool
-		openaiWSMode          bool
-		durationMs            sql.NullInt64
-		firstTokenMs          sql.NullInt64
-		userAgent             sql.NullString
-		ipAddress             sql.NullString
-		imageCount            int
-		imageSize             sql.NullString
-		imageInputSize        sql.NullString
-		imageOutputSize       sql.NullString
-		imageSizeSource       sql.NullString
-		imageSizeBreakdown    sql.NullString
-		videoCount            int
-		videoResolution       sql.NullString
-		videoDurationSeconds  sql.NullInt64
-		serviceTier           sql.NullString
-		reasoningEffort       sql.NullString
-		inboundEndpoint       sql.NullString
-		upstreamEndpoint      sql.NullString
-		cacheTTLOverridden    bool
-		longContextBilling    bool
-		channelID             sql.NullInt64
-		modelMappingChain     sql.NullString
-		billingTier           sql.NullString
-		billingMode           sql.NullString
-		accountStatsCost      sql.NullFloat64
-		sessionID             sql.NullString
-		createdAt             time.Time
+		id                       int64
+		userID                   int64
+		apiKeyID                 int64
+		accountID                int64
+		requestID                sql.NullString
+		model                    string
+		requestedModel           sql.NullString
+		upstreamModel            sql.NullString
+		upstreamResponseModel    sql.NullString
+		upstreamModelMismatch    sql.NullBool
+		groupID                  sql.NullInt64
+		subscriptionID           sql.NullInt64
+		payerUserID              sql.NullInt64
+		parentAccountID          sql.NullInt64
+		inputTokens              int
+		outputTokens             int
+		cacheCreationTokens      int
+		cacheReadTokens          int
+		cacheCreation5m          int
+		cacheCreation1h          int
+		imageOutputTokens        int
+		imageOutputCost          float64
+		imageInputTokens         int
+		imageInputCost           float64
+		inputCost                float64
+		outputCost               float64
+		cacheCreationCost        float64
+		cacheReadCost            float64
+		totalCost                float64
+		actualCost               float64
+		parentQuotaUsed          float64
+		rateMultiplier           float64
+		accountRateMultiplier    sql.NullFloat64
+		billingType              int16
+		requestTypeRaw           int16
+		stream                   bool
+		openaiWSMode             bool
+		durationMs               sql.NullInt64
+		firstTokenMs             sql.NullInt64
+		userAgent                sql.NullString
+		ipAddress                sql.NullString
+		imageCount               int
+		imageSize                sql.NullString
+		imageInputSize           sql.NullString
+		imageOutputSize          sql.NullString
+		imageSizeSource          sql.NullString
+		imageSizeBreakdown       sql.NullString
+		videoCount               int
+		videoResolution          sql.NullString
+		videoDurationSeconds     sql.NullInt64
+		serviceTier              sql.NullString
+		reasoningEffort          sql.NullString
+		requestedReasoningEffort sql.NullString
+		inboundEndpoint          sql.NullString
+		upstreamEndpoint         sql.NullString
+		cacheTTLOverridden       bool
+		longContextBilling       bool
+		channelID                sql.NullInt64
+		modelMappingChain        sql.NullString
+		billingTier              sql.NullString
+		billingMode              sql.NullString
+		accountStatsCost         sql.NullFloat64
+		upstreamRequestID        sql.NullString
+		sessionID                sql.NullString
+		nativeCompactionV2       bool
+		createdAt                time.Time
 	)
 
 	if err := scanner.Scan(
@@ -4864,6 +4943,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&model,
 		&requestedModel,
 		&upstreamModel,
+		&upstreamResponseModel,
+		&upstreamModelMismatch,
 		&groupID,
 		&subscriptionID,
 		&payerUserID,
@@ -4906,6 +4987,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&videoDurationSeconds,
 		&serviceTier,
 		&reasoningEffort,
+		&requestedReasoningEffort,
 		&inboundEndpoint,
 		&upstreamEndpoint,
 		&cacheTTLOverridden,
@@ -4915,7 +4997,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&billingTier,
 		&billingMode,
 		&accountStatsCost,
+		&upstreamRequestID,
 		&sessionID,
+		&nativeCompactionV2,
 		&createdAt,
 	); err != nil {
 		return nil, err
@@ -4949,6 +5033,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		AccountRateMultiplier:     nullFloat64Ptr(accountRateMultiplier),
 		BillingType:               int8(billingType),
 		RequestType:               service.RequestTypeFromInt16(requestTypeRaw),
+		NativeCompactionV2:        nativeCompactionV2,
 		ImageCount:                imageCount,
 		VideoCount:                videoCount,
 		CacheTTLOverridden:        cacheTTLOverridden,
@@ -5020,6 +5105,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	if reasoningEffort.Valid {
 		log.ReasoningEffort = &reasoningEffort.String
 	}
+	if requestedReasoningEffort.Valid {
+		log.RequestedReasoningEffort = &requestedReasoningEffort.String
+	}
 	if inboundEndpoint.Valid {
 		log.InboundEndpoint = &inboundEndpoint.String
 	}
@@ -5028,6 +5116,13 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	}
 	if upstreamModel.Valid {
 		log.UpstreamModel = &upstreamModel.String
+	}
+	if upstreamResponseModel.Valid {
+		log.UpstreamResponseModel = &upstreamResponseModel.String
+	}
+	if upstreamModelMismatch.Valid {
+		value := upstreamModelMismatch.Bool
+		log.UpstreamModelMismatch = &value
 	}
 	if channelID.Valid {
 		value := channelID.Int64
@@ -5047,6 +5142,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	}
 	if sessionID.Valid {
 		log.SessionID = &sessionID.String
+	}
+	if upstreamRequestID.Valid {
+		log.UpstreamRequestID = &upstreamRequestID.String
 	}
 
 	return log, nil
@@ -5138,6 +5236,27 @@ func appendRequestTypeOrStreamQueryFilter(query string, args []any, requestType 
 	return query, args
 }
 
+func appendNativeCompactionV2WhereCondition(conditions []string, args []any, nativeCompactionV2 *bool, alias string) ([]string, []any) {
+	if nativeCompactionV2 == nil {
+		return conditions, args
+	}
+	column := "native_compaction_v2"
+	if alias != "" {
+		column = alias + "." + column
+	}
+	conditions = append(conditions, fmt.Sprintf("%s = $%d", column, len(args)+1))
+	args = append(args, *nativeCompactionV2)
+	return conditions, args
+}
+
+func appendNativeCompactionV2QueryFilter(query string, args []any, nativeCompactionV2 *bool, alias string) (string, []any) {
+	conditions, args := appendNativeCompactionV2WhereCondition(nil, args, nativeCompactionV2, alias)
+	if len(conditions) == 0 {
+		return query, args
+	}
+	return query + " AND " + conditions[0], args
+}
+
 // buildRequestTypeFilterCondition 在 request_type 过滤时兼容 legacy 字段，避免历史数据漏查。
 func buildRequestTypeFilterCondition(startArgIndex int, requestType int16) (string, []any) {
 	return buildRequestTypeFilterConditionWithAlias(startArgIndex, requestType, "")
@@ -5189,6 +5308,13 @@ func nullString(v *string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: *v, Valid: true}
+}
+
+func nullBool(v *bool) sql.NullBool {
+	if v == nil {
+		return sql.NullBool{}
+	}
+	return sql.NullBool{Bool: *v, Valid: true}
 }
 
 func nullStringIntMapJSON(v map[string]int) any {

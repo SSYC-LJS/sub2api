@@ -19,11 +19,14 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/imroc/req/v3"
 	"golang.org/x/sync/singleflight"
+	"sync"
 )
 
 // CoerceDingTalkCorpPolicyForWrite 是 coerceDeprecatedDingTalkCorpPolicy 的导出版本，
@@ -43,6 +46,74 @@ func coerceDeprecatedDingTalkCorpPolicy(policy string) string {
 		return "none"
 	}
 	return policy
+}
+
+const (
+	GrokDefaultBaseURLModeAPI     = "api"
+	GrokDefaultBaseURLModeUSEast1 = "us-east-1"
+	GrokDefaultBaseURLModeUSWest2 = "us-west-2"
+	GrokDefaultBaseURLModeEUWest1 = "eu-west-1"
+	GrokDefaultBaseURLModeCLI     = "cli"
+)
+
+func normalizeGrokDefaultBaseURLMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case GrokDefaultBaseURLModeAPI:
+		return GrokDefaultBaseURLModeAPI
+	case GrokDefaultBaseURLModeUSEast1:
+		return GrokDefaultBaseURLModeUSEast1
+	case GrokDefaultBaseURLModeUSWest2:
+		return GrokDefaultBaseURLModeUSWest2
+	case GrokDefaultBaseURLModeEUWest1:
+		return GrokDefaultBaseURLModeEUWest1
+	case GrokDefaultBaseURLModeCLI:
+		return GrokDefaultBaseURLModeCLI
+	default:
+		return GrokDefaultBaseURLModeCLI
+	}
+}
+
+func GrokBaseURLForMode(mode string) string {
+	switch normalizeGrokDefaultBaseURLMode(mode) {
+	case GrokDefaultBaseURLModeAPI:
+		return xai.DefaultBaseURL
+	case GrokDefaultBaseURLModeUSEast1:
+		return xai.DefaultUSEast1BaseURL
+	case GrokDefaultBaseURLModeUSWest2:
+		return xai.DefaultUSWest2BaseURL
+	case GrokDefaultBaseURLModeEUWest1:
+		return xai.DefaultEUWest1BaseURL
+	default:
+		return xai.DefaultCLIBaseURL
+	}
+}
+
+func (s *SettingService) GetGrokDefaultBaseURLMode(ctx context.Context) string {
+	if s == nil || s.settingRepo == nil {
+		return GrokDefaultBaseURLModeCLI
+	}
+	dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gatewayForwardingDBTimeout)
+	defer cancel()
+	raw, err := s.settingRepo.GetValue(dbCtx, SettingKeyGrokDefaultBaseURLMode)
+	if err != nil {
+		return GrokDefaultBaseURLModeCLI
+	}
+	return normalizeGrokDefaultBaseURLMode(raw)
+}
+
+func (s *SettingService) GetGrokDefaultBaseURL(ctx context.Context) string {
+	return GrokBaseURLForMode(s.GetGrokDefaultBaseURLMode(ctx))
+}
+
+func (s *SettingService) ResolveGrokBaseURL(ctx context.Context, account *Account) string {
+	def := xai.DefaultCLIBaseURL
+	if s != nil {
+		def = s.GetGrokDefaultBaseURL(ctx)
+	}
+	if account == nil {
+		return def
+	}
+	return account.GetGrokBaseURLOr(def)
 }
 
 var (
@@ -163,6 +234,7 @@ const backendModeDBTimeout = 5 * time.Second
 
 // cachedGatewayForwardingSettings 缓存网关转发行为设置（进程内缓存，60s TTL）
 type cachedGatewayForwardingSettings struct {
+	openAITTFTMode                   string
 	fingerprintUnification           bool
 	metadataPassthrough              bool
 	cchSigning                       bool
@@ -182,6 +254,19 @@ const gatewayForwardingCacheTTL = 60 * time.Second
 const gatewayForwardingErrorTTL = 5 * time.Second
 const gatewayForwardingDBTimeout = 5 * time.Second
 
+// cachedAccountSchedulingThresholds 缓存平台自动停调阈值（进程内缓存，60s TTL）
+type cachedAccountSchedulingThresholds struct {
+	thresholds map[string]int
+	expiresAt  int64 // unix nano
+}
+
+var accountSchedulingThresholdsCache atomic.Value // *cachedAccountSchedulingThresholds
+var accountSchedulingThresholdsSF singleflight.Group
+
+const accountSchedulingThresholdsCacheTTL = 60 * time.Second
+const accountSchedulingThresholdsErrorTTL = 5 * time.Second
+const accountSchedulingThresholdsDBTimeout = 5 * time.Second
+
 // cachedAntigravityUserAgentVersion 缓存 Antigravity UA 版本号（进程内缓存，60s TTL）
 type cachedAntigravityUserAgentVersion struct {
 	version   string
@@ -192,9 +277,8 @@ const antigravityUserAgentVersionCacheTTL = 60 * time.Second
 const antigravityUserAgentVersionErrorTTL = 5 * time.Second
 const antigravityUserAgentVersionDBTimeout = 5 * time.Second
 
-// DefaultOpenAICodexUserAgent OpenAI Codex 默认 User-Agent（用于规避 Cloudflare 对浏览器 UA 的质询）。
-// 取官方 CLI 身份而非 TUI 身份：上游按 originator 分桶调度容量，TUI 身份命中降载桶会被回
-// server_is_overloaded 并触发账号冷却，而该默认值是浏览器 UA 兜底路径上最主要的身份来源。
+// DefaultOpenAICodexUserAgent 是 OpenAI Codex 默认 User-Agent，用于规避浏览器 UA 的质询。
+// 默认采用 codex-tui 身份，版本段随 codexCLIVersion 一起更新。
 const DefaultOpenAICodexUserAgent = codexCLIUserAgent
 
 // cachedOpenAICodexUserAgent 缓存 OpenAI Codex UA（进程内缓存，60s TTL）
@@ -202,6 +286,32 @@ type cachedOpenAICodexUserAgent struct {
 	value     string
 	expiresAt int64 // unix nano
 }
+
+// cachedOpenAICodexClientVersion 缓存出站 Codex 客户端版本号（进程内缓存，60s TTL）
+type cachedOpenAICodexClientVersion struct {
+	version   string
+	expiresAt int64 // unix nano
+}
+
+const openAICodexClientVersionCacheTTL = 60 * time.Second
+const openAICodexClientVersionErrorTTL = 5 * time.Second
+const openAICodexClientVersionDBTimeout = 5 * time.Second
+
+// openAICodexClientVersionSFKey singleflight 键。
+const openAICodexClientVersionSFKey = "openai_codex_client_version"
+
+// cachedClaudeCodeClientVersion 缓存出站 Claude Code 客户端版本号（进程内缓存，60s TTL）
+type cachedClaudeCodeClientVersion struct {
+	version   string
+	expiresAt int64 // unix nano
+}
+
+const claudeCodeClientVersionCacheTTL = 60 * time.Second
+const claudeCodeClientVersionErrorTTL = 5 * time.Second
+const claudeCodeClientVersionDBTimeout = 5 * time.Second
+
+// claudeCodeClientVersionSFKey singleflight 键。
+const claudeCodeClientVersionSFKey = "claude_code_client_version"
 
 type cachedOpenAIQuotaAutoPauseSettings struct {
 	settings  OpsOpenAIAccountQuotaAutoPauseSettings
@@ -231,12 +341,13 @@ type cachedCodexRestrictionPolicy struct {
 	expiresAt int64 // unix nano
 }
 
-// cachedCyberSessionBlockRuntime cyber 会话屏蔽开关+TTL 进程内缓存（60s TTL）。
+// cachedCyberSessionBlockRuntime cyber 会话屏蔽开关、TTL 与用户白名单缓存（60s TTL）。
 // GetCyberSessionBlockRuntime 在网关请求热路径上被调用，避免每次访问 DB。
 type cachedCyberSessionBlockRuntime struct {
-	enabled   bool
-	ttl       time.Duration
-	expiresAt int64 // unix nano
+	allowlistedUsers map[int64]struct{}
+	enabled          bool
+	ttl              time.Duration
+	expiresAt        int64 // unix nano
 }
 
 const cyberSessionBlockRuntimeCacheTTL = 60 * time.Second
@@ -271,9 +382,14 @@ type SettingService struct {
 	antigravityUAVersionSF      singleflight.Group
 	openAICodexUACache          atomic.Value // *cachedOpenAICodexUserAgent
 	openAICodexUASF             singleflight.Group
+	openAICodexVersionCache     atomic.Value // *cachedOpenAICodexClientVersion
+	openAICodexVersionSF        singleflight.Group
+	claudeCodeVersionCache      atomic.Value // *cachedClaudeCodeClientVersion
+	claudeCodeVersionSF         singleflight.Group
 	codexRestrictionPolicyCache atomic.Value // *cachedCodexRestrictionPolicy
 	codexRestrictionPolicySF    singleflight.Group
 
+	cyberSessionBlockRuntimeMu    sync.Mutex
 	cyberSessionBlockRuntimeCache atomic.Value // *cachedCyberSessionBlockRuntime
 	cyberSessionBlockRuntimeSF    singleflight.Group
 
@@ -293,6 +409,11 @@ type SettingService struct {
 
 	requestResponseCaptureCache atomic.Value // *cachedRequestResponseCaptureSettings
 	requestResponseCaptureSF    singleflight.Group
+
+	openAIAPIKeyHealthBreakerCache atomic.Value // *cachedOpenAIAPIKeyHealthBreakerSettings
+
+	channelMonitorRuntimeListenersMu sync.Mutex
+	channelMonitorRuntimeListeners   []func()
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）
@@ -300,6 +421,11 @@ type DefaultPlatformQuotaSetting struct {
 	DailyLimitUSD   *float64 `json:"daily"`
 	WeeklyLimitUSD  *float64 `json:"weekly"`
 	MonthlyLimitUSD *float64 `json:"monthly"`
+}
+
+// HasAnyLimit 报告是否至少配置了一档限额（0 也算配置）。nil receiver 视为未配置。
+func (q *DefaultPlatformQuotaSetting) HasAnyLimit() bool {
+	return q != nil && (q.DailyLimitUSD != nil || q.WeeklyLimitUSD != nil || q.MonthlyLimitUSD != nil)
 }
 
 type ProviderDefaultGrantSettings struct {
@@ -836,7 +962,7 @@ func (s *SettingService) GetFrontendURL(ctx context.Context) string {
 
 // GetCyberSessionBlockRuntime 返回 (开关, TTL)，进程内缓存 ~60s，
 // 供网关热路径读取时避免 DB 往返。
-// 两个 setting key 在单次 singleflight 里一起读取，减少 DB 往返。
+// 屏蔽设置与用户白名单在单次 singleflight 中一起读取。
 // 默认值：开关 false，TTL 1h（与粘性会话对齐）。
 func (s *SettingService) GetCyberSessionBlockRuntime(ctx context.Context) (bool, time.Duration) {
 	if cached, ok := s.cyberSessionBlockRuntimeCache.Load().(*cachedCyberSessionBlockRuntime); ok && cached != nil {
@@ -845,6 +971,8 @@ func (s *SettingService) GetCyberSessionBlockRuntime(ctx context.Context) (bool,
 		}
 	}
 	result, _, _ := s.cyberSessionBlockRuntimeSF.Do("cyber_session_block_runtime", func() (any, error) {
+		s.cyberSessionBlockRuntimeMu.Lock()
+		defer s.cyberSessionBlockRuntimeMu.Unlock()
 		if cached, ok := s.cyberSessionBlockRuntimeCache.Load().(*cachedCyberSessionBlockRuntime); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return cached, nil
@@ -856,15 +984,11 @@ func (s *SettingService) GetCyberSessionBlockRuntime(ctx context.Context) (bool,
 		enabledVal, enabledErr := s.settingRepo.GetValue(dbCtx, SettingKeyCyberSessionBlockEnabled)
 		ttlVal, ttlErr := s.settingRepo.GetValue(dbCtx, SettingKeyCyberSessionBlockTTLSeconds)
 
+		previous, _ := s.cyberSessionBlockRuntimeCache.Load().(*cachedCyberSessionBlockRuntime)
+		cacheTTL := cyberSessionBlockRuntimeCacheTTL
 		if enabledErr != nil && !errors.Is(enabledErr, ErrSettingNotFound) {
 			slog.Warn("failed to get cyber_session_block_enabled setting", "error", enabledErr)
-			entry := &cachedCyberSessionBlockRuntime{
-				enabled:   false,
-				ttl:       time.Hour,
-				expiresAt: time.Now().Add(cyberSessionBlockRuntimeErrorTTL).UnixNano(),
-			}
-			s.cyberSessionBlockRuntimeCache.Store(entry)
-			return entry, nil
+			cacheTTL = cyberSessionBlockRuntimeErrorTTL
 		}
 
 		enabled := enabledErr == nil && strings.TrimSpace(enabledVal) == "true"
@@ -876,10 +1000,23 @@ func (s *SettingService) GetCyberSessionBlockRuntime(ctx context.Context) (bool,
 			}
 		}
 
+		allowlistVal, allowlistErr := s.settingRepo.GetValue(dbCtx, SettingKeyCyberPolicyUserAllowlist)
+		var allowlistedUsers map[int64]struct{}
+		if allowlistErr == nil {
+			allowlistedUsers, allowlistErr = ParseCyberPolicyUserAllowlist(allowlistVal)
+		}
+		if allowlistErr != nil && !errors.Is(allowlistErr, ErrSettingNotFound) {
+			slog.Warn("failed to load risk control user allowlist", "error", allowlistErr)
+			cacheTTL = cyberSessionBlockRuntimeErrorTTL
+			if previous != nil {
+				allowlistedUsers = previous.allowlistedUsers
+			}
+		}
 		entry := &cachedCyberSessionBlockRuntime{
-			enabled:   enabled,
-			ttl:       ttl,
-			expiresAt: time.Now().Add(cyberSessionBlockRuntimeCacheTTL).UnixNano(),
+			allowlistedUsers: allowlistedUsers,
+			enabled:          enabled,
+			ttl:              ttl,
+			expiresAt:        time.Now().Add(cacheTTL).UnixNano(),
 		}
 		s.cyberSessionBlockRuntimeCache.Store(entry)
 		return entry, nil
@@ -897,6 +1034,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyEmailVerifyEnabled,
 		SettingKeyForceEmailOnThirdPartySignup,
 		SettingKeyRegistrationEmailSuffixWhitelist,
+		SettingKeyRegistrationEmailDomainQuotaEnabled,
 		SettingKeyPromoCodeEnabled,
 		SettingKeyPasswordResetEnabled,
 		SettingKeyInvitationCodeEnabled,
@@ -908,6 +1046,13 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyLoginAgreementDocuments,
 		SettingKeyTurnstileEnabled,
 		SettingKeyTurnstileSiteKey,
+		SettingKeyTencentCaptchaEnabled,
+		SettingKeyTencentCaptchaAppID,
+		SettingKeyTencentCaptchaRegion,
+		SettingKeyAliyunCaptchaEnabled,
+		SettingKeyAliyunCaptchaSceneID,
+		SettingKeyAliyunCaptchaPrefix,
+		SettingKeyAliyunCaptchaRegion,
 		SettingKeyAPIKeyACLTrustForwardedIP,
 		SettingKeySiteName,
 		SettingKeySiteLogo,
@@ -948,6 +1093,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyWeChatConnectFrontendRedirectURL,
 		SettingKeyBackendModeEnabled,
 		SettingPaymentEnabled,
+		SettingBalancePayDisabled,
 		SettingKeyOIDCConnectEnabled,
 		SettingKeyOIDCConnectProviderName,
 		SettingKeyGitHubOAuthEnabled,
@@ -961,10 +1107,16 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyBalanceLowNotifyRechargeURL,
 		SettingKeyAccountQuotaNotifyEnabled,
 		SettingKeyChannelMonitorEnabled,
+		SettingKeyChannelMonitorMode,
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
+		SettingKeyChannelMonitorHideThroughput,
+		SettingKeyChannelMonitorShowQuota,
+		SettingKeyChannelMonitorHideUserRanking,
 		SettingKeyAvailableChannelsEnabled,
+		SettingKeySubscriptionEnabled,
 		SettingKeyModelPlazaEnabled,
 		SettingKeyModelPlazaRequireAuth,
+		SettingKeyPluginManagementEnabled,
 		SettingKeyAffiliateEnabled,
 		SettingKeyRiskControlEnabled,
 		SettingKeyAllowUserViewErrorRequests,
@@ -1026,64 +1178,81 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	}
 
 	return &PublicSettings{
-		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
-		EmailVerifyEnabled:               emailVerifyEnabled,
-		ForceEmailOnThirdPartySignup:     settings[SettingKeyForceEmailOnThirdPartySignup] == "true",
-		RegistrationEmailSuffixWhitelist: registrationEmailSuffixWhitelist,
-		PromoCodeEnabled:                 settings[SettingKeyPromoCodeEnabled] != "false", // 默认启用
-		PasswordResetEnabled:             passwordResetEnabled,
-		InvitationCodeEnabled:            settings[SettingKeyInvitationCodeEnabled] == "true",
-		TotpEnabled:                      settings[SettingKeyTotpEnabled] == "true",
-		PasskeyEnabled:                   s.passkeyConfigured() && s.passkeySettingEnabled(settings),
-		LoginAgreementEnabled:            settings[SettingKeyLoginAgreementEnabled] == "true" && len(loginAgreementDocuments) > 0,
-		LoginAgreementMode:               normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),
-		LoginAgreementUpdatedAt:          loginAgreementUpdatedAt,
-		LoginAgreementRevision:           buildLoginAgreementRevision(loginAgreementUpdatedAt, loginAgreementDocuments),
-		LoginAgreementDocuments:          loginAgreementDocuments,
-		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
-		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
-		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
-		SiteLogo:                         settings[SettingKeySiteLogo],
-		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
-		APIBaseURL:                       settings[SettingKeyAPIBaseURL],
-		ContactInfo:                      settings[SettingKeyContactInfo],
-		ContactQRCodeURL:                 strings.TrimSpace(settings[SettingKeyContactQRCodeURL]),
-		ContactWebmasterQRCodeURL:        firstNonEmpty(settings[SettingKeyContactWebmasterQRCodeURL], settings[SettingKeyContactQRCodeURL]),
-		ContactGroupQRCodeURL:            strings.TrimSpace(settings[SettingKeyContactGroupQRCodeURL]),
-		DocURL:                           settings[SettingKeyDocURL],
-		ActivationCodePurchaseURL:        strings.TrimSpace(settings[SettingKeyActivationCodePurchaseURL]),
-		HomeContent:                      settings[SettingKeyHomeContent],
-		CompactHomeEnabled:               settings[SettingKeyCompactHomeEnabled] == "true",
-		HideCcsImportButton:              settings[SettingKeyHideCcsImportButton] == "true",
-		PurchaseSubscriptionEnabled:      settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
-		PurchaseSubscriptionURL:          strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
-		TableDefaultPageSize:             tableDefaultPageSize,
-		TablePageSizeOptions:             tablePageSizeOptions,
-		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
-		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
-		LinuxDoOAuthEnabled:              linuxDoEnabled,
-		DingTalkOAuthEnabled:             dingTalkEnabled,
-		WeChatOAuthEnabled:               weChatEnabled,
-		WeChatOAuthOpenEnabled:           weChatOpenEnabled,
-		WeChatOAuthMPEnabled:             weChatMPEnabled,
-		WeChatOAuthMobileEnabled:         weChatMobileEnabled,
-		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",
-		PaymentEnabled:                   settings[SettingPaymentEnabled] == "true",
-		OIDCOAuthEnabled:                 oidcEnabled,
-		OIDCOAuthProviderName:            oidcProviderName,
-		GitHubOAuthEnabled:               gitHubEnabled,
-		GoogleOAuthEnabled:               googleEnabled,
-		BalanceLowNotifyEnabled:          settings[SettingKeyBalanceLowNotifyEnabled] == "true",
-		AccountQuotaNotifyEnabled:        settings[SettingKeyAccountQuotaNotifyEnabled] == "true",
-		BalanceLowNotifyThreshold:        balanceLowNotifyThreshold,
-		BalanceLowNotifyRechargeURL:      settings[SettingKeyBalanceLowNotifyRechargeURL],
+		RegistrationEnabled:                 settings[SettingKeyRegistrationEnabled] == "true",
+		EmailVerifyEnabled:                  emailVerifyEnabled,
+		ForceEmailOnThirdPartySignup:        settings[SettingKeyForceEmailOnThirdPartySignup] == "true",
+		RegistrationEmailSuffixWhitelist:    registrationEmailSuffixWhitelist,
+		RegistrationEmailDomainQuotaEnabled: settings[SettingKeyRegistrationEmailDomainQuotaEnabled] == "true",
+		PromoCodeEnabled:                    settings[SettingKeyPromoCodeEnabled] != "false", // 默认启用
+		PasswordResetEnabled:                passwordResetEnabled,
+		InvitationCodeEnabled:               settings[SettingKeyInvitationCodeEnabled] == "true",
+		TotpEnabled:                         settings[SettingKeyTotpEnabled] == "true",
+		PasskeyEnabled:                      s.passkeyConfigured() && s.passkeySettingEnabled(settings),
+		LoginAgreementEnabled:               settings[SettingKeyLoginAgreementEnabled] == "true" && len(loginAgreementDocuments) > 0,
+		LoginAgreementMode:                  normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),
+		LoginAgreementUpdatedAt:             loginAgreementUpdatedAt,
+		LoginAgreementRevision:              buildLoginAgreementRevision(loginAgreementUpdatedAt, loginAgreementDocuments),
+		LoginAgreementDocuments:             loginAgreementDocuments,
+		TurnstileEnabled:                    settings[SettingKeyTurnstileEnabled] == "true",
+		TurnstileSiteKey:                    settings[SettingKeyTurnstileSiteKey],
+		TencentCaptchaEnabled:               settings[SettingKeyTencentCaptchaEnabled] == "true",
+		TencentCaptchaAppID:                 settings[SettingKeyTencentCaptchaAppID],
+		TencentCaptchaRegion:                normalizeTencentCaptchaRegion(settings[SettingKeyTencentCaptchaRegion]),
+		AliyunCaptchaEnabled:                settings[SettingKeyAliyunCaptchaEnabled] == "true",
+		AliyunCaptchaSceneID:                settings[SettingKeyAliyunCaptchaSceneID],
+		AliyunCaptchaPrefix:                 settings[SettingKeyAliyunCaptchaPrefix],
+		AliyunCaptchaRegion:                 normalizeAliyunCaptchaRegion(settings[SettingKeyAliyunCaptchaRegion]),
+		SiteName:                            s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
+		SiteLogo:                            settings[SettingKeySiteLogo],
+		SiteSubtitle:                        s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
+		APIBaseURL:                          settings[SettingKeyAPIBaseURL],
+		ContactInfo:                         settings[SettingKeyContactInfo],
+		ContactQRCodeURL:                    strings.TrimSpace(settings[SettingKeyContactQRCodeURL]),
+		ContactWebmasterQRCodeURL:           firstNonEmpty(settings[SettingKeyContactWebmasterQRCodeURL], settings[SettingKeyContactQRCodeURL]),
+		ContactGroupQRCodeURL:               strings.TrimSpace(settings[SettingKeyContactGroupQRCodeURL]),
+		DocURL:                              settings[SettingKeyDocURL],
+		ActivationCodePurchaseURL:           strings.TrimSpace(settings[SettingKeyActivationCodePurchaseURL]),
+		HomeContent:                         settings[SettingKeyHomeContent],
+		CompactHomeEnabled:                  settings[SettingKeyCompactHomeEnabled] == "true",
+		HideCcsImportButton:                 settings[SettingKeyHideCcsImportButton] == "true",
+		PurchaseSubscriptionEnabled:         settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
+		PurchaseSubscriptionURL:             strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
+		TableDefaultPageSize:                tableDefaultPageSize,
+		TablePageSizeOptions:                tablePageSizeOptions,
+		CustomMenuItems:                     settings[SettingKeyCustomMenuItems],
+		CustomEndpoints:                     settings[SettingKeyCustomEndpoints],
+		LinuxDoOAuthEnabled:                 linuxDoEnabled,
+		DingTalkOAuthEnabled:                dingTalkEnabled,
+		WeChatOAuthEnabled:                  weChatEnabled,
+		WeChatOAuthOpenEnabled:              weChatOpenEnabled,
+		WeChatOAuthMPEnabled:                weChatMPEnabled,
+		WeChatOAuthMobileEnabled:            weChatMobileEnabled,
+		BackendModeEnabled:                  settings[SettingKeyBackendModeEnabled] == "true",
+		PaymentEnabled:                      settings[SettingPaymentEnabled] == "true",
+		PaymentBalanceDisabled:              settings[SettingBalancePayDisabled] == "true",
+		OIDCOAuthEnabled:                    oidcEnabled,
+		OIDCOAuthProviderName:               oidcProviderName,
+		GitHubOAuthEnabled:                  gitHubEnabled,
+		GoogleOAuthEnabled:                  googleEnabled,
+		BalanceLowNotifyEnabled:             settings[SettingKeyBalanceLowNotifyEnabled] == "true",
+		AccountQuotaNotifyEnabled:           settings[SettingKeyAccountQuotaNotifyEnabled] == "true",
+		BalanceLowNotifyThreshold:           balanceLowNotifyThreshold,
+		BalanceLowNotifyRechargeURL:         settings[SettingKeyBalanceLowNotifyRechargeURL],
 
 		ChannelMonitorEnabled:                !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled]),
+		ChannelMonitorMode:                   normalizeChannelMonitorMode(settings[SettingKeyChannelMonitorMode]),
 		ChannelMonitorDefaultIntervalSeconds: parseChannelMonitorInterval(settings[SettingKeyChannelMonitorDefaultIntervalSeconds]),
+		ChannelMonitorHideThroughput:         !isFalseSettingValue(settings[SettingKeyChannelMonitorHideThroughput]),
+		ChannelMonitorShowQuota:              settings[SettingKeyChannelMonitorShowQuota] == "true",
+		ChannelMonitorHideUserRanking:        isTrueSettingValue(settings[SettingKeyChannelMonitorHideUserRanking]),
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
-		ModelPlazaEnabled:        settings[SettingKeyModelPlazaEnabled] == "true",
-		ModelPlazaRequireAuth:    settings[SettingKeyModelPlazaRequireAuth] == "true",
+
+		SubscriptionEnabled: !isFalseSettingValue(settings[SettingKeySubscriptionEnabled]),
+
+		ModelPlazaEnabled:       settings[SettingKeyModelPlazaEnabled] == "true",
+		ModelPlazaRequireAuth:   settings[SettingKeyModelPlazaRequireAuth] == "true",
+		PluginManagementEnabled: settings[SettingKeyPluginManagementEnabled] == "true",
 
 		AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
 
@@ -1099,7 +1268,20 @@ const (
 	channelMonitorIntervalMin      = 15
 	channelMonitorIntervalMax      = 3600
 	channelMonitorIntervalFallback = 60
+	defaultChannelMonitorMode      = ChannelMonitorModeV1
 )
+
+// normalizeChannelMonitorMode accepts only v1/v2; empty/invalid → v1 (safe default).
+func normalizeChannelMonitorMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case ChannelMonitorModeV1, "":
+		return ChannelMonitorModeV1
+	case ChannelMonitorModeV2:
+		return ChannelMonitorModeV2
+	default:
+		return defaultChannelMonitorMode
+	}
+}
 
 // parseChannelMonitorInterval parses the stored string and clamps to [15, 3600].
 // Empty / invalid input falls back to channelMonitorIntervalFallback.
@@ -1126,25 +1308,66 @@ func clampChannelMonitorInterval(v int) int {
 }
 
 // ChannelMonitorRuntime is the lightweight view of the channel monitor feature
-// consumed by the runner and user-facing handlers.
+// consumed by the runner, V2 aggregator, and user-facing handlers.
 type ChannelMonitorRuntime struct {
 	Enabled                bool
+	Mode                   string // ChannelMonitorModeV1 or ChannelMonitorModeV2
 	DefaultIntervalSeconds int
+	// HideThroughput: when true, user-facing V2 APIs omit RPM/TPM scale signals.
+	HideThroughput bool
+	// ShowQuota: when true, user-facing monitor views keep the quota/balance
+	// snapshots; otherwise the user handler strips them server-side.
+	// Parsed fail-closed (only literal "true" enables). Admin always sees them.
+	ShowQuota bool
+	// HideUserRanking: when true, user-facing V2 views hide the user ranking tab
+	// and the /users payload. Parsed fail-open (only literal "true" hides it).
+	HideUserRanking bool
+}
+
+// ActiveProbesAllowed reports whether V1 active provider probes may run.
+func (r ChannelMonitorRuntime) ActiveProbesAllowed() bool {
+	return r.Enabled && r.Mode == ChannelMonitorModeV1
+}
+
+// PassiveAggregationAllowed reports whether V2 passive aggregation may run.
+func (r ChannelMonitorRuntime) PassiveAggregationAllowed() bool {
+	return r.Enabled && r.Mode == ChannelMonitorModeV2
 }
 
 // GetChannelMonitorRuntime reads the channel monitor feature flags directly from
-// the settings store. Fail-open: on error returns Enabled=true with the default interval.
+// the settings store. Fail-open: on error returns Enabled=true, Mode=v1, default interval.
 func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMonitorRuntime {
+	if s == nil || s.settingRepo == nil {
+		return ChannelMonitorRuntime{
+			Enabled:                true,
+			Mode:                   defaultChannelMonitorMode,
+			DefaultIntervalSeconds: channelMonitorIntervalFallback,
+			HideThroughput:         true,
+		}
+	}
 	vals, err := s.settingRepo.GetMultiple(ctx, []string{
 		SettingKeyChannelMonitorEnabled,
+		SettingKeyChannelMonitorMode,
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
+		SettingKeyChannelMonitorHideThroughput,
+		SettingKeyChannelMonitorShowQuota,
+		SettingKeyChannelMonitorHideUserRanking,
 	})
 	if err != nil {
-		return ChannelMonitorRuntime{Enabled: true, DefaultIntervalSeconds: channelMonitorIntervalFallback}
+		return ChannelMonitorRuntime{
+			Enabled:                true,
+			Mode:                   defaultChannelMonitorMode,
+			DefaultIntervalSeconds: channelMonitorIntervalFallback,
+			HideThroughput:         true,
+		}
 	}
 	return ChannelMonitorRuntime{
 		Enabled:                !isFalseSettingValue(vals[SettingKeyChannelMonitorEnabled]),
+		Mode:                   normalizeChannelMonitorMode(vals[SettingKeyChannelMonitorMode]),
 		DefaultIntervalSeconds: parseChannelMonitorInterval(vals[SettingKeyChannelMonitorDefaultIntervalSeconds]),
+		HideThroughput:         !isFalseSettingValue(vals[SettingKeyChannelMonitorHideThroughput]),
+		ShowQuota:              vals[SettingKeyChannelMonitorShowQuota] == "true",
+		HideUserRanking:        isTrueSettingValue(vals[SettingKeyChannelMonitorHideUserRanking]),
 	}
 }
 
@@ -1324,7 +1547,8 @@ func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
 			})
 			return fallback, nil
 		}
-		ua := strings.TrimSpace(value)
+		// Preserve invalid header bytes for canonical identity validation.
+		ua := strings.Trim(value, " \t")
 		if ua == "" {
 			ua = fallback
 		}
@@ -1338,6 +1562,190 @@ func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
 		return ua
 	}
 	return fallback
+}
+
+// GetOpenAICodexClientVersion 返回出站声明的 Codex 客户端版本号。
+// 优先级：管理员在面板覆写的版本 → 自动同步到的官方最新稳定版 → 内置常量。
+// 上游在容量紧张时按客户端身份分优先级降载，陈旧版本会被优先丢弃，故该值需保持跟随官方发布；
+// 自动同步让运维不必为了跟版本而发新版本。
+func (s *SettingService) GetOpenAICodexClientVersion(ctx context.Context) string {
+	fallback := codexCLIVersion
+	if s == nil || s.settingRepo == nil {
+		return fallback
+	}
+	if cached, ok := s.openAICodexVersionCache.Load().(*cachedOpenAICodexClientVersion); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.version
+		}
+	}
+
+	result, _, _ := s.openAICodexVersionSF.Do(openAICodexClientVersionSFKey, func() (any, error) {
+		if cached, ok := s.openAICodexVersionCache.Load().(*cachedOpenAICodexClientVersion); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached.version, nil
+			}
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openAICodexClientVersionDBTimeout)
+		defer cancel()
+		values, err := s.settingRepo.GetMultiple(dbCtx, []string{
+			SettingKeyOpenAICodexClientVersion,
+			SettingKeyOpenAICodexClientVersionSynced,
+		})
+		if err != nil {
+			slog.Warn("failed to get openai codex client version setting", "error", err)
+			s.openAICodexVersionCache.Store(&cachedOpenAICodexClientVersion{
+				version:   fallback,
+				expiresAt: time.Now().Add(openAICodexClientVersionErrorTTL).UnixNano(),
+			})
+			return fallback, nil
+		}
+		version := NormalizeCodexClientVersion(values[SettingKeyOpenAICodexClientVersion])
+		if version == "" {
+			version = NormalizeCodexClientVersion(values[SettingKeyOpenAICodexClientVersionSynced])
+		}
+		if version == "" {
+			version = fallback
+		}
+		s.openAICodexVersionCache.Store(&cachedOpenAICodexClientVersion{
+			version:   version,
+			expiresAt: time.Now().Add(openAICodexClientVersionCacheTTL).UnixNano(),
+		})
+		return version, nil
+	})
+	if version, ok := result.(string); ok && version != "" {
+		return version
+	}
+	return fallback
+}
+
+// InvalidateOpenAICodexClientVersionCache 丢弃版本号缓存，下次读取回源。
+// 面板保存与自动同步写入后调用。
+func (s *SettingService) InvalidateOpenAICodexClientVersionCache() {
+	if s == nil {
+		return
+	}
+	s.openAICodexVersionSF.Forget(openAICodexClientVersionSFKey)
+	s.openAICodexVersionCache.Store((*cachedOpenAICodexClientVersion)(nil))
+}
+
+// NormalizeClaudeCodeClientVersion 校验并归一化 Claude Code 客户端版本号，非法值返回空串。
+// 容忍前导 "v" 与首尾空白；合法性复用 claude.IsSupportedCLIVersion（严格三段纯数字 semver、
+// 无预发布/构建后缀、且不低于内置基线）。
+func NormalizeClaudeCodeClientVersion(version string) string {
+	normalized := strings.TrimSpace(version)
+	normalized = strings.TrimPrefix(normalized, "v")
+	if normalized == "" {
+		return ""
+	}
+	if !claude.IsSupportedCLIVersion(normalized) {
+		return ""
+	}
+	return normalized
+}
+
+// GetClaudeCodeClientVersion 返回出站声明的 Claude Code CLI 客户端版本号。
+// 优先级：管理员在面板覆写的版本 → 自动同步到的官方最新版本 → claude.CLIVersion()
+// （环境变量 SUB2API_CLAUDE_CLI_VERSION 覆盖 + 内置基线）。
+// 版本太旧会被 Anthropic 拒绝（HTTP 400 claude_code_version_too_old），故该值需保持跟随官方发布。
+//
+// ⚠️ 一致性约束：同一次请求里，拼 User-Agent（claude-cli/<版本>）的版本号和用于
+// billing attribution 的版本号必须是同一个值，否则 Anthropic 侧对不上、判为非正版客户端。
+// 因此调用点必须在一次请求内只取一次本函数并复用；本缓存的唯一主动变更点是
+// 同步任务写入后调用 InvalidateClaudeCodeClientVersionCache，60s TTL 不会在极短时间内抖动。
+func (s *SettingService) GetClaudeCodeClientVersion(ctx context.Context) string {
+	fallback := claude.CLIVersion()
+	if s == nil || s.settingRepo == nil {
+		return fallback
+	}
+	if cached, ok := s.claudeCodeVersionCache.Load().(*cachedClaudeCodeClientVersion); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.version
+		}
+	}
+
+	result, _, _ := s.claudeCodeVersionSF.Do(claudeCodeClientVersionSFKey, func() (any, error) {
+		if cached, ok := s.claudeCodeVersionCache.Load().(*cachedClaudeCodeClientVersion); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached.version, nil
+			}
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeCodeClientVersionDBTimeout)
+		defer cancel()
+		values, err := s.settingRepo.GetMultiple(dbCtx, []string{
+			SettingKeyClaudeCodeClientVersion,
+			SettingKeyClaudeCodeClientVersionSynced,
+		})
+		if err != nil {
+			slog.Warn("failed to get claude code client version setting", "error", err)
+			s.claudeCodeVersionCache.Store(&cachedClaudeCodeClientVersion{
+				version:   fallback,
+				expiresAt: time.Now().Add(claudeCodeClientVersionErrorTTL).UnixNano(),
+			})
+			return fallback, nil
+		}
+		version := NormalizeClaudeCodeClientVersion(values[SettingKeyClaudeCodeClientVersion])
+		if version == "" {
+			if raw := values[SettingKeyClaudeCodeClientVersion]; strings.TrimSpace(raw) != "" {
+				slog.Warn("ignoring invalid claude_code_client_version setting; falling back to the next layer",
+					"value", raw)
+			}
+			version = NormalizeClaudeCodeClientVersion(values[SettingKeyClaudeCodeClientVersionSynced])
+			if version == "" && strings.TrimSpace(values[SettingKeyClaudeCodeClientVersionSynced]) != "" {
+				slog.Warn("ignoring invalid claude_code_client_version_synced setting; falling back to the built-in pin",
+					"value", values[SettingKeyClaudeCodeClientVersionSynced])
+			}
+		}
+		if version == "" {
+			version = fallback
+		}
+		s.claudeCodeVersionCache.Store(&cachedClaudeCodeClientVersion{
+			version:   version,
+			expiresAt: time.Now().Add(claudeCodeClientVersionCacheTTL).UnixNano(),
+		})
+		return version, nil
+	})
+	if version, ok := result.(string); ok && version != "" {
+		return version
+	}
+	return fallback
+}
+
+// InvalidateClaudeCodeClientVersionCache 丢弃版本号缓存，下次读取回源。
+// 面板保存与自动同步写入后调用。
+func (s *SettingService) InvalidateClaudeCodeClientVersionCache() {
+	if s == nil {
+		return
+	}
+	s.claudeCodeVersionSF.Forget(claudeCodeClientVersionSFKey)
+	s.claudeCodeVersionCache.Store((*cachedClaudeCodeClientVersion)(nil))
+}
+
+// GetOpenAICodexCanonicalUserAgent 返回出站规范 Codex User-Agent。
+// 未填面板 UA 时按当前生效的客户端版本号拼出标准 Codex TUI UA。
+//
+// 面板 UA 只贡献客户端名与 OS / 架构 / 终端指纹，版本段一律用生效版本重建：该输入框是
+// 唯一能改 UA 后缀的地方，但它填写于某个历史版本，逐字沿用会把出站身份永久钉死在陈旧
+// 版本上并绕过自动同步——而陈旧身份正是上游优先降载的那一侧。
+// 需要固定版本请填「Codex 客户端版本号」并关闭自动同步。
+func (s *SettingService) GetOpenAICodexCanonicalUserAgent(ctx context.Context) string {
+	if s == nil {
+		return codexCLIUserAgent
+	}
+	version := s.GetOpenAICodexClientVersion(ctx)
+	ua := s.GetOpenAICodexUserAgent(ctx)
+	if _, pairedUA, ok := openai.PairCodexClientIdentity(ua); ok {
+		if rebuilt := openai.SetCodexUserAgentVersion(pairedUA, version); rebuilt != "" {
+			return rebuilt
+		}
+	}
+	// Invalid fingerprints must not discard the independently resolved version.
+	return buildCodexCLIUserAgent(version)
 }
 
 var legacyClaudeCodeCodexWhitelistEntry = openai.AllowedClientEntry{
@@ -1394,6 +1802,37 @@ func (s *SettingService) MigrateOpenAIAllowClaudeCodeCodexPluginSetting(ctx cont
 	}
 	s.codexRestrictionPolicySF.Forget("codex_restriction_policy")
 	s.codexRestrictionPolicyCache.Store(&cachedCodexRestrictionPolicy{expiresAt: 0})
+	return nil
+}
+
+// MigrateGrokDefaultTextModel upgrades the pre-4.6 built-in default for
+// existing installations. Explicit operator choices are left untouched.
+func (s *SettingService) MigrateGrokDefaultTextModel(ctx context.Context) error {
+	if s == nil || s.settingRepo == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), codexRestrictionPolicyDBTimeout)
+	defer cancel()
+
+	value, err := s.settingRepo.GetValue(dbCtx, SettingKeyGrokDefaultTextModel)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return nil
+		}
+		return fmt.Errorf("get %s setting: %w", SettingKeyGrokDefaultTextModel, err)
+	}
+	// Only migrate the value that was previously shipped as the built-in
+	// default. Any other value is an explicit operator choice or a future
+	// default and must remain unchanged.
+	if strings.TrimSpace(value) != "grok-4.5" {
+		return nil
+	}
+	if err := s.settingRepo.Set(dbCtx, SettingKeyGrokDefaultTextModel, "grok-4.6"); err != nil {
+		return fmt.Errorf("set %s setting: %w", SettingKeyGrokDefaultTextModel, err)
+	}
 	return nil
 }
 
@@ -1604,6 +2043,52 @@ func (s *SettingService) SetOnUpdateCallback(callback func()) {
 	s.onUpdate = callback
 }
 
+// SubscribeChannelMonitorRuntime registers a listener that is invoked after
+// settings are successfully persisted (and process caches refreshed).
+// Used by ChannelMonitorRunner / ChannelMonitorV2Aggregator for immediate
+// mode flips without waiting for poll intervals.
+func (s *SettingService) SubscribeChannelMonitorRuntime(listener func()) (unsubscribe func()) {
+	if s == nil || listener == nil {
+		return func() {}
+	}
+	s.channelMonitorRuntimeListenersMu.Lock()
+	s.channelMonitorRuntimeListeners = append(s.channelMonitorRuntimeListeners, listener)
+	idx := len(s.channelMonitorRuntimeListeners) - 1
+	s.channelMonitorRuntimeListenersMu.Unlock()
+	return func() {
+		s.channelMonitorRuntimeListenersMu.Lock()
+		defer s.channelMonitorRuntimeListenersMu.Unlock()
+		if idx < 0 || idx >= len(s.channelMonitorRuntimeListeners) {
+			return
+		}
+		s.channelMonitorRuntimeListeners[idx] = nil
+	}
+}
+
+func (s *SettingService) notifyChannelMonitorRuntimeListeners() {
+	if s == nil {
+		return
+	}
+	s.channelMonitorRuntimeListenersMu.Lock()
+	listeners := make([]func(), 0, len(s.channelMonitorRuntimeListeners))
+	for _, l := range s.channelMonitorRuntimeListeners {
+		if l != nil {
+			listeners = append(listeners, l)
+		}
+	}
+	s.channelMonitorRuntimeListenersMu.Unlock()
+	for _, l := range listeners {
+		func(fn func()) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					_ = recovered // keep settings path healthy
+				}
+			}()
+			fn()
+		}(l)
+	}
+}
+
 // SetVersion sets the application version for injection into public settings
 func (s *SettingService) SetVersion(version string) {
 	s.version = version
@@ -1623,71 +2108,92 @@ func (s *SettingService) SetVersion(version string) {
 // A unit test diffs this struct's JSON keys against dto.PublicSettings to catch
 // drift automatically (see setting_service_injection_test.go).
 type PublicSettingsInjectionPayload struct {
-	RegistrationEnabled              bool                     `json:"registration_enabled"`
-	EmailVerifyEnabled               bool                     `json:"email_verify_enabled"`
-	RegistrationEmailSuffixWhitelist []string                 `json:"registration_email_suffix_whitelist"`
-	PromoCodeEnabled                 bool                     `json:"promo_code_enabled"`
-	PasswordResetEnabled             bool                     `json:"password_reset_enabled"`
-	InvitationCodeEnabled            bool                     `json:"invitation_code_enabled"`
-	TotpEnabled                      bool                     `json:"totp_enabled"`
-	PasskeyEnabled                   bool                     `json:"passkey_enabled"`
-	LoginAgreementEnabled            bool                     `json:"login_agreement_enabled"`
-	LoginAgreementMode               string                   `json:"login_agreement_mode"`
-	LoginAgreementUpdatedAt          string                   `json:"login_agreement_updated_at"`
-	LoginAgreementRevision           string                   `json:"login_agreement_revision"`
-	LoginAgreementDocuments          []LoginAgreementDocument `json:"login_agreement_documents"`
-	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
-	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
-	SiteName                         string                   `json:"site_name"`
-	SiteLogo                         string                   `json:"site_logo"`
-	SiteSubtitle                     string                   `json:"site_subtitle"`
-	APIBaseURL                       string                   `json:"api_base_url"`
-	ContactInfo                      string                   `json:"contact_info"`
-	ContactQRCodeURL                 string                   `json:"contact_qrcode_url"`
-	ContactWebmasterQRCodeURL        string                   `json:"contact_webmaster_qrcode_url"`
-	ContactGroupQRCodeURL            string                   `json:"contact_group_qrcode_url"`
-	DocURL                           string                   `json:"doc_url"`
-	ActivationCodePurchaseURL        string                   `json:"activation_code_purchase_url"`
-	HomeContent                      string                   `json:"home_content"`
-	CompactHomeEnabled               bool                     `json:"compact_home_enabled"`
-	HideCcsImportButton              bool                     `json:"hide_ccs_import_button"`
-	PurchaseSubscriptionEnabled      bool                     `json:"purchase_subscription_enabled"`
-	PurchaseSubscriptionURL          string                   `json:"purchase_subscription_url"`
-	TableDefaultPageSize             int                      `json:"table_default_page_size"`
-	TablePageSizeOptions             []int                    `json:"table_page_size_options"`
-	CustomMenuItems                  json.RawMessage          `json:"custom_menu_items"`
-	CustomEndpoints                  json.RawMessage          `json:"custom_endpoints"`
-	LinuxDoOAuthEnabled              bool                     `json:"linuxdo_oauth_enabled"`
-	DingTalkOAuthEnabled             bool                     `json:"dingtalk_oauth_enabled"`
-	WeChatOAuthEnabled               bool                     `json:"wechat_oauth_enabled"`
-	WeChatOAuthOpenEnabled           bool                     `json:"wechat_oauth_open_enabled"`
-	WeChatOAuthMPEnabled             bool                     `json:"wechat_oauth_mp_enabled"`
-	WeChatOAuthMobileEnabled         bool                     `json:"wechat_oauth_mobile_enabled"`
-	OIDCOAuthEnabled                 bool                     `json:"oidc_oauth_enabled"`
-	OIDCOAuthProviderName            string                   `json:"oidc_oauth_provider_name"`
-	GitHubOAuthEnabled               bool                     `json:"github_oauth_enabled"`
-	GoogleOAuthEnabled               bool                     `json:"google_oauth_enabled"`
-	BackendModeEnabled               bool                     `json:"backend_mode_enabled"`
-	PaymentEnabled                   bool                     `json:"payment_enabled"`
-	Version                          string                   `json:"version"`
-	BalanceLowNotifyEnabled          bool                     `json:"balance_low_notify_enabled"`
-	AccountQuotaNotifyEnabled        bool                     `json:"account_quota_notify_enabled"`
-	BalanceLowNotifyThreshold        float64                  `json:"balance_low_notify_threshold"`
-	BalanceLowNotifyRechargeURL      string                   `json:"balance_low_notify_recharge_url"`
-	ServerTimezone                   string                   `json:"server_timezone"`
-	ServerUTCOffset                  string                   `json:"server_utc_offset"`
+	RegistrationEnabled                 bool                     `json:"registration_enabled"`
+	EmailVerifyEnabled                  bool                     `json:"email_verify_enabled"`
+	RegistrationEmailSuffixWhitelist    []string                 `json:"registration_email_suffix_whitelist"`
+	RegistrationEmailDomainQuotaEnabled bool                     `json:"registration_email_domain_quota_enabled"`
+	PromoCodeEnabled                    bool                     `json:"promo_code_enabled"`
+	PasswordResetEnabled                bool                     `json:"password_reset_enabled"`
+	InvitationCodeEnabled               bool                     `json:"invitation_code_enabled"`
+	TotpEnabled                         bool                     `json:"totp_enabled"`
+	PasskeyEnabled                      bool                     `json:"passkey_enabled"`
+	LoginAgreementEnabled               bool                     `json:"login_agreement_enabled"`
+	LoginAgreementMode                  string                   `json:"login_agreement_mode"`
+	LoginAgreementUpdatedAt             string                   `json:"login_agreement_updated_at"`
+	LoginAgreementRevision              string                   `json:"login_agreement_revision"`
+	LoginAgreementDocuments             []LoginAgreementDocument `json:"login_agreement_documents"`
+	TurnstileEnabled                    bool                     `json:"turnstile_enabled"`
+	TurnstileSiteKey                    string                   `json:"turnstile_site_key"`
+	TencentCaptchaEnabled               bool                     `json:"tencent_captcha_enabled"`
+	TencentCaptchaAppID                 string                   `json:"tencent_captcha_app_id"`
+	TencentCaptchaRegion                string                   `json:"tencent_captcha_region"`
+	AliyunCaptchaEnabled                bool                     `json:"aliyun_captcha_enabled"`
+	AliyunCaptchaSceneID                string                   `json:"aliyun_captcha_scene_id"`
+	AliyunCaptchaPrefix                 string                   `json:"aliyun_captcha_prefix"`
+	AliyunCaptchaRegion                 string                   `json:"aliyun_captcha_region"`
+	SiteName                            string                   `json:"site_name"`
+	SiteLogo                            string                   `json:"site_logo"`
+	SiteSubtitle                        string                   `json:"site_subtitle"`
+	APIBaseURL                          string                   `json:"api_base_url"`
+	ContactInfo                         string                   `json:"contact_info"`
+	ContactQRCodeURL                    string                   `json:"contact_qrcode_url"`
+	ContactWebmasterQRCodeURL           string                   `json:"contact_webmaster_qrcode_url"`
+	ContactGroupQRCodeURL               string                   `json:"contact_group_qrcode_url"`
+	DocURL                              string                   `json:"doc_url"`
+	ActivationCodePurchaseURL           string                   `json:"activation_code_purchase_url"`
+	HomeContent                         string                   `json:"home_content"`
+	CompactHomeEnabled                  bool                     `json:"compact_home_enabled"`
+	HideCcsImportButton                 bool                     `json:"hide_ccs_import_button"`
+	PurchaseSubscriptionEnabled         bool                     `json:"purchase_subscription_enabled"`
+	PurchaseSubscriptionURL             string                   `json:"purchase_subscription_url"`
+	TableDefaultPageSize                int                      `json:"table_default_page_size"`
+	TablePageSizeOptions                []int                    `json:"table_page_size_options"`
+	CustomMenuItems                     json.RawMessage          `json:"custom_menu_items"`
+	CustomEndpoints                     json.RawMessage          `json:"custom_endpoints"`
+	LinuxDoOAuthEnabled                 bool                     `json:"linuxdo_oauth_enabled"`
+	DingTalkOAuthEnabled                bool                     `json:"dingtalk_oauth_enabled"`
+	WeChatOAuthEnabled                  bool                     `json:"wechat_oauth_enabled"`
+	WeChatOAuthOpenEnabled              bool                     `json:"wechat_oauth_open_enabled"`
+	WeChatOAuthMPEnabled                bool                     `json:"wechat_oauth_mp_enabled"`
+	WeChatOAuthMobileEnabled            bool                     `json:"wechat_oauth_mobile_enabled"`
+	OIDCOAuthEnabled                    bool                     `json:"oidc_oauth_enabled"`
+	OIDCOAuthProviderName               string                   `json:"oidc_oauth_provider_name"`
+	GitHubOAuthEnabled                  bool                     `json:"github_oauth_enabled"`
+	GoogleOAuthEnabled                  bool                     `json:"google_oauth_enabled"`
+	BackendModeEnabled                  bool                     `json:"backend_mode_enabled"`
+	PaymentEnabled                      bool                     `json:"payment_enabled"`
+	PaymentBalanceDisabled              bool                     `json:"payment_balance_disabled"`
+	Version                             string                   `json:"version"`
+	BalanceLowNotifyEnabled             bool                     `json:"balance_low_notify_enabled"`
+	AccountQuotaNotifyEnabled           bool                     `json:"account_quota_notify_enabled"`
+	BalanceLowNotifyThreshold           float64                  `json:"balance_low_notify_threshold"`
+	BalanceLowNotifyRechargeURL         string                   `json:"balance_low_notify_recharge_url"`
+	ServerTimezone                      string                   `json:"server_timezone"`
+	ServerUTCOffset                     string                   `json:"server_utc_offset"`
 
 	// Feature flags — MUST match the opt-in/opt-out registry in
 	// frontend/src/utils/featureFlags.ts. Missing a field here is the bug
 	// that hid the "可用渠道" menu on page refresh.
-	ChannelMonitorEnabled                bool `json:"channel_monitor_enabled"`
-	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
-	AvailableChannelsEnabled             bool `json:"available_channels_enabled"`
-	ModelPlazaEnabled                    bool `json:"model_plaza_enabled"`
-	ModelPlazaRequireAuth                bool `json:"model_plaza_require_auth"`
-	AffiliateEnabled                     bool `json:"affiliate_enabled"`
-	RiskControlEnabled                   bool `json:"risk_control_enabled"`
-	AllowUserViewErrorRequests           bool `json:"allow_user_view_error_requests"`
+	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
+	ChannelMonitorMode                   string `json:"channel_monitor_mode"`
+	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
+	// ChannelMonitorHideThroughput is public so the user UI can hide RPM/TPM
+	// without waiting for API redaction alone (defense in depth).
+	ChannelMonitorHideThroughput bool `json:"channel_monitor_hide_throughput"`
+	// ChannelMonitorShowQuota gates the user-facing quota/balance display on
+	// monitors; fail-closed (absent/false = hidden). Admin UI always shows it.
+	// ChannelMonitorHideUserRanking hides the user ranking tab and /users payload
+	// from non-admin channel-monitor v2 viewers; default false (visible).
+	ChannelMonitorHideUserRanking bool `json:"channel_monitor_hide_user_ranking"`
+	ChannelMonitorShowQuota       bool `json:"channel_monitor_show_quota"`
+	AvailableChannelsEnabled      bool `json:"available_channels_enabled"`
+	SubscriptionEnabled           bool `json:"subscription_enabled"`
+	ModelPlazaEnabled             bool `json:"model_plaza_enabled"`
+	ModelPlazaRequireAuth         bool `json:"model_plaza_require_auth"`
+	PluginManagementEnabled       bool `json:"plugin_management_enabled"`
+	AffiliateEnabled              bool `json:"affiliate_enabled"`
+	RiskControlEnabled            bool `json:"risk_control_enabled"`
+	AllowUserViewErrorRequests    bool `json:"allow_user_view_error_requests"`
 }
 
 // GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.
@@ -1699,65 +2205,80 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 	}
 
 	return &PublicSettingsInjectionPayload{
-		RegistrationEnabled:              settings.RegistrationEnabled,
-		EmailVerifyEnabled:               settings.EmailVerifyEnabled,
-		RegistrationEmailSuffixWhitelist: settings.RegistrationEmailSuffixWhitelist,
-		PromoCodeEnabled:                 settings.PromoCodeEnabled,
-		PasswordResetEnabled:             settings.PasswordResetEnabled,
-		InvitationCodeEnabled:            settings.InvitationCodeEnabled,
-		TotpEnabled:                      settings.TotpEnabled,
-		PasskeyEnabled:                   settings.PasskeyEnabled,
-		LoginAgreementEnabled:            settings.LoginAgreementEnabled,
-		LoginAgreementMode:               settings.LoginAgreementMode,
-		LoginAgreementUpdatedAt:          settings.LoginAgreementUpdatedAt,
-		LoginAgreementRevision:           settings.LoginAgreementRevision,
-		LoginAgreementDocuments:          settings.LoginAgreementDocuments,
-		TurnstileEnabled:                 settings.TurnstileEnabled,
-		TurnstileSiteKey:                 settings.TurnstileSiteKey,
-		SiteName:                         settings.SiteName,
-		SiteLogo:                         settings.SiteLogo,
-		SiteSubtitle:                     settings.SiteSubtitle,
-		APIBaseURL:                       settings.APIBaseURL,
-		ContactInfo:                      settings.ContactInfo,
-		ContactQRCodeURL:                 settings.ContactQRCodeURL,
-		ContactWebmasterQRCodeURL:        firstNonEmpty(settings.ContactWebmasterQRCodeURL, settings.ContactQRCodeURL),
-		ContactGroupQRCodeURL:            settings.ContactGroupQRCodeURL,
-		DocURL:                           settings.DocURL,
-		ActivationCodePurchaseURL:        settings.ActivationCodePurchaseURL,
-		HomeContent:                      settings.HomeContent,
-		CompactHomeEnabled:               settings.CompactHomeEnabled,
-		HideCcsImportButton:              settings.HideCcsImportButton,
-		PurchaseSubscriptionEnabled:      settings.PurchaseSubscriptionEnabled,
-		PurchaseSubscriptionURL:          settings.PurchaseSubscriptionURL,
-		TableDefaultPageSize:             settings.TableDefaultPageSize,
-		TablePageSizeOptions:             settings.TablePageSizeOptions,
-		CustomMenuItems:                  filterUserVisibleMenuItems(settings.CustomMenuItems),
-		CustomEndpoints:                  safeRawJSONArray(settings.CustomEndpoints),
-		LinuxDoOAuthEnabled:              settings.LinuxDoOAuthEnabled,
-		DingTalkOAuthEnabled:             settings.DingTalkOAuthEnabled,
-		WeChatOAuthEnabled:               settings.WeChatOAuthEnabled,
-		WeChatOAuthOpenEnabled:           settings.WeChatOAuthOpenEnabled,
-		WeChatOAuthMPEnabled:             settings.WeChatOAuthMPEnabled,
-		WeChatOAuthMobileEnabled:         settings.WeChatOAuthMobileEnabled,
-		OIDCOAuthEnabled:                 settings.OIDCOAuthEnabled,
-		OIDCOAuthProviderName:            settings.OIDCOAuthProviderName,
-		GitHubOAuthEnabled:               settings.GitHubOAuthEnabled,
-		GoogleOAuthEnabled:               settings.GoogleOAuthEnabled,
-		BackendModeEnabled:               settings.BackendModeEnabled,
-		PaymentEnabled:                   settings.PaymentEnabled,
-		Version:                          s.version,
-		BalanceLowNotifyEnabled:          settings.BalanceLowNotifyEnabled,
-		AccountQuotaNotifyEnabled:        settings.AccountQuotaNotifyEnabled,
-		BalanceLowNotifyThreshold:        settings.BalanceLowNotifyThreshold,
-		BalanceLowNotifyRechargeURL:      settings.BalanceLowNotifyRechargeURL,
-		ServerTimezone:                   timezone.Name(),
-		ServerUTCOffset:                  timezone.UTCOffset(),
+		RegistrationEnabled:                 settings.RegistrationEnabled,
+		EmailVerifyEnabled:                  settings.EmailVerifyEnabled,
+		RegistrationEmailSuffixWhitelist:    settings.RegistrationEmailSuffixWhitelist,
+		RegistrationEmailDomainQuotaEnabled: settings.RegistrationEmailDomainQuotaEnabled,
+		PromoCodeEnabled:                    settings.PromoCodeEnabled,
+		PasswordResetEnabled:                settings.PasswordResetEnabled,
+		InvitationCodeEnabled:               settings.InvitationCodeEnabled,
+		TotpEnabled:                         settings.TotpEnabled,
+		PasskeyEnabled:                      settings.PasskeyEnabled,
+		LoginAgreementEnabled:               settings.LoginAgreementEnabled,
+		LoginAgreementMode:                  settings.LoginAgreementMode,
+		LoginAgreementUpdatedAt:             settings.LoginAgreementUpdatedAt,
+		LoginAgreementRevision:              settings.LoginAgreementRevision,
+		LoginAgreementDocuments:             settings.LoginAgreementDocuments,
+		TurnstileEnabled:                    settings.TurnstileEnabled,
+		TurnstileSiteKey:                    settings.TurnstileSiteKey,
+		TencentCaptchaEnabled:               settings.TencentCaptchaEnabled,
+		TencentCaptchaAppID:                 settings.TencentCaptchaAppID,
+		TencentCaptchaRegion:                settings.TencentCaptchaRegion,
+		AliyunCaptchaEnabled:                settings.AliyunCaptchaEnabled,
+		AliyunCaptchaSceneID:                settings.AliyunCaptchaSceneID,
+		AliyunCaptchaPrefix:                 settings.AliyunCaptchaPrefix,
+		AliyunCaptchaRegion:                 settings.AliyunCaptchaRegion,
+		SiteName:                            settings.SiteName,
+		SiteLogo:                            settings.SiteLogo,
+		SiteSubtitle:                        settings.SiteSubtitle,
+		APIBaseURL:                          settings.APIBaseURL,
+		ContactInfo:                         settings.ContactInfo,
+		ContactQRCodeURL:                    settings.ContactQRCodeURL,
+		ContactWebmasterQRCodeURL:           firstNonEmpty(settings.ContactWebmasterQRCodeURL, settings.ContactQRCodeURL),
+		ContactGroupQRCodeURL:               settings.ContactGroupQRCodeURL,
+		DocURL:                              settings.DocURL,
+		ActivationCodePurchaseURL:           settings.ActivationCodePurchaseURL,
+		HomeContent:                         settings.HomeContent,
+		CompactHomeEnabled:                  settings.CompactHomeEnabled,
+		HideCcsImportButton:                 settings.HideCcsImportButton,
+		PurchaseSubscriptionEnabled:         settings.PurchaseSubscriptionEnabled,
+		PurchaseSubscriptionURL:             settings.PurchaseSubscriptionURL,
+		TableDefaultPageSize:                settings.TableDefaultPageSize,
+		TablePageSizeOptions:                settings.TablePageSizeOptions,
+		CustomMenuItems:                     filterUserVisibleMenuItems(settings.CustomMenuItems),
+		CustomEndpoints:                     safeRawJSONArray(settings.CustomEndpoints),
+		LinuxDoOAuthEnabled:                 settings.LinuxDoOAuthEnabled,
+		DingTalkOAuthEnabled:                settings.DingTalkOAuthEnabled,
+		WeChatOAuthEnabled:                  settings.WeChatOAuthEnabled,
+		WeChatOAuthOpenEnabled:              settings.WeChatOAuthOpenEnabled,
+		WeChatOAuthMPEnabled:                settings.WeChatOAuthMPEnabled,
+		WeChatOAuthMobileEnabled:            settings.WeChatOAuthMobileEnabled,
+		OIDCOAuthEnabled:                    settings.OIDCOAuthEnabled,
+		OIDCOAuthProviderName:               settings.OIDCOAuthProviderName,
+		GitHubOAuthEnabled:                  settings.GitHubOAuthEnabled,
+		GoogleOAuthEnabled:                  settings.GoogleOAuthEnabled,
+		BackendModeEnabled:                  settings.BackendModeEnabled,
+		PaymentEnabled:                      settings.PaymentEnabled,
+		PaymentBalanceDisabled:              settings.PaymentBalanceDisabled,
+		Version:                             s.version,
+		BalanceLowNotifyEnabled:             settings.BalanceLowNotifyEnabled,
+		AccountQuotaNotifyEnabled:           settings.AccountQuotaNotifyEnabled,
+		BalanceLowNotifyThreshold:           settings.BalanceLowNotifyThreshold,
+		BalanceLowNotifyRechargeURL:         settings.BalanceLowNotifyRechargeURL,
+		ServerTimezone:                      timezone.Name(),
+		ServerUTCOffset:                     timezone.UTCOffset(),
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
+		ChannelMonitorMode:                   settings.ChannelMonitorMode,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
+		ChannelMonitorHideThroughput:         settings.ChannelMonitorHideThroughput,
+		ChannelMonitorShowQuota:              settings.ChannelMonitorShowQuota,
+		ChannelMonitorHideUserRanking:        settings.ChannelMonitorHideUserRanking,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
+		SubscriptionEnabled:                  settings.SubscriptionEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:                settings.ModelPlazaRequireAuth,
+		PluginManagementEnabled:              settings.PluginManagementEnabled,
 		AffiliateEnabled:                     settings.AffiliateEnabled,
 		RiskControlEnabled:                   settings.RiskControlEnabled,
 		AllowUserViewErrorRequests:           settings.AllowUserViewErrorRequests,
@@ -2060,18 +2581,56 @@ func oidcCompatibilityWriteDefault(base config.OIDCConnectConfig, configured boo
 	return false
 }
 
+// OmittedSettingKeys marks setting keys the caller's payload never carried.
+// SystemSettings is a plain struct, so a field the caller omitted arrives as a
+// zero value and is indistinguishable from a deliberate clear. Listing the key
+// here drops it from the write, leaving the stored value in place.
+//
+// A nil or empty set keeps whole-document semantics: every key is written.
+type OmittedSettingKeys map[string]struct{}
+
+func (o OmittedSettingKeys) dropFrom(updates map[string]string) {
+	for key := range o {
+		delete(updates, key)
+	}
+}
+
 // UpdateSettings 更新系统设置
 func (s *SettingService) UpdateSettings(ctx context.Context, settings *SystemSettings) error {
+	return s.UpdateSettingsOmitting(ctx, settings, nil)
+}
+
+// UpdateSettingsOmitting persists system settings, leaving the keys in omitted
+// at their stored value.
+func (s *SettingService) UpdateSettingsOmitting(ctx context.Context, settings *SystemSettings, omitted OmittedSettingKeys) error {
 	updates, err := s.buildSystemSettingsUpdates(ctx, settings)
 	if err != nil {
 		return err
 	}
+	omitted.dropFrom(updates)
 
-	err = s.settingRepo.SetMultiple(ctx, updates)
-	if err == nil {
-		s.refreshCachedSettings(settings)
+	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
+		return err
 	}
-	return err
+	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	return nil
+}
+
+// refreshCachedSettingsAfterWrite keeps the in-process caches in step with the
+// write that just landed. A partial payload carries zero values for the fields
+// it omitted, so in that case the caches are rebuilt from storage rather than
+// from the request struct.
+func (s *SettingService) refreshCachedSettingsAfterWrite(ctx context.Context, settings *SystemSettings, omitted OmittedSettingKeys) {
+	if len(omitted) == 0 {
+		s.refreshCachedSettings(settings)
+		return
+	}
+	stored, err := s.GetAllSettings(ctx)
+	if err != nil {
+		slog.Warn("refresh cached settings after partial update failed", "error", err)
+		return
+	}
+	s.refreshCachedSettings(stored)
 }
 
 func (s *SettingService) OIDCSecurityWriteDefaults(ctx context.Context) (bool, bool, error) {
@@ -2098,6 +2657,13 @@ func (s *SettingService) OIDCSecurityWriteDefaults(ctx context.Context) (bool, b
 
 // UpdateSettingsWithAuthSourceDefaults persists system settings and auth-source defaults in a single write.
 func (s *SettingService) UpdateSettingsWithAuthSourceDefaults(ctx context.Context, settings *SystemSettings, authDefaults *AuthSourceDefaultSettings) error {
+	return s.UpdateSettingsWithAuthSourceDefaultsOmitting(ctx, settings, authDefaults, nil)
+}
+
+// UpdateSettingsWithAuthSourceDefaultsOmitting persists system settings and
+// auth-source defaults in a single write, leaving the keys in omitted at their
+// stored value.
+func (s *SettingService) UpdateSettingsWithAuthSourceDefaultsOmitting(ctx context.Context, settings *SystemSettings, authDefaults *AuthSourceDefaultSettings, omitted OmittedSettingKeys) error {
 	updates, err := s.buildSystemSettingsUpdates(ctx, settings)
 	if err != nil {
 		return err
@@ -2110,12 +2676,13 @@ func (s *SettingService) UpdateSettingsWithAuthSourceDefaults(ctx context.Contex
 	for key, value := range authSourceUpdates {
 		updates[key] = value
 	}
+	omitted.dropFrom(updates)
 
-	err = s.settingRepo.SetMultiple(ctx, updates)
-	if err == nil {
-		s.refreshCachedSettings(settings)
+	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
+		return err
 	}
-	return err
+	s.refreshCachedSettingsAfterWrite(ctx, settings, omitted)
+	return nil
 }
 
 func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, settings *SystemSettings) (map[string]string, error) {
@@ -2189,6 +2756,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		return nil, fmt.Errorf("marshal registration email suffix whitelist: %w", err)
 	}
 	updates[SettingKeyRegistrationEmailSuffixWhitelist] = string(registrationEmailSuffixWhitelistJSON)
+	updates[SettingKeyRegistrationEmailDomainQuotaEnabled] = strconv.FormatBool(settings.RegistrationEmailDomainQuotaEnabled)
 	updates[SettingKeyPromoCodeEnabled] = strconv.FormatBool(settings.PromoCodeEnabled)
 	updates[SettingKeyPasswordResetEnabled] = strconv.FormatBool(settings.PasswordResetEnabled)
 	updates[SettingKeyFrontendURL] = settings.FrontendURL
@@ -2229,6 +2797,28 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if settings.TurnstileSecretKey != "" {
 		updates[SettingKeyTurnstileSecretKey] = settings.TurnstileSecretKey
 	}
+
+	updates[SettingKeyTencentCaptchaEnabled] = strconv.FormatBool(settings.TencentCaptchaEnabled)
+	updates[SettingKeyTencentCaptchaAppID] = settings.TencentCaptchaAppID
+	if settings.TencentCaptchaAppSecretKey != "" {
+		updates[SettingKeyTencentCaptchaAppSecretKey] = settings.TencentCaptchaAppSecretKey
+	}
+	if settings.TencentCaptchaCloudSecretID != "" {
+		updates[SettingKeyTencentCaptchaCloudSecretID] = settings.TencentCaptchaCloudSecretID
+	}
+	if settings.TencentCaptchaCloudSecretKey != "" {
+		updates[SettingKeyTencentCaptchaCloudSecretKey] = settings.TencentCaptchaCloudSecretKey
+	}
+	updates[SettingKeyTencentCaptchaRegion] = normalizeTencentCaptchaRegion(settings.TencentCaptchaRegion)
+	// 阿里云验证码 2.0 设置（只有非空才更新密钥）
+	updates[SettingKeyAliyunCaptchaEnabled] = strconv.FormatBool(settings.AliyunCaptchaEnabled)
+	updates[SettingKeyAliyunCaptchaAccessKeyID] = settings.AliyunCaptchaAccessKeyID
+	if settings.AliyunCaptchaAccessKeySecret != "" {
+		updates[SettingKeyAliyunCaptchaAccessKeySecret] = settings.AliyunCaptchaAccessKeySecret
+	}
+	updates[SettingKeyAliyunCaptchaSceneID] = settings.AliyunCaptchaSceneID
+	updates[SettingKeyAliyunCaptchaPrefix] = settings.AliyunCaptchaPrefix
+	updates[SettingKeyAliyunCaptchaRegion] = normalizeAliyunCaptchaRegion(settings.AliyunCaptchaRegion)
 	updates[SettingKeyAPIKeyACLTrustForwardedIP] = strconv.FormatBool(settings.APIKeyACLTrustForwardedIP)
 	forwardedClientIPHeadersJSON, err := json.Marshal(settings.ForwardedClientIPHeaders)
 	if err != nil {
@@ -2436,12 +3026,30 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// Channel monitor feature switch
 	updates[SettingKeyChannelMonitorEnabled] = strconv.FormatBool(settings.ChannelMonitorEnabled)
+	updates[SettingKeyChannelMonitorMode] = normalizeChannelMonitorMode(settings.ChannelMonitorMode)
 	if v := clampChannelMonitorInterval(settings.ChannelMonitorDefaultIntervalSeconds); v > 0 {
 		updates[SettingKeyChannelMonitorDefaultIntervalSeconds] = strconv.Itoa(v)
 	}
+	updates[SettingKeyChannelMonitorHideThroughput] = strconv.FormatBool(settings.ChannelMonitorHideThroughput)
+	updates[SettingKeyChannelMonitorShowQuota] = strconv.FormatBool(settings.ChannelMonitorShowQuota)
+	updates[SettingKeyChannelMonitorHideUserRanking] = strconv.FormatBool(settings.ChannelMonitorHideUserRanking)
+
+	// Grok model mapping policy
+	if v := strings.TrimSpace(settings.GrokDefaultTextModel); v != "" {
+		updates[SettingKeyGrokDefaultTextModel] = v
+	} else {
+		updates[SettingKeyGrokDefaultTextModel] = "grok-4.6"
+	}
+	updates[SettingKeyGrokCrossClientModelMapEnabled] = strconv.FormatBool(settings.GrokCrossClientModelMapEnabled)
+	updates[SettingKeyGrokDefaultBaseURLMode] = normalizeGrokDefaultBaseURLMode(settings.GrokDefaultBaseURLMode)
 
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
+
+	// Subscription feature switch
+	updates[SettingKeySubscriptionEnabled] = strconv.FormatBool(settings.SubscriptionEnabled)
+
+	updates[SettingKeyPluginManagementEnabled] = strconv.FormatBool(settings.PluginManagementEnabled)
 
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)
@@ -2451,6 +3059,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// cyber 会话屏蔽开关 + TTL
 	updates[SettingKeyCyberSessionBlockEnabled] = strconv.FormatBool(settings.CyberSessionBlockEnabled)
+	if _, err := ParseCyberPolicyUserAllowlist(settings.CyberPolicyUserAllowlist); err != nil {
+		return nil, err
+	}
+	updates[SettingKeyCyberPolicyUserAllowlist] = settings.CyberPolicyUserAllowlist
 	if settings.CyberSessionBlockTTLSeconds > 0 {
 		updates[SettingKeyCyberSessionBlockTTLSeconds] = strconv.Itoa(settings.CyberSessionBlockTTLSeconds)
 	}
@@ -2466,6 +3078,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyBackendModeEnabled] = strconv.FormatBool(settings.BackendModeEnabled)
 
 	// Gateway forwarding behavior
+	mode := normalizeOpenAITTFTMode(settings.OpenAITTFTMode)
+	if strings.TrimSpace(settings.OpenAITTFTMode) != "" && strings.ToLower(strings.TrimSpace(settings.OpenAITTFTMode)) != OpenAITTFTModeSemantic && strings.ToLower(strings.TrimSpace(settings.OpenAITTFTMode)) != OpenAITTFTModeVisible {
+		return nil, fmt.Errorf("%s must be one of: %s/%s", SettingKeyOpenAITTFTMode, OpenAITTFTModeSemantic, OpenAITTFTModeVisible)
+	}
+	updates[SettingKeyOpenAITTFTMode] = mode
 	updates[SettingKeyEnableFingerprintUnification] = strconv.FormatBool(settings.EnableFingerprintUnification)
 	updates[SettingKeyEnableMetadataPassthrough] = strconv.FormatBool(settings.EnableMetadataPassthrough)
 	updates[SettingKeyEnableCCHSigning] = strconv.FormatBool(settings.EnableCCHSigning)
@@ -2480,6 +3097,14 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyEnableClientDatelineNormalization] = strconv.FormatBool(settings.EnableClientDatelineNormalization)
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
+	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
+	updates[SettingKeyOpenAICodexVersionAutoSyncEnabled] = strconv.FormatBool(settings.OpenAICodexVersionAutoSyncEnabled)
+	// SettingKeyOpenAICodexClientVersionSynced 由自动同步任务独占写入，此处不得覆盖，
+	// 否则面板保存会把同步结果清空。
+	updates[SettingKeyClaudeCodeClientVersion] = NormalizeClaudeCodeClientVersion(settings.ClaudeCodeClientVersion)
+	updates[SettingKeyClaudeCodeVersionAutoSyncEnabled] = strconv.FormatBool(settings.ClaudeCodeVersionAutoSyncEnabled)
+	// SettingKeyClaudeCodeClientVersionSynced 由自动同步任务独占写入，此处不得覆盖，
+	// 否则面板保存会把同步结果清空。
 	// codex_cli_only 加固
 	updates[SettingKeyMinCodexVersion] = strings.TrimSpace(settings.MinCodexVersion)
 	updates[SettingKeyMaxCodexVersion] = strings.TrimSpace(settings.MaxCodexVersion)
@@ -2492,7 +3117,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
 	updates[SettingPaymentVisibleMethodWxpayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodWxpayEnabled)
 	updates[SettingKeyOpenAILowUpstreamRatePriorityEnabled] = strconv.FormatBool(settings.OpenAILowUpstreamRatePriorityEnabled)
-	updates[SettingKeyOpenAIOAuthSchedulingRateMultiplier] = strconv.FormatFloat(settings.OpenAIOAuthSchedulingRateMultiplier, 'f', -1, 64)
+	updates[SettingKeyOpenAIOAuthSchedulingRateMultiplier] = ""
+	if rate := settings.OpenAIOAuthSchedulingRateMultiplier; rate != nil {
+		updates[SettingKeyOpenAIOAuthSchedulingRateMultiplier] = strconv.FormatFloat(*rate, 'f', -1, 64)
+	}
 	updates[openAIAdvancedSchedulerSettingKey] = strconv.FormatBool(settings.OpenAIAdvancedSchedulerEnabled)
 	updates[SettingKeyOpenAIAdvancedSchedulerStickyWeightedEnabled] = strconv.FormatBool(settings.OpenAIAdvancedSchedulerStickyWeightedEnabled)
 	updates[SettingKeyOpenAIAdvancedSchedulerSubscriptionPriorityEnabled] = strconv.FormatBool(settings.OpenAIAdvancedSchedulerSubscriptionPriorityEnabled)
@@ -2527,10 +3155,86 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		}
 		updates[SettingKeyDefaultPlatformQuotas] = string(blob)
 	}
+	if settings.AccountSchedulingThresholds != nil {
+		normalized, err := validateAndNormalizeAccountSchedulingThresholds(settings.AccountSchedulingThresholds)
+		if err != nil {
+			return nil, err
+		}
+		blob, err := json.Marshal(normalized)
+		if err != nil {
+			return nil, fmt.Errorf("marshal account scheduling thresholds: %w", err)
+		}
+		updates[SettingKeyAccountSchedulingThresholds] = string(blob)
+	}
 
 	updates[SettingKeyAllowUserViewErrorRequests] = strconv.FormatBool(settings.AllowUserViewErrorRequests)
 
 	return updates, nil
+}
+
+func defaultAccountSchedulingThresholds() map[string]int {
+	return map[string]int{
+		PlatformOpenAI:    100,
+		PlatformAnthropic: 100,
+		PlatformGrok:      100,
+	}
+}
+
+func validateAndNormalizeAccountSchedulingThresholds(input map[string]int) (map[string]int, error) {
+	normalized := defaultAccountSchedulingThresholds()
+	for platform, value := range input {
+		allowed := false
+		for _, item := range AllowedSchedulingThresholdPlatforms {
+			if item == platform {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return nil, infraerrors.BadRequest("INVALID_ACCOUNT_SCHEDULING_THRESHOLDS", fmt.Sprintf("unknown platform %q", platform))
+		}
+		if value < 1 || value > 100 {
+			return nil, infraerrors.BadRequest("INVALID_ACCOUNT_SCHEDULING_THRESHOLDS", "platform scheduling threshold must be between 1 and 100")
+		}
+		normalized[platform] = value
+	}
+	return normalized, nil
+}
+
+func parseAccountSchedulingThresholdsSetting(raw string) (map[string]int, error) {
+	thresholds := defaultAccountSchedulingThresholds()
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return thresholds, nil
+	}
+	parsed := map[string]int{}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return thresholds, err
+	}
+	for _, platform := range AllowedSchedulingThresholdPlatforms {
+		if value, ok := parsed[platform]; ok {
+			thresholds[platform] = boundedIntOrDefault(value, 1, 100, 100)
+		}
+	}
+	return thresholds, nil
+}
+
+func boundedIntOrDefault(value, minValue, maxValue, defaultValue int) int {
+	if value < minValue || value > maxValue {
+		return defaultValue
+	}
+	return value
+}
+
+func cloneAccountSchedulingThresholds(input map[string]int) map[string]int {
+	if len(input) == 0 {
+		return defaultAccountSchedulingThresholds()
+	}
+	cloned := make(map[string]int, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 // validateDefaultPlatformQuotaMap 校验 platform quota map 的合法性：
@@ -2623,6 +3327,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	})
 	gatewayForwardingSF.Forget("gateway_forwarding")
 	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		openAITTFTMode:                   normalizeOpenAITTFTMode(settings.OpenAITTFTMode),
 		fingerprintUnification:           settings.EnableFingerprintUnification,
 		metadataPassthrough:              settings.EnableMetadataPassthrough,
 		cchSigning:                       settings.EnableCCHSigning,
@@ -2652,6 +3357,10 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     codexUA,
 		expiresAt: time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
 	})
+	// 版本号缓存只做失效，不在此重算：生效值还取决于自动同步写入的 synced 键，
+	// 这里没有它的最新值，重算会把同步结果覆盖成陈旧值。
+	s.InvalidateOpenAICodexClientVersionCache()
+	s.InvalidateClaudeCodeClientVersionCache()
 	openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
 	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
 		lowUpstreamRatePriorityEnabled: settings.OpenAILowUpstreamRatePriorityEnabled,
@@ -2685,15 +3394,35 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 			expiresAt: 0,
 		})
 	}
+	accountSchedulingThresholdsSF.Forget(SettingKeyAccountSchedulingThresholds)
+	if settings.AccountSchedulingThresholds != nil {
+		normalizedThresholds, err := validateAndNormalizeAccountSchedulingThresholds(settings.AccountSchedulingThresholds)
+		if err != nil {
+			normalizedThresholds = defaultAccountSchedulingThresholds()
+		}
+		accountSchedulingThresholdsCache.Store(&cachedAccountSchedulingThresholds{
+			thresholds: cloneAccountSchedulingThresholds(normalizedThresholds),
+			expiresAt:  time.Now().Add(accountSchedulingThresholdsCacheTTL).UnixNano(),
+		})
+	} else {
+		// Partial/omitted payload: clear cache so the next hot-path read reloads from DB.
+		accountSchedulingThresholdsCache.Store(&cachedAccountSchedulingThresholds{})
+	}
 	if s.cfg != nil {
 		s.cfg.SetForwardedClientIPSettings(settings.APIKeyACLTrustForwardedIP, settings.ForwardedClientIPHeaders)
 	}
 	// codex_cli_only 加固策略缓存：设置更新后强制下次重载（涉及 4 个键 + JSON 解析，直接置过期）。
 	s.codexRestrictionPolicySF.Forget("codex_restriction_policy")
 	s.codexRestrictionPolicyCache.Store(&cachedCodexRestrictionPolicy{expiresAt: 0})
+	// Retain the successfully saved allowlist if the next DB refresh fails.
+	s.cyberSessionBlockRuntimeMu.Lock()
+	allowlistedUsers, _ := ParseCyberPolicyUserAllowlist(settings.CyberPolicyUserAllowlist)
+	s.cyberSessionBlockRuntimeCache.Store(&cachedCyberSessionBlockRuntime{allowlistedUsers: allowlistedUsers})
+	s.cyberSessionBlockRuntimeMu.Unlock()
 	if s.onUpdate != nil {
 		s.onUpdate() // Invalidate cache after settings update
 	}
+	s.notifyChannelMonitorRuntimeListeners()
 }
 
 func (s *SettingService) defaultRewriteMessageCacheControl() bool {
@@ -2851,6 +3580,7 @@ func (s *SettingService) IsBackendModeEnabled(ctx context.Context) bool {
 }
 
 type gatewayForwardingSettingsResult struct {
+	openAITTFTMode                                                                        string
 	fp, mp, cch, claudeOAuthSystemPromptInjection, cacheTTL1h, rewriteMessageCacheControl bool
 	clientDatelineNormalization                                                           bool
 	claudeOAuthSystemPrompt, claudeOAuthSystemPromptBlocks                                string
@@ -2860,6 +3590,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 	if cached, ok := gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
 			return gatewayForwardingSettingsResult{
+				openAITTFTMode:                   cached.openAITTFTMode,
 				fp:                               cached.fingerprintUnification,
 				mp:                               cached.metadataPassthrough,
 				cch:                              cached.cchSigning,
@@ -2876,6 +3607,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		if cached, ok := gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return gatewayForwardingSettingsResult{
+					openAITTFTMode:                   cached.openAITTFTMode,
 					fp:                               cached.fingerprintUnification,
 					mp:                               cached.metadataPassthrough,
 					cch:                              cached.cchSigning,
@@ -2891,6 +3623,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gatewayForwardingDBTimeout)
 		defer cancel()
 		values, err := s.settingRepo.GetMultiple(dbCtx, []string{
+			SettingKeyOpenAITTFTMode,
 			SettingKeyEnableFingerprintUnification,
 			SettingKeyEnableMetadataPassthrough,
 			SettingKeyEnableCCHSigning,
@@ -2904,6 +3637,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		if err != nil {
 			slog.Warn("failed to get gateway forwarding settings", "error", err)
 			gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+				openAITTFTMode:                   OpenAITTFTModeSemantic,
 				fingerprintUnification:           true,
 				metadataPassthrough:              false,
 				cchSigning:                       false,
@@ -2913,8 +3647,9 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 				clientDatelineNormalization:      true,
 				expiresAt:                        time.Now().Add(gatewayForwardingErrorTTL).UnixNano(),
 			})
-			return gatewayForwardingSettingsResult{fp: true, claudeOAuthSystemPromptInjection: true, rewriteMessageCacheControl: s.defaultRewriteMessageCacheControl(), clientDatelineNormalization: true}, nil
+			return gatewayForwardingSettingsResult{openAITTFTMode: OpenAITTFTModeSemantic, fp: true, claudeOAuthSystemPromptInjection: true, rewriteMessageCacheControl: s.defaultRewriteMessageCacheControl(), clientDatelineNormalization: true}, nil
 		}
+		ttftMode := normalizeOpenAITTFTMode(values[SettingKeyOpenAITTFTMode])
 		fp := true
 		if v, ok := values[SettingKeyEnableFingerprintUnification]; ok && v != "" {
 			fp = v == "true"
@@ -2937,6 +3672,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 			clientDatelineNormalization = v == "true"
 		}
 		gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+			openAITTFTMode:                   ttftMode,
 			fingerprintUnification:           fp,
 			metadataPassthrough:              mp,
 			cchSigning:                       cch,
@@ -2949,6 +3685,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 			expiresAt:                        time.Now().Add(gatewayForwardingCacheTTL).UnixNano(),
 		})
 		return gatewayForwardingSettingsResult{
+			openAITTFTMode:                   ttftMode,
 			fp:                               fp,
 			mp:                               mp,
 			cch:                              cch,
@@ -2964,6 +3701,11 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		return r
 	}
 	return gatewayForwardingSettingsResult{fp: true, claudeOAuthSystemPromptInjection: true, clientDatelineNormalization: true}
+}
+
+// GetOpenAITTFTMode 返回 Responses first_token_ms 的统计口径。
+func (s *SettingService) GetOpenAITTFTMode(ctx context.Context) string {
+	return s.getGatewayForwardingSettingsCached(ctx).openAITTFTMode
 }
 
 // GetGatewayForwardingSettings returns cached gateway forwarding settings.
@@ -3001,6 +3743,16 @@ func (s *SettingService) GetClaudeOAuthSystemPromptInjectionSettings(ctx context
 // IsEmailVerifyEnabled 检查是否开启邮件验证
 func (s *SettingService) IsEmailVerifyEnabled(ctx context.Context) bool {
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyEmailVerifyEnabled)
+	if err != nil {
+		return false
+	}
+	return value == "true"
+}
+
+// IsRegistrationEmailDomainQuotaEnabled 检查白名单非空时是否放行非白名单域名限量注册。
+// 安全默认：设置缺失或查询出错时按关闭处理（保持白名单严格模式）。
+func (s *SettingService) IsRegistrationEmailDomainQuotaEnabled(ctx context.Context) bool {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyRegistrationEmailDomainQuotaEnabled)
 	if err != nil {
 		return false
 	}
@@ -3345,6 +4097,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyRegistrationEnabled:                       "true",
 		SettingKeyEmailVerifyEnabled:                        "false",
 		SettingKeyRegistrationEmailSuffixWhitelist:          "[]",
+		SettingKeyRegistrationEmailDomainQuotaEnabled:       "false",
 		SettingKeyPromoCodeEnabled:                          "true", // 默认启用优惠码功能
 		SettingKeyLoginAgreementEnabled:                     "false",
 		SettingKeyLoginAgreementMode:                        defaultLoginAgreementMode,
@@ -3474,10 +4227,29 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		// Channel monitor defaults (enabled, 60s)
 		SettingKeyChannelMonitorEnabled:                "true",
+		SettingKeyChannelMonitorMode:                   ChannelMonitorModeV1,
 		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
+		SettingKeyChannelMonitorHideThroughput:         "true",
+		SettingKeyChannelMonitorShowQuota:              "false",
+		SettingKeyChannelMonitorHideUserRanking:        "false",
+
+		// Grok compatibility defaults: cross-client mapping stays enabled unless
+		// operators explicitly disable it.
+		SettingKeyGrokDefaultTextModel:           "grok-4.6",
+		SettingKeyGrokCrossClientModelMapEnabled: "true",
+		SettingKeyGrokDefaultBaseURLMode:         GrokDefaultBaseURLModeCLI,
 
 		// Available channels feature (default disabled; opt-in)
 		SettingKeyAvailableChannelsEnabled: "false",
+
+		// Subscription feature (default enabled; opt-out)
+		SettingKeySubscriptionEnabled: "true",
+
+		// Model plaza feature (default disabled; opt-in, public unless require_auth)
+		SettingKeyModelPlazaEnabled:       "false",
+		SettingKeyModelPlazaRequireAuth:   "false",
+		SettingKeyModelPlazaDescription:   "",
+		SettingKeyPluginManagementEnabled: "false",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled: "false",
@@ -3487,6 +4259,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		// cyber 会话屏蔽（默认关闭，TTL 默认 3600s）
 		SettingKeyCyberSessionBlockEnabled:    "false",
+		SettingKeyCyberPolicyUserAllowlist:    "",
 		SettingKeyCyberSessionBlockTTLSeconds: "3600",
 
 		// Claude Code version check (default: empty = disabled)
@@ -3510,6 +4283,12 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyEnableClientDatelineNormalization:                  "true",
 		SettingKeyAntigravityUserAgentVersion:                        "",
 		SettingKeyOpenAICodexUserAgent:                               "",
+		SettingKeyOpenAICodexClientVersion:                           "",
+		SettingKeyOpenAICodexClientVersionSynced:                     "",
+		SettingKeyOpenAICodexVersionAutoSyncEnabled:                  "true",
+		SettingKeyClaudeCodeClientVersion:                            "",
+		SettingKeyClaudeCodeClientVersionSynced:                      "",
+		SettingKeyClaudeCodeVersionAutoSyncEnabled:                   "true",
 		SettingPaymentVisibleMethodAlipaySource:                      "",
 		SettingPaymentVisibleMethodWxpaySource:                       "",
 		SettingPaymentVisibleMethodAlipayEnabled:                     "false",
@@ -3595,58 +4374,71 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 	webhookEvents := ParseWebhookEvents(settings[SettingKeyWebhookEvents])
 	result := &SystemSettings{
-		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
-		EmailVerifyEnabled:               emailVerifyEnabled,
-		RegistrationEmailSuffixWhitelist: ParseRegistrationEmailSuffixWhitelist(settings[SettingKeyRegistrationEmailSuffixWhitelist]),
-		PromoCodeEnabled:                 settings[SettingKeyPromoCodeEnabled] != "false", // 默认启用
-		PasswordResetEnabled:             emailVerifyEnabled && settings[SettingKeyPasswordResetEnabled] == "true",
-		FrontendURL:                      settings[SettingKeyFrontendURL],
-		InvitationCodeEnabled:            settings[SettingKeyInvitationCodeEnabled] == "true",
-		TotpEnabled:                      settings[SettingKeyTotpEnabled] == "true",
-		PasskeyEnabled:                   s.passkeySettingEnabled(settings),
-		SessionBindingEnabled:            settings[SettingKeySessionBindingEnabled] == "true",
-		StepUpEnabled:                    settings[SettingKeyStepUpEnabled] == "true",
-		AuditLogRetentionDays:            parseAuditLogRetentionDays(settings[SettingKeyAuditLogRetentionDays]),
-		LoginAgreementEnabled:            settings[SettingKeyLoginAgreementEnabled] == "true",
-		LoginAgreementMode:               normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),
-		LoginAgreementUpdatedAt:          loginAgreementUpdatedAt,
-		LoginAgreementDocuments:          loginAgreementDocuments,
-		SMTPHost:                         settings[SettingKeySMTPHost],
-		SMTPUsername:                     settings[SettingKeySMTPUsername],
-		SMTPFrom:                         settings[SettingKeySMTPFrom],
-		SMTPFromName:                     settings[SettingKeySMTPFromName],
-		SMTPUseTLS:                       settings[SettingKeySMTPUseTLS] == "true",
-		SMTPPasswordConfigured:           settings[SettingKeySMTPPassword] != "",
-		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
-		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
-		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
-		APIKeyACLTrustForwardedIP:        apiKeyACLTrustForwardedIP,
-		ForwardedClientIPHeaders:         forwardedClientIPHeaders,
-		WebhookEnabled:                   webhookEnabled,
-		WebhookURL:                       webhookURL,
-		WebhookFormat:                    webhookFormat,
-		WebhookBearerToken:               webhookBearerToken,
-		WebhookBearerTokenConfigured:     strings.TrimSpace(webhookBearerToken) != "",
-		WebhookTimeoutSeconds:            webhookTimeoutSeconds,
-		WebhookEvents:                    webhookEvents,
-		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
-		SiteLogo:                         settings[SettingKeySiteLogo],
-		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
-		APIBaseURL:                       settings[SettingKeyAPIBaseURL],
-		ContactInfo:                      settings[SettingKeyContactInfo],
-		ContactQRCodeURL:                 strings.TrimSpace(settings[SettingKeyContactQRCodeURL]),
-		ContactWebmasterQRCodeURL:        firstNonEmpty(settings[SettingKeyContactWebmasterQRCodeURL], settings[SettingKeyContactQRCodeURL]),
-		ContactGroupQRCodeURL:            strings.TrimSpace(settings[SettingKeyContactGroupQRCodeURL]),
-		DocURL:                           settings[SettingKeyDocURL],
-		ActivationCodePurchaseURL:        strings.TrimSpace(settings[SettingKeyActivationCodePurchaseURL]),
-		HomeContent:                      settings[SettingKeyHomeContent],
-		CompactHomeEnabled:               settings[SettingKeyCompactHomeEnabled] == "true",
-		HideCcsImportButton:              settings[SettingKeyHideCcsImportButton] == "true",
-		PurchaseSubscriptionEnabled:      settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
-		PurchaseSubscriptionURL:          strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
-		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
-		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
-		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",
+		RegistrationEnabled:                    settings[SettingKeyRegistrationEnabled] == "true",
+		EmailVerifyEnabled:                     emailVerifyEnabled,
+		RegistrationEmailSuffixWhitelist:       ParseRegistrationEmailSuffixWhitelist(settings[SettingKeyRegistrationEmailSuffixWhitelist]),
+		RegistrationEmailDomainQuotaEnabled:    settings[SettingKeyRegistrationEmailDomainQuotaEnabled] == "true",
+		PromoCodeEnabled:                       settings[SettingKeyPromoCodeEnabled] != "false", // 默认启用
+		PasswordResetEnabled:                   emailVerifyEnabled && settings[SettingKeyPasswordResetEnabled] == "true",
+		FrontendURL:                            settings[SettingKeyFrontendURL],
+		InvitationCodeEnabled:                  settings[SettingKeyInvitationCodeEnabled] == "true",
+		TotpEnabled:                            settings[SettingKeyTotpEnabled] == "true",
+		PasskeyEnabled:                         s.passkeySettingEnabled(settings),
+		SessionBindingEnabled:                  settings[SettingKeySessionBindingEnabled] == "true", // 默认关闭
+		StepUpEnabled:                          settings[SettingKeyStepUpEnabled] == "true",         // 默认关闭
+		AuditLogRetentionDays:                  parseAuditLogRetentionDays(settings[SettingKeyAuditLogRetentionDays]),
+		LoginAgreementEnabled:                  settings[SettingKeyLoginAgreementEnabled] == "true",
+		LoginAgreementMode:                     normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),
+		LoginAgreementUpdatedAt:                loginAgreementUpdatedAt,
+		LoginAgreementDocuments:                loginAgreementDocuments,
+		SMTPHost:                               settings[SettingKeySMTPHost],
+		SMTPUsername:                           settings[SettingKeySMTPUsername],
+		SMTPFrom:                               settings[SettingKeySMTPFrom],
+		SMTPFromName:                           settings[SettingKeySMTPFromName],
+		SMTPUseTLS:                             settings[SettingKeySMTPUseTLS] == "true",
+		SMTPPasswordConfigured:                 settings[SettingKeySMTPPassword] != "",
+		TurnstileEnabled:                       settings[SettingKeyTurnstileEnabled] == "true",
+		TurnstileSiteKey:                       settings[SettingKeyTurnstileSiteKey],
+		TurnstileSecretKeyConfigured:           settings[SettingKeyTurnstileSecretKey] != "",
+		TencentCaptchaEnabled:                  settings[SettingKeyTencentCaptchaEnabled] == "true",
+		TencentCaptchaAppID:                    settings[SettingKeyTencentCaptchaAppID],
+		TencentCaptchaAppSecretKeyConfigured:   settings[SettingKeyTencentCaptchaAppSecretKey] != "",
+		TencentCaptchaCloudSecretIDConfigured:  settings[SettingKeyTencentCaptchaCloudSecretID] != "",
+		TencentCaptchaCloudSecretKeyConfigured: settings[SettingKeyTencentCaptchaCloudSecretKey] != "",
+		TencentCaptchaRegion:                   normalizeTencentCaptchaRegion(settings[SettingKeyTencentCaptchaRegion]),
+		AliyunCaptchaEnabled:                   settings[SettingKeyAliyunCaptchaEnabled] == "true",
+		AliyunCaptchaAccessKeyID:               settings[SettingKeyAliyunCaptchaAccessKeyID],
+		AliyunCaptchaAccessKeySecretConfigured: settings[SettingKeyAliyunCaptchaAccessKeySecret] != "",
+		AliyunCaptchaSceneID:                   settings[SettingKeyAliyunCaptchaSceneID],
+		AliyunCaptchaPrefix:                    settings[SettingKeyAliyunCaptchaPrefix],
+		AliyunCaptchaRegion:                    normalizeAliyunCaptchaRegion(settings[SettingKeyAliyunCaptchaRegion]),
+		APIKeyACLTrustForwardedIP:              apiKeyACLTrustForwardedIP,
+		ForwardedClientIPHeaders:               forwardedClientIPHeaders,
+		WebhookEnabled:                         webhookEnabled,
+		WebhookURL:                             webhookURL,
+		WebhookFormat:                          webhookFormat,
+		WebhookBearerToken:                     webhookBearerToken,
+		WebhookBearerTokenConfigured:           strings.TrimSpace(webhookBearerToken) != "",
+		WebhookTimeoutSeconds:                  webhookTimeoutSeconds,
+		WebhookEvents:                          webhookEvents,
+		SiteName:                               s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
+		SiteLogo:                               settings[SettingKeySiteLogo],
+		SiteSubtitle:                           s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
+		APIBaseURL:                             settings[SettingKeyAPIBaseURL],
+		ContactInfo:                            settings[SettingKeyContactInfo],
+		ContactQRCodeURL:                       strings.TrimSpace(settings[SettingKeyContactQRCodeURL]),
+		ContactWebmasterQRCodeURL:              firstNonEmpty(settings[SettingKeyContactWebmasterQRCodeURL], settings[SettingKeyContactQRCodeURL]),
+		ContactGroupQRCodeURL:                  strings.TrimSpace(settings[SettingKeyContactGroupQRCodeURL]),
+		DocURL:                                 settings[SettingKeyDocURL],
+		ActivationCodePurchaseURL:              strings.TrimSpace(settings[SettingKeyActivationCodePurchaseURL]),
+		HomeContent:                            settings[SettingKeyHomeContent],
+		CompactHomeEnabled:                     settings[SettingKeyCompactHomeEnabled] == "true",
+		HideCcsImportButton:                    settings[SettingKeyHideCcsImportButton] == "true",
+		PurchaseSubscriptionEnabled:            settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
+		PurchaseSubscriptionURL:                strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
+		CustomMenuItems:                        settings[SettingKeyCustomMenuItems],
+		CustomEndpoints:                        settings[SettingKeyCustomEndpoints],
+		BackendModeEnabled:                     settings[SettingKeyBackendModeEnabled] == "true",
 	}
 	result.TableDefaultPageSize, result.TablePageSizeOptions = parseTablePreferences(
 		settings[SettingKeyTableDefaultPageSize],
@@ -3702,6 +4494,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// 敏感信息直接返回，方便测试连接时使用
 	result.SMTPPassword = settings[SettingKeySMTPPassword]
 	result.TurnstileSecretKey = settings[SettingKeyTurnstileSecretKey]
+	result.TencentCaptchaAppSecretKey = settings[SettingKeyTencentCaptchaAppSecretKey]
+	result.TencentCaptchaCloudSecretID = settings[SettingKeyTencentCaptchaCloudSecretID]
+	result.TencentCaptchaCloudSecretKey = settings[SettingKeyTencentCaptchaCloudSecretKey]
+	result.AliyunCaptchaAccessKeySecret = settings[SettingKeyAliyunCaptchaAccessKeySecret]
 
 	// LinuxDo Connect 设置：
 	// - 兼容 config.yaml/env（避免老部署因为未迁移到数据库设置而被意外关闭）
@@ -4072,12 +4868,36 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Channel monitor feature (default: enabled, 60s)
 	result.ChannelMonitorEnabled = !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled])
+	result.ChannelMonitorMode = normalizeChannelMonitorMode(settings[SettingKeyChannelMonitorMode])
 	result.ChannelMonitorDefaultIntervalSeconds = parseChannelMonitorInterval(
 		settings[SettingKeyChannelMonitorDefaultIntervalSeconds],
 	)
+	// 默认隐藏吞吐（迁移 206 的隐私默认）：未配置时必须与 setting_public.go 的
+	// 公开读取路径给出同一个值，否则管理端看到“未隐藏”而用户端实际已隐藏。
+	result.ChannelMonitorHideThroughput = !isFalseSettingValue(settings[SettingKeyChannelMonitorHideThroughput])
+	// 配额展示默认关闭且 fail-closed：仅字面 "true" 视为开启
+	// （与 setting_public.go 公开读取路径保持一致）。
+	result.ChannelMonitorShowQuota = settings[SettingKeyChannelMonitorShowQuota] == "true"
+	result.ChannelMonitorHideUserRanking = isTrueSettingValue(settings[SettingKeyChannelMonitorHideUserRanking])
+
+	// Grok default mapping policy
+	result.GrokDefaultTextModel = strings.TrimSpace(settings[SettingKeyGrokDefaultTextModel])
+	if result.GrokDefaultTextModel == "" {
+		result.GrokDefaultTextModel = "grok-4.6"
+	}
+	// Default true (missing/empty → enabled) so Claude/Codex→Grok mapping keeps working.
+	// Operators can set false to disable silent cross-client rewrite.
+	result.GrokCrossClientModelMapEnabled = !isFalseSettingValue(settings[SettingKeyGrokCrossClientModelMapEnabled])
+	result.GrokDefaultBaseURLMode = normalizeGrokDefaultBaseURLMode(settings[SettingKeyGrokDefaultBaseURLMode])
 
 	// Available channels feature (default: disabled; strict true)
 	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true"
+
+	// Subscription feature (default: enabled; only an explicit false disables)
+	result.SubscriptionEnabled = !isFalseSettingValue(settings[SettingKeySubscriptionEnabled])
+
+	// Plugin management feature (default: disabled; strict true)
+	result.PluginManagementEnabled = settings[SettingKeyPluginManagementEnabled] == "true"
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"
@@ -4087,6 +4907,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// cyber 会话屏蔽（默认关闭，TTL 默认 3600s）
 	result.CyberSessionBlockEnabled = settings[SettingKeyCyberSessionBlockEnabled] == "true"
+	result.CyberPolicyUserAllowlist = settings[SettingKeyCyberPolicyUserAllowlist]
 	if v, err := strconv.Atoi(strings.TrimSpace(settings[SettingKeyCyberSessionBlockTTLSeconds])); err == nil && v > 0 {
 		result.CyberSessionBlockTTLSeconds = v
 	} else {
@@ -4102,6 +4923,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Gateway forwarding behavior (defaults: fingerprint=true, metadata_passthrough=false,
 	// cch_signing=false, claude_oauth_system_prompt_injection=true)
+	result.OpenAITTFTMode = normalizeOpenAITTFTMode(settings[SettingKeyOpenAITTFTMode])
 	if v, ok := settings[SettingKeyEnableFingerprintUnification]; ok && v != "" {
 		result.EnableFingerprintUnification = v == "true"
 	} else {
@@ -4129,6 +4951,22 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
+	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])
+	result.OpenAICodexClientVersionSynced = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersionSynced])
+	// 自动同步默认开启：缺失/空值一律视为开启，与 enable_client_dateline_normalization 同一惯例。
+	if v, ok := settings[SettingKeyOpenAICodexVersionAutoSyncEnabled]; ok && v != "" {
+		result.OpenAICodexVersionAutoSyncEnabled = v == "true"
+	} else {
+		result.OpenAICodexVersionAutoSyncEnabled = true
+	}
+	result.ClaudeCodeClientVersion = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersion])
+	result.ClaudeCodeClientVersionSynced = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersionSynced])
+	// 自动同步默认开启：缺失/空值一律视为开启，与 openai_codex_version_auto_sync_enabled 同一惯例。
+	if v, ok := settings[SettingKeyClaudeCodeVersionAutoSyncEnabled]; ok && v != "" {
+		result.ClaudeCodeVersionAutoSyncEnabled = v == "true"
+	} else {
+		result.ClaudeCodeVersionAutoSyncEnabled = true
+	}
 	// codex_cli_only 加固
 	result.MinCodexVersion = settings[SettingKeyMinCodexVersion]
 	result.MaxCodexVersion = settings[SettingKeyMaxCodexVersion]
@@ -4153,7 +4991,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.PaymentVisibleMethodAlipayEnabled = settings[SettingPaymentVisibleMethodAlipayEnabled] == "true"
 	result.PaymentVisibleMethodWxpayEnabled = settings[SettingPaymentVisibleMethodWxpayEnabled] == "true"
 	result.OpenAILowUpstreamRatePriorityEnabled = settings[SettingKeyOpenAILowUpstreamRatePriorityEnabled] == "true"
-	result.OpenAIOAuthSchedulingRateMultiplier = parseOpenAIOAuthSchedulingRateMultiplier(settings[SettingKeyOpenAIOAuthSchedulingRateMultiplier])
+	result.OpenAIOAuthSchedulingRateMultiplier = parseOpenAIOAuthSchedulingRateMultiplier(settings)
 	result.OpenAIAdvancedSchedulerEnabled = settings[openAIAdvancedSchedulerSettingKey] == "true"
 	result.OpenAIAdvancedSchedulerStickyWeightedEnabled = settings[SettingKeyOpenAIAdvancedSchedulerStickyWeightedEnabled] == "true"
 	result.OpenAIAdvancedSchedulerSubscriptionPriorityEnabled = settings[SettingKeyOpenAIAdvancedSchedulerSubscriptionPriorityEnabled] == "true"
@@ -4207,10 +5045,31 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 			result.DefaultPlatformQuotas = parsed
 		}
 	}
+	result.AccountSchedulingThresholds = defaultAccountSchedulingThresholds()
+	if raw := strings.TrimSpace(settings[SettingKeyAccountSchedulingThresholds]); raw != "" {
+		if thresholds, err := parseAccountSchedulingThresholdsSetting(raw); err != nil {
+			slog.Warn("[Setting] parseSettings: unmarshal account_scheduling_thresholds failed", "error", err)
+		} else {
+			result.AccountSchedulingThresholds = thresholds
+		}
+	}
 
 	result.AllowUserViewErrorRequests = settings[SettingKeyAllowUserViewErrorRequests] == "true" // default false
 
+	// Publish Grok default model_mapping options for accounts with empty mapping.
+	xai.SetRuntimeModelMappingOptions(xai.ModelMappingOptions{
+		DefaultText:          result.GrokDefaultTextModel,
+		EnableCrossClientMap: result.GrokCrossClientModelMapEnabled,
+	})
+
 	return result
+}
+
+func normalizeOpenAITTFTMode(mode string) string {
+	if strings.EqualFold(strings.TrimSpace(mode), OpenAITTFTModeVisible) {
+		return OpenAITTFTModeVisible
+	}
+	return OpenAITTFTModeSemantic
 }
 
 func clampAffiliateRebateRate(value float64) float64 {
@@ -4229,6 +5088,15 @@ func clampAffiliateRebateRate(value float64) float64 {
 func isFalseSettingValue(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "false", "0", "off", "disabled":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTrueSettingValue(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1", "on", "enabled":
 		return true
 	default:
 		return false
@@ -4288,7 +5156,7 @@ func formatOpenAIAdvancedSchedulerFloat(value float64) string {
 }
 
 func (s *SettingService) normalizeOpenAIAdvancedSchedulerOverrides(settings *SystemSettings) error {
-	if rate := settings.OpenAIOAuthSchedulingRateMultiplier; rate < 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
+	if rate := settings.OpenAIOAuthSchedulingRateMultiplier; rate != nil && (*rate < 0 || math.IsNaN(*rate) || math.IsInf(*rate, 0)) {
 		return infraerrors.BadRequest("INVALID_OPENAI_OAUTH_SCHEDULING_RATE_MULTIPLIER", "OpenAI OAuth scheduling rate multiplier must be a finite non-negative number")
 	}
 
@@ -4335,6 +5203,20 @@ func (s *SettingService) normalizeOpenAIAdvancedSchedulerOverrides(settings *Sys
 		return infraerrors.BadRequest("INVALID_OPENAI_ADVANCED_SCHEDULER_WEIGHT", "openai advanced scheduler weights must have finite non-zero base and total sums")
 	}
 	return nil
+}
+
+func parseOpenAIOAuthSchedulingRateMultiplier(settings map[string]string) *float64 {
+	raw, exists := settings[SettingKeyOpenAIOAuthSchedulingRateMultiplier]
+	if !exists {
+		// Preserve the legacy default until an administrator explicitly clears it.
+		value := defaultOpenAIOAuthSchedulingRateMultiplier
+		return &value
+	}
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil
+	}
+	return &value
 }
 
 func resolveOpenAIAdvancedSchedulerWeight(normalized string, fallback float64) float64 {
@@ -4556,6 +5438,87 @@ func (s *SettingService) GetTurnstileSecretKey(ctx context.Context) string {
 		return ""
 	}
 	return value
+}
+
+// TencentCaptchaConfig contains the credentials required by Tencent Cloud's
+// ticket verification API. It must never be returned by a public handler.
+type TencentCaptchaConfig struct {
+	Enabled        bool
+	AppID          string
+	AppSecretKey   string
+	CloudSecretID  string
+	CloudSecretKey string
+	Region         string
+}
+
+// AliyunCaptchaConfig contains the credentials required by Aliyun Captcha 2.0's
+// server-side verification API. It must never be returned by a public handler.
+type AliyunCaptchaConfig struct {
+	Enabled         bool
+	AccessKeyID     string
+	AccessKeySecret string
+	SceneID         string
+	Region          string
+}
+
+type CaptchaProviderConfig struct {
+	TurnstileEnabled   bool
+	TurnstileSecretKey string
+	Tencent            TencentCaptchaConfig
+	Aliyun             AliyunCaptchaConfig
+}
+
+func (s *SettingService) GetCaptchaProviderConfig(ctx context.Context) (CaptchaProviderConfig, error) {
+	values, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyTurnstileEnabled,
+		SettingKeyTurnstileSecretKey,
+		SettingKeyTencentCaptchaEnabled,
+		SettingKeyTencentCaptchaAppID,
+		SettingKeyTencentCaptchaAppSecretKey,
+		SettingKeyTencentCaptchaCloudSecretID,
+		SettingKeyTencentCaptchaCloudSecretKey,
+		SettingKeyTencentCaptchaRegion,
+		SettingKeyAliyunCaptchaEnabled,
+		SettingKeyAliyunCaptchaAccessKeyID,
+		SettingKeyAliyunCaptchaAccessKeySecret,
+		SettingKeyAliyunCaptchaSceneID,
+		SettingKeyAliyunCaptchaRegion,
+	})
+	if err != nil {
+		return CaptchaProviderConfig{}, fmt.Errorf("read captcha provider settings: %w", err)
+	}
+	return CaptchaProviderConfig{
+		TurnstileEnabled:   values[SettingKeyTurnstileEnabled] == "true",
+		TurnstileSecretKey: values[SettingKeyTurnstileSecretKey],
+		Tencent: TencentCaptchaConfig{
+			Enabled:        values[SettingKeyTencentCaptchaEnabled] == "true",
+			AppID:          values[SettingKeyTencentCaptchaAppID],
+			AppSecretKey:   values[SettingKeyTencentCaptchaAppSecretKey],
+			CloudSecretID:  values[SettingKeyTencentCaptchaCloudSecretID],
+			CloudSecretKey: values[SettingKeyTencentCaptchaCloudSecretKey],
+			Region:         normalizeTencentCaptchaRegion(values[SettingKeyTencentCaptchaRegion]),
+		},
+		Aliyun: AliyunCaptchaConfig{
+			Enabled:         values[SettingKeyAliyunCaptchaEnabled] == "true",
+			AccessKeyID:     values[SettingKeyAliyunCaptchaAccessKeyID],
+			AccessKeySecret: values[SettingKeyAliyunCaptchaAccessKeySecret],
+			SceneID:         values[SettingKeyAliyunCaptchaSceneID],
+			Region:          normalizeAliyunCaptchaRegion(values[SettingKeyAliyunCaptchaRegion]),
+		},
+	}, nil
+}
+
+func (s *SettingService) IsTencentCaptchaEnabled(ctx context.Context) bool {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyTencentCaptchaEnabled)
+	return err == nil && value == "true"
+}
+
+func (s *SettingService) GetTencentCaptchaConfig(ctx context.Context) TencentCaptchaConfig {
+	config, err := s.GetCaptchaProviderConfig(ctx)
+	if err != nil {
+		return TencentCaptchaConfig{}
+	}
+	return config.Tencent
 }
 
 // IsIdentityPatchEnabled 检查是否启用身份补丁（Claude -> Gemini systemInstruction 注入）
@@ -5042,6 +6005,40 @@ func (s *SettingService) SetRateLimit429CooldownSettings(ctx context.Context, se
 	}
 
 	return s.settingRepo.Set(ctx, SettingKeyRateLimit429CooldownSettings, string(data))
+}
+
+func (s *SettingService) GetOpenAIImagesOAuthUnavailableCooldownSettings(ctx context.Context) (*OpenAIImagesOAuthUnavailableCooldownSettings, error) {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyOpenAIImagesOAuthUnavailableCooldownSettings)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return DefaultOpenAIImagesOAuthUnavailableCooldownSettings(), nil
+		}
+		return nil, fmt.Errorf("get OpenAI images OAuth unavailable cooldown settings: %w", err)
+	}
+	if value == "" {
+		return DefaultOpenAIImagesOAuthUnavailableCooldownSettings(), nil
+	}
+
+	var settings OpenAIImagesOAuthUnavailableCooldownSettings
+	if err := json.Unmarshal([]byte(value), &settings); err != nil ||
+		settings.CooldownMinutes <= 0 || settings.CooldownMinutes > openAIImagesOAuthUnavailableMaxCooldownMinutes {
+		return DefaultOpenAIImagesOAuthUnavailableCooldownSettings(), nil
+	}
+	return &settings, nil
+}
+
+func (s *SettingService) SetOpenAIImagesOAuthUnavailableCooldownSettings(ctx context.Context, settings *OpenAIImagesOAuthUnavailableCooldownSettings) error {
+	if settings == nil {
+		return fmt.Errorf("settings cannot be nil")
+	}
+	if settings.CooldownMinutes <= 0 || settings.CooldownMinutes > openAIImagesOAuthUnavailableMaxCooldownMinutes {
+		return fmt.Errorf("cooldown_minutes must be between 1-%d", openAIImagesOAuthUnavailableMaxCooldownMinutes)
+	}
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("marshal OpenAI images OAuth unavailable cooldown settings: %w", err)
+	}
+	return s.settingRepo.Set(ctx, SettingKeyOpenAIImagesOAuthUnavailableCooldownSettings, string(data))
 }
 
 // GetOIDCConnectOAuthConfig 返回用于登录的“最终生效” OIDC 配置。
@@ -5696,7 +6693,8 @@ func (s *SettingService) SetOpenAIFastPolicySettings(ctx context.Context, settin
 		BetaPolicyScopeAll: true, BetaPolicyScopeOAuth: true, BetaPolicyScopeAPIKey: true, BetaPolicyScopeBedrock: true,
 	}
 	validTiers := map[string]bool{
-		OpenAIFastTierAny: true, OpenAIFastTierPriority: true, OpenAIFastTierFlex: true,
+		OpenAIFastTierAny: true, OpenAIFastTierPriority: true, OpenAIFastTierUltrafast: true, OpenAIFastTierFlex: true,
+		OpenAIFastTierMissing: true,
 	}
 
 	for i, rule := range settings.Rules {
@@ -5801,6 +6799,69 @@ func (s *SettingService) GetDefaultPlatformQuotas(ctx context.Context) (map[stri
 		}
 	}
 	return out, nil // 补齐全部允许 platform key，保持与旧实现一致的下游契约
+}
+
+// GetAccountSchedulingThresholds returns per-platform auto-pause thresholds (1..100).
+// 100 disables the threshold for that platform. Hot-path cached with singleflight.
+func (s *SettingService) GetAccountSchedulingThresholds(ctx context.Context) map[string]int {
+	if s == nil || s.settingRepo == nil {
+		return defaultAccountSchedulingThresholds()
+	}
+	if cached, ok := accountSchedulingThresholdsCache.Load().(*cachedAccountSchedulingThresholds); ok {
+		if cached != nil && len(cached.thresholds) > 0 && time.Now().UnixNano() < cached.expiresAt {
+			return cloneAccountSchedulingThresholds(cached.thresholds)
+		}
+	}
+
+	result, err, _ := accountSchedulingThresholdsSF.Do(SettingKeyAccountSchedulingThresholds, func() (any, error) {
+		if cached, ok := accountSchedulingThresholdsCache.Load().(*cachedAccountSchedulingThresholds); ok {
+			if cached != nil && len(cached.thresholds) > 0 && time.Now().UnixNano() < cached.expiresAt {
+				return cloneAccountSchedulingThresholds(cached.thresholds), nil
+			}
+		}
+
+		thresholds := defaultAccountSchedulingThresholds()
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), accountSchedulingThresholdsDBTimeout)
+		defer cancel()
+
+		raw, err := s.settingRepo.GetValue(dbCtx, SettingKeyAccountSchedulingThresholds)
+		if err != nil {
+			if errors.Is(err, ErrSettingNotFound) {
+				accountSchedulingThresholdsCache.Store(&cachedAccountSchedulingThresholds{
+					thresholds: cloneAccountSchedulingThresholds(thresholds),
+					expiresAt:  time.Now().Add(accountSchedulingThresholdsCacheTTL).UnixNano(),
+				})
+				return cloneAccountSchedulingThresholds(thresholds), nil
+			}
+			slog.Warn("failed to get account scheduling thresholds, falling back to defaults", "error", err)
+			accountSchedulingThresholdsCache.Store(&cachedAccountSchedulingThresholds{
+				thresholds: cloneAccountSchedulingThresholds(thresholds),
+				expiresAt:  time.Now().Add(accountSchedulingThresholdsErrorTTL).UnixNano(),
+			})
+			return cloneAccountSchedulingThresholds(thresholds), nil
+		}
+
+		if trimmed := strings.TrimSpace(raw); trimmed != "" {
+			if parsed, err := parseAccountSchedulingThresholdsSetting(trimmed); err != nil {
+				slog.Warn("failed to parse account scheduling thresholds, falling back to defaults", "error", err)
+			} else {
+				thresholds = parsed
+			}
+		}
+
+		accountSchedulingThresholdsCache.Store(&cachedAccountSchedulingThresholds{
+			thresholds: cloneAccountSchedulingThresholds(thresholds),
+			expiresAt:  time.Now().Add(accountSchedulingThresholdsCacheTTL).UnixNano(),
+		})
+		return cloneAccountSchedulingThresholds(thresholds), nil
+	})
+	if err != nil {
+		return defaultAccountSchedulingThresholds()
+	}
+	if thresholds, ok := result.(map[string]int); ok {
+		return cloneAccountSchedulingThresholds(thresholds)
+	}
+	return defaultAccountSchedulingThresholds()
 }
 
 // GetAuthSourcePlatformQuotas 读取指定 auth source 的 platform quota 覆盖（仅返回有配置的平台，override 语义）。

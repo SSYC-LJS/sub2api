@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from './client'
-import type { MonitorStatus } from './admin/channelMonitor'
+import type { MonitorQuotaSnapshot, MonitorStatus } from './admin/channelMonitor'
 
 export type { MonitorStatus } from './admin/channelMonitor'
 export type UserMonitorProvider = string
@@ -44,9 +44,15 @@ export interface UserMonitorView {
   primary_latency_ms: number | null
   primary_ping_latency_ms: number | null
   availability_12h: number
+  availability_7d: number
   window_stats: GroupWindowStats
   extra_models: UserMonitorExtraModel[]
   timeline: MonitorTimelinePoint[]
+  /**
+   * 主模型最近配额快照。仅当系统开启 channel_monitor_show_quota 时
+   * 服务端才会下发（关闭时服务端已剥离，前端 flag 仅作纵深防御）。
+   */
+  latest_quota?: MonitorQuotaSnapshot | null
 }
 
 export interface UserMonitorListResponse {
@@ -58,7 +64,11 @@ export interface UserMonitorModelDetail {
   latest_status: MonitorStatus
   latest_latency_ms: number | null
   availability_12h: number
+  availability_7d: number
+  availability_15d: number
+  availability_30d: number
   avg_latency_12h_ms: number | null
+  avg_latency_7d_ms: number | null
 }
 
 export interface UserMonitorDetail {

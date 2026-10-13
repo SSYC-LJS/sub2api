@@ -74,7 +74,11 @@ func TestOpsServiceRecordErrorBatch_SanitizesAndBatches(t *testing.T) {
 	require.False(t, second.CreatedAt.IsZero())
 }
 
-func TestOpsServiceRecordErrorBatch_FallsBackToSingleInsert(t *testing.T) {
+// 本地分支刻意保留「批量插入失败 → 逐条回退插入」的兜底逻辑（并逐条触发 webhook
+// 通知），以保证 ops 报错日志不因一次批量失败整体丢失。上游在同期改为
+// 「批量失败直接返回错误、不回退」，两者语义互斥；此处按本地语义断言，差异记录在
+// 合并报告中。
+func TestOpsServiceRecordErrorBatch_FallsBackToSingleInsertsWhenBatchFails(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -100,6 +104,78 @@ func TestOpsServiceRecordErrorBatch_FallsBackToSingleInsert(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, batchCalls)
 	require.Equal(t, 2, singleCalls)
+}
+
+// 回退插入本身也失败时必须把首个错误返回给调用方，避免静默丢日志。
+func TestOpsServiceRecordErrorBatch_ReturnsFirstFallbackInsertError(t *testing.T) {
+	t.Parallel()
+
+	var singleCalls int
+	repo := &opsRepoMock{
+		BatchInsertErrorLogsFn: func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error) {
+			return 0, errors.New("batch failed")
+		},
+		InsertErrorLogFn: func(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error) {
+			singleCalls++
+			return 0, errors.New("single insert failed")
+		},
+	}
+	svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	err := svc.RecordErrorBatch(context.Background(), []*OpsInsertErrorLogInput{
+		{ErrorMessage: "first"},
+		{ErrorMessage: "second"},
+	})
+	require.ErrorContains(t, err, "single insert failed")
+	require.Equal(t, 2, singleCalls)
+}
+
+func TestOpsServiceRecordErrorPersistsExplicitAccountAuthStatusZero(t *testing.T) {
+	t.Parallel()
+
+	var captured *OpsInsertErrorLogInput
+	repo := &opsRepoMock{
+		InsertErrorLogFn: func(_ context.Context, input *OpsInsertErrorLogInput) (int64, error) {
+			captured = input
+			return 1, nil
+		},
+	}
+	svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	staleStatus := 403
+	staleMessage := "stale inference message"
+	staleDetail := "stale inference detail"
+
+	err := svc.RecordError(context.Background(), &OpsInsertErrorLogInput{
+		ErrorPhase:           "upstream",
+		ErrorType:            "upstream_error",
+		ErrorOwner:           "provider",
+		ErrorSource:          "upstream_http",
+		UpstreamStatusCode:   &staleStatus,
+		UpstreamErrorMessage: &staleMessage,
+		UpstreamErrorDetail:  &staleDetail,
+		UpstreamErrors: []*OpsUpstreamErrorEvent{
+			{Stage: string(GatewayFailureStageInference), UpstreamStatusCode: 403, Message: staleMessage, Detail: staleDetail},
+			{
+				Stage: string(GatewayFailureStageAccountAuth), Scope: string(GatewayFailureScopeAccount),
+				Reason: string(GrokCredentialReasonRevoked), Message: "Grok OAuth credentials require account action",
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, captured)
+	require.Equal(t, "account_auth", captured.ErrorPhase)
+	require.Equal(t, "provider", captured.ErrorOwner)
+	require.Equal(t, "gateway", captured.ErrorSource)
+	require.NotNil(t, captured.UpstreamStatusCode)
+	require.Zero(t, *captured.UpstreamStatusCode)
+	require.NotNil(t, captured.UpstreamErrorMessage)
+	require.Equal(t, "Grok OAuth credentials require account action", *captured.UpstreamErrorMessage)
+	require.Nil(t, captured.UpstreamErrorDetail)
+	require.Nil(t, captured.UpstreamErrors)
+	require.NotNil(t, captured.UpstreamErrorsJSON)
+	require.Contains(t, *captured.UpstreamErrorsJSON, `"upstream_status_code":403`)
+	require.Contains(t, *captured.UpstreamErrorsJSON, `"stage":"account_auth"`)
 }
 
 func TestOpsServiceNotifyOpsErrorUsesEmailAndGroupName(t *testing.T) {

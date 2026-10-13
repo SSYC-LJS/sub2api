@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -90,14 +89,6 @@ func parseAuditLogRetentionDays(value string) int {
 		return 0
 	}
 	return days
-}
-
-func parseOpenAIOAuthSchedulingRateMultiplier(raw string) float64 {
-	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
-	if err != nil || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
-		return defaultOpenAIOAuthSchedulingRateMultiplier
-	}
-	return value
 }
 
 func parseForwardedClientIPHeadersSetting(value string) ([]string, error) {

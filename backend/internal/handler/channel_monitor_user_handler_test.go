@@ -28,7 +28,7 @@ func TestUserMonitorViewToItemIncludes12HourAvailabilityAndWindowStats(t *testin
 			Success24h:  235,
 			Errors24h:   5,
 		},
-	})
+	}, false)
 
 	require.Equal(t, 11, item.WindowStats.Requests1h)
 	require.Equal(t, 120, item.WindowStats.Requests12h)
