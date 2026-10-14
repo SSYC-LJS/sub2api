@@ -49,6 +49,14 @@ export default {
           enabled: '启用可用渠道',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
+        usageRanking: {
+          title: '用量排行榜',
+          description:
+            '用户端「用量排行榜」页面：按全部/今日/本周/本月展示 token 或消费排行。默认开启。',
+          enabled: '启用用量排行榜',
+          enabledHint:
+            '关闭后用户端侧边栏入口隐藏，直接访问 /usage-ranking 会跳回仪表盘，排行接口返回 404。',
+        },
         siteBillingMode: {
           title: '站点类型',
           description: '决定用户端提供哪些购买方式。默认「充值 & 订阅」。',

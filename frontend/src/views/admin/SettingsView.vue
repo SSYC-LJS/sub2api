@@ -7374,6 +7374,30 @@
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.usageRanking.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.usageRanking.description') }}
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.usageRanking.enabled') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.usageRanking.enabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.usage_ranking_enabled" data-testid="usage-ranking-toggle" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.modelPlaza.title') }}
             </h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -10248,6 +10272,8 @@ const form = reactive<SettingsForm>({
   available_channels_enabled: false,
   // Subscription feature switch (user sidebar "My Subscriptions" entry)
   subscription_enabled: true,
+  // Usage ranking feature switch (user /usage-ranking page + sidebar entry)
+  usage_ranking_enabled: true,
   // Model Plaza feature switches + description
   model_plaza_enabled: false,
   model_plaza_require_auth: false,
@@ -12012,6 +12038,8 @@ async function saveSettings() {
       available_channels_enabled: form.available_channels_enabled,
       // Subscription feature switch
       subscription_enabled: form.subscription_enabled,
+      // Usage ranking feature switch
+      usage_ranking_enabled: form.usage_ranking_enabled,
       // Model Plaza feature switches + description
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,

@@ -1114,6 +1114,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorHideUserRanking,
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeySubscriptionEnabled,
+		SettingKeyUsageRankingEnabled,
 		SettingKeyModelPlazaEnabled,
 		SettingKeyModelPlazaRequireAuth,
 		SettingKeyPluginManagementEnabled,
@@ -1249,6 +1250,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 
 		SubscriptionEnabled: !isFalseSettingValue(settings[SettingKeySubscriptionEnabled]),
+
+		// 用量排行榜（opt-out：缺省/空值视为开启，仅显式 false 关闭）
+		UsageRankingEnabled: !isFalseSettingValue(settings[SettingKeyUsageRankingEnabled]),
 
 		ModelPlazaEnabled:       settings[SettingKeyModelPlazaEnabled] == "true",
 		ModelPlazaRequireAuth:   settings[SettingKeyModelPlazaRequireAuth] == "true",
@@ -1399,6 +1403,20 @@ func (s *SettingService) IsUserErrorViewAllowed(ctx context.Context) bool {
 		return false
 	}
 	return vals[SettingKeyAllowUserViewErrorRequests] == "true"
+}
+
+// IsUsageRankingEnabled reads the user-facing usage ranking switch directly from
+// the settings store, for handlers that must enforce it server-side.
+// Opt-out and fail-open: a missing row or a read error keeps the feature enabled
+// (the ranking page shipped before this switch existed), only an explicit
+// "false" disables it — matching GetPublicSettings/parseSettings.
+func (s *SettingService) IsUsageRankingEnabled(ctx context.Context) bool {
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyUsageRankingEnabled})
+	if err != nil {
+		slog.Warn("failed to get usage_ranking_enabled setting, defaulting to true", "error", err)
+		return true
+	}
+	return !isFalseSettingValue(vals[SettingKeyUsageRankingEnabled])
 }
 
 // GetRequestResponseCaptureSettings reads the gateway request/response capture runtime settings.
@@ -2188,6 +2206,7 @@ type PublicSettingsInjectionPayload struct {
 	ChannelMonitorShowQuota       bool `json:"channel_monitor_show_quota"`
 	AvailableChannelsEnabled      bool `json:"available_channels_enabled"`
 	SubscriptionEnabled           bool `json:"subscription_enabled"`
+	UsageRankingEnabled           bool `json:"usage_ranking_enabled"`
 	ModelPlazaEnabled             bool `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth         bool `json:"model_plaza_require_auth"`
 	PluginManagementEnabled       bool `json:"plugin_management_enabled"`
@@ -2276,6 +2295,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorHideUserRanking:        settings.ChannelMonitorHideUserRanking,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		SubscriptionEnabled:                  settings.SubscriptionEnabled,
+		UsageRankingEnabled:                  settings.UsageRankingEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:                settings.ModelPlazaRequireAuth,
 		PluginManagementEnabled:              settings.PluginManagementEnabled,
@@ -3048,6 +3068,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// Subscription feature switch
 	updates[SettingKeySubscriptionEnabled] = strconv.FormatBool(settings.SubscriptionEnabled)
+
+	// Usage ranking feature switch (opt-out)
+	updates[SettingKeyUsageRankingEnabled] = strconv.FormatBool(settings.UsageRankingEnabled)
 
 	updates[SettingKeyPluginManagementEnabled] = strconv.FormatBool(settings.PluginManagementEnabled)
 
@@ -4245,6 +4268,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		// Subscription feature (default enabled; opt-out)
 		SettingKeySubscriptionEnabled: "true",
 
+		// Usage ranking feature (default enabled; opt-out)
+		SettingKeyUsageRankingEnabled: "true",
+
 		// Model plaza feature (default disabled; opt-in, public unless require_auth)
 		SettingKeyModelPlazaEnabled:       "false",
 		SettingKeyModelPlazaRequireAuth:   "false",
@@ -4895,6 +4921,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Subscription feature (default: enabled; only an explicit false disables)
 	result.SubscriptionEnabled = !isFalseSettingValue(settings[SettingKeySubscriptionEnabled])
+
+	// 用量排行榜（默认开启；仅显式 false 关闭，与公开读取路径保持一致）
+	result.UsageRankingEnabled = !isFalseSettingValue(settings[SettingKeyUsageRankingEnabled])
 
 	// Plugin management feature (default: disabled; strict true)
 	result.PluginManagementEnabled = settings[SettingKeyPluginManagementEnabled] == "true"

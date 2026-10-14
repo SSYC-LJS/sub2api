@@ -267,6 +267,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
+      requiresUsageRanking: true,
       title: 'Usage Ranking',
       titleKey: 'usageRanking.title',
       descriptionKey: 'usageRanking.description'
@@ -995,6 +996,17 @@ router.beforeEach(async (to, _from, next) => {
     to.meta.requiresSubscription &&
     appStore.publicSettingsLoaded &&
     appStore.cachedPublicSettings?.subscription_enabled === false
+  ) {
+    next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    return
+  }
+
+  // 用量排行榜同样是 opt-out 开关（usage_ranking_enabled）：只有显式 false 才拦截
+  // /usage-ranking 直达，设置未加载时不拦截（后端 404 兜底）。
+  if (
+    to.meta.requiresUsageRanking &&
+    appStore.publicSettingsLoaded &&
+    appStore.cachedPublicSettings?.usage_ranking_enabled === false
   ) {
     next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
     return

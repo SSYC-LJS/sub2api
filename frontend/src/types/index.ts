@@ -283,6 +283,8 @@ export interface PublicSettings {
   available_channels_enabled: boolean
   /** When false, the whole user-facing subscription surface is hidden. Default true. */
   subscription_enabled: boolean
+  /** When false, the user-facing usage ranking page (/usage-ranking) is hidden. Default true. */
+  usage_ranking_enabled?: boolean
   /** Mirrors payment config BALANCE_PAYMENT_DISABLED; true = balance top-up closed (subscription-only site). */
   payment_balance_disabled: boolean
   model_plaza_enabled: boolean

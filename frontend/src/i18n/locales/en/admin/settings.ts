@@ -49,6 +49,14 @@ export default {
           enabled: 'Enable Available Channels',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
+        usageRanking: {
+          title: 'Usage Ranking',
+          description:
+            'The user-facing usage ranking page: token or spend leaderboards for all time / today / this week / this month. Enabled by default.',
+          enabled: 'Enable Usage Ranking',
+          enabledHint:
+            'When off, the sidebar entry is hidden, direct visits to /usage-ranking return to the dashboard and the ranking endpoint answers 404.',
+        },
         siteBillingMode: {
           title: 'Site Billing Mode',
           description: 'Controls which purchase options users see. Defaults to "Recharge & Subscription".',

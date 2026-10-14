@@ -783,6 +783,7 @@ const flagChannelMonitor = makeSidebarFlag(FeatureFlags.channelMonitor)
 const flagPayment = makeSidebarFlag(FeatureFlags.payment)
 const flagAvailableChannels = makeSidebarFlag(FeatureFlags.availableChannels)
 const flagSubscription = makeSidebarFlag(FeatureFlags.subscription)
+const flagUsageRanking = makeSidebarFlag(FeatureFlags.usageRanking)
 
 // 购买入口文案随站点计费模式切换：仅充值 → 「充值」，仅订阅 → 「订阅」，否则「充值/订阅」。
 const purchaseNavLabel = computed(() => {
@@ -816,7 +817,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/image-canvas', label: '生图画布', icon: ImageCanvasIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     ...(isParentAccount.value ? [{ path: '/sub-accounts', label: '子账号管理', icon: UsersIcon }] : []),
-    { path: '/usage-ranking', label: t('nav.ranking'), icon: ChartIcon },
+    { path: '/usage-ranking', label: t('nav.ranking'), icon: ChartIcon, featureFlag: flagUsageRanking },
     { path: '/model-market', label: t('nav.modelMarket'), icon: ChannelIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },

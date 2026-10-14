@@ -103,10 +103,10 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		AccountQuotaNotifyEnabled:           settings.AccountQuotaNotifyEnabled,
 		BalanceLowNotifyThreshold:           settings.BalanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:         settings.BalanceLowNotifyRechargeURL,
-		ContactQRCodeURL:                 settings.ContactQRCodeURL,
-		ContactWebmasterQRCodeURL:        settings.ContactWebmasterQRCodeURL,
-		ContactGroupQRCodeURL:            settings.ContactGroupQRCodeURL,
-		ActivationCodePurchaseURL:        settings.ActivationCodePurchaseURL,
+		ContactQRCodeURL:                    settings.ContactQRCodeURL,
+		ContactWebmasterQRCodeURL:           settings.ContactWebmasterQRCodeURL,
+		ContactGroupQRCodeURL:               settings.ContactGroupQRCodeURL,
+		ActivationCodePurchaseURL:           settings.ActivationCodePurchaseURL,
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorMode:                   settings.ChannelMonitorMode,
@@ -117,6 +117,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 		SubscriptionEnabled:      settings.SubscriptionEnabled,
+		UsageRankingEnabled:      settings.UsageRankingEnabled,
 
 		ModelPlazaEnabled:       settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   settings.ModelPlazaRequireAuth,

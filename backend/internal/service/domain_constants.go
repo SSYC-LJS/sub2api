@@ -574,6 +574,14 @@ const (
 	// admin "site billing mode" selector. Defaults to true (opt-out feature).
 	SettingKeySubscriptionEnabled = "subscription_enabled"
 
+	// SettingKeyUsageRankingEnabled is a DB-backed soft switch for the user-facing
+	// usage ranking page (/usage-ranking): the sidebar entry, the route itself and
+	// GET /api/v1/usage/dashboard/ranking. When false the endpoint answers 404 and
+	// the menu/route are hidden. Defaults to true (opt-out feature) because the
+	// ranking page shipped before the switch existed — only an explicit "false"
+	// turns it off.
+	SettingKeyUsageRankingEnabled = "usage_ranking_enabled"
+
 	// SettingKeyModelPlazaEnabled is a DB-backed soft switch for the Model Plaza page
 	// (public group/model pricing showcase). When false: the plaza endpoint returns 404
 	// and the header entry is hidden. Defaults to false (opt-in feature).

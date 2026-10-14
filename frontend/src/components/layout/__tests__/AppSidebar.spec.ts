@@ -80,3 +80,12 @@ describe('AppSidebar subscription feature flag', () => {
     expect(componentSource).toMatch(/path: '\/purchase'[^\n]*label: purchaseNavLabel\.value/)
   })
 })
+
+describe('AppSidebar usage ranking feature flag', () => {
+  it('gates the usage ranking entry behind the usage_ranking_enabled flag', () => {
+    expect(componentSource).toContain(
+      'const flagUsageRanking = makeSidebarFlag(FeatureFlags.usageRanking)',
+    )
+    expect(componentSource).toMatch(/path: '\/usage-ranking'[^\n]*featureFlag: flagUsageRanking/)
+  })
+})

@@ -341,6 +341,10 @@ type SystemSettings struct {
 	// (sidebar entries, purchase-page subscription tab, header badge, /subscriptions route).
 	SubscriptionEnabled bool `json:"subscription_enabled"`
 
+	// Usage ranking feature switch: gates the user-facing usage ranking page
+	// (/usage-ranking sidebar entry, route and /usage/dashboard/ranking).
+	UsageRankingEnabled bool `json:"usage_ranking_enabled"`
+
 	// Model Plaza feature (public group/model pricing showcase)
 	ModelPlazaEnabled       bool   `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth   bool   `json:"model_plaza_require_auth"`
@@ -431,13 +435,13 @@ type PublicSettings struct {
 	// PaymentBalanceDisabled mirrors the payment-config BALANCE_PAYMENT_DISABLED switch so the
 	// user shell can derive the site billing mode (recharge & subscription / recharge only /
 	// subscription only) before any authenticated checkout call.
-	PaymentBalanceDisabled bool   `json:"payment_balance_disabled"`
-	Version                string `json:"version"`
-	ContactQRCodeURL                 string                   `json:"contact_qrcode_url"`
-	ContactWebmasterQRCodeURL        string                   `json:"contact_webmaster_qrcode_url"`
-	ContactGroupQRCodeURL            string                   `json:"contact_group_qrcode_url"`
-	ActivationCodePurchaseURL        string                   `json:"activation_code_purchase_url"`
-	SoraClientEnabled                bool                     `json:"sora_client_enabled"`
+	PaymentBalanceDisabled    bool   `json:"payment_balance_disabled"`
+	Version                   string `json:"version"`
+	ContactQRCodeURL          string `json:"contact_qrcode_url"`
+	ContactWebmasterQRCodeURL string `json:"contact_webmaster_qrcode_url"`
+	ContactGroupQRCodeURL     string `json:"contact_group_qrcode_url"`
+	ActivationCodePurchaseURL string `json:"activation_code_purchase_url"`
+	SoraClientEnabled         bool   `json:"sora_client_enabled"`
 	// 服务器全局时区（IANA 名称与当前 UTC 偏移，如 "Asia/Shanghai" / "+08:00"）。
 	// 高峰时段等按服务器本地时间判定的窗口，前端展示时据此标注，避免用户按浏览器本地时间误读。
 	ServerTimezone              string  `json:"server_timezone"`
@@ -457,6 +461,8 @@ type PublicSettings struct {
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 
 	SubscriptionEnabled bool `json:"subscription_enabled"`
+
+	UsageRankingEnabled bool `json:"usage_ranking_enabled"`
 
 	ModelPlazaEnabled       bool `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth   bool `json:"model_plaza_require_auth"`

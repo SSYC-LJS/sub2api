@@ -62,6 +62,12 @@ declare module 'vue-router' {
     requiresSubscription?: boolean
 
     /**
+     * 是否要求用量排行榜开关（usage_ranking_enabled，opt-out）未被显式关闭
+     * @default false
+     */
+    requiresUsageRanking?: boolean
+
+    /**
      * i18n key for the page title
      */
     titleKey?: string

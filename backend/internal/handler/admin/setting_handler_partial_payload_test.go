@@ -203,3 +203,20 @@ func TestUpdateSettingsSubscriptionEnabledIsWritableAndKeptWhenOmitted(t *testin
 	require.Equal(t, "false", repo.values[service.SettingKeySubscriptionEnabled],
 		"a payload without subscription_enabled must not flip the stored value back to true")
 }
+
+// usage_ranking_enabled is an opt-out switch written by the admin 系统设置 page:
+// an explicit false is persisted, a later payload that omits the field keeps it.
+func TestUpdateSettingsUsageRankingEnabledIsWritableAndKeptWhenOmitted(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+		service.SettingKeyUsageRankingEnabled: "true",
+	})
+
+	rec := doUpdateSettings(t, h, map[string]any{"usage_ranking_enabled": false}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "false", repo.values[service.SettingKeyUsageRankingEnabled])
+
+	rec = doUpdateSettings(t, h, map[string]any{"site_name": "Example Gateway"}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "false", repo.values[service.SettingKeyUsageRankingEnabled],
+		"a payload without usage_ranking_enabled must not flip the stored value back to true")
+}

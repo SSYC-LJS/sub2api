@@ -144,6 +144,7 @@ describe('feature route guard', () => {
     ['payment', { requiresPayment: true }, '/purchase'],
     ['risk control', { requiresRiskControl: true }, '/admin/risk-control'],
     ['subscription', { requiresSubscription: true }, '/subscriptions'],
+    ['usage ranking', { requiresUsageRanking: true }, '/usage-ranking'],
   ])('does not treat a failed %s settings load as explicitly disabled', async (_name, meta, path) => {
     authStore.isAdmin = meta.requiresRiskControl === true
     appStore.fetchPublicSettings.mockResolvedValue(null)
@@ -165,6 +166,12 @@ describe('feature route guard', () => {
       '/admin/settings',
     ],
     ['subscription', { requiresSubscription: true }, { subscription_enabled: false }, '/dashboard'],
+    [
+      'usage ranking',
+      { requiresUsageRanking: true },
+      { usage_ranking_enabled: false },
+      '/dashboard',
+    ],
   ])('redirects when loaded settings explicitly disable %s', async (_name, meta, settings, target) => {
     authStore.isAdmin = meta.requiresRiskControl === true
     appStore.cachedPublicSettings = settings
@@ -205,6 +212,48 @@ describe('subscription route guard (opt-out flag)', () => {
     appStore.cachedPublicSettings = { subscription_enabled: false }
 
     const { navigation, next } = runGuard({ requiresSubscription: true }, '/subscriptions')
+    await navigation
+
+    expect(next).toHaveBeenCalledWith('/admin/dashboard')
+  })
+})
+
+describe('usage ranking route guard (opt-out flag)', () => {
+  beforeEach(() => {
+    authStore.isAdmin = false
+    authStore.isSimpleMode = false
+    appStore.publicSettingsLoaded = true
+    appStore.fetchPublicSettings.mockReset()
+  })
+
+  it.each([
+    ['missing key', {}],
+    ['explicit true', { usage_ranking_enabled: true }],
+  ])('lets /usage-ranking through when the flag is %s', async (_name, settings) => {
+    appStore.cachedPublicSettings = settings
+
+    const { navigation, next } = runGuard({ requiresUsageRanking: true }, '/usage-ranking')
+    await navigation
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('redirects to the dashboard when the admin turned the ranking off', async () => {
+    appStore.cachedPublicSettings = { usage_ranking_enabled: false }
+
+    const { navigation, next } = runGuard({ requiresUsageRanking: true }, '/usage-ranking')
+    await navigation
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('sends admins to the admin dashboard when the ranking is disabled', async () => {
+    authStore.isAdmin = true
+    appStore.cachedPublicSettings = { usage_ranking_enabled: false }
+
+    const { navigation, next } = runGuard({ requiresUsageRanking: true }, '/usage-ranking')
     await navigation
 
     expect(next).toHaveBeenCalledWith('/admin/dashboard')

@@ -223,6 +223,11 @@ type SystemSettings struct {
 	// to form the admin-facing "site billing mode" selector.
 	SubscriptionEnabled bool `json:"subscription_enabled"`
 
+	// Usage ranking feature switch: gates the user-facing usage ranking page
+	// (/usage-ranking sidebar entry, the route and /usage/dashboard/ranking).
+	// Opt-out: missing/empty keeps it enabled, only an explicit false disables it.
+	UsageRankingEnabled bool `json:"usage_ranking_enabled"`
+
 	// Model Plaza feature (public group/model pricing showcase)
 	ModelPlazaEnabled       bool   `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth   bool   `json:"model_plaza_require_auth"`
@@ -423,6 +428,9 @@ type PublicSettings struct {
 
 	// Subscription feature switch (see SystemSettings.SubscriptionEnabled)
 	SubscriptionEnabled bool `json:"subscription_enabled"`
+
+	// Usage ranking feature switch (see SystemSettings.UsageRankingEnabled)
+	UsageRankingEnabled bool `json:"usage_ranking_enabled"`
 
 	// Model Plaza feature (public group/model pricing showcase)
 	ModelPlazaEnabled       bool `json:"model_plaza_enabled"`

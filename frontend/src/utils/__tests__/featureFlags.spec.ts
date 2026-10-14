@@ -40,6 +40,34 @@ describe('FeatureFlags.subscription', () => {
   })
 })
 
+describe('FeatureFlags.usageRanking', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    delete (window as any).__APP_CONFIG__
+  })
+
+  it('reads usage_ranking_enabled as an opt-out flag: visible before settings load', () => {
+    expect(FeatureFlags.usageRanking.key).toBe('usage_ranking_enabled')
+    expect(FeatureFlags.usageRanking.mode).toBe('opt-out')
+    expect(useAppStore().cachedPublicSettings).toBeNull()
+    expect(isFeatureFlagEnabled(FeatureFlags.usageRanking)).toBe(true)
+  })
+
+  it('hides the sidebar entry only when the backend explicitly sends false', () => {
+    const store = useAppStore()
+    const sidebarFlag = makeSidebarFlag(FeatureFlags.usageRanking)
+
+    store.cachedPublicSettings = { usage_ranking_enabled: false } as PublicSettings
+    expect(sidebarFlag()).toBe(false)
+
+    store.cachedPublicSettings = { usage_ranking_enabled: true } as PublicSettings
+    expect(sidebarFlag()).toBe(true)
+
+    store.cachedPublicSettings = {} as PublicSettings
+    expect(sidebarFlag()).toBe(true)
+  })
+})
+
 describe('resolveFeatureFlag', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

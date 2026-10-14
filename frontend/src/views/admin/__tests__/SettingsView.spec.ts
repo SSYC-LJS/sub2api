@@ -765,6 +765,24 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("loads and saves the usage ranking switch", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, usage_ranking_enabled: false });
+    const wrapper = mountView();
+    await flushPromises();
+
+    const toggle = wrapper.get('[data-testid="usage-ranking-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ usage_ranking_enabled: true }),
+    );
+    wrapper.unmount();
+  });
+
   it("renders panel rate limit card and saves settings", async () => {
     getPanelRateLimitSettings.mockClear();
     updatePanelRateLimitSettings.mockClear();

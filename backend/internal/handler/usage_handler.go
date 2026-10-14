@@ -561,6 +561,13 @@ func (h *UsageHandler) DashboardRanking(c *gin.Context) {
 		return
 	}
 
+	// 排行榜是管理员可调的 opt-out 开关（usage_ranking_enabled）：显式关闭时
+	// 直接 404，前端菜单/路由同时隐藏（读取失败按开启处理，见 IsUsageRankingEnabled）。
+	if h.settingService != nil && !h.settingService.IsUsageRankingEnabled(c.Request.Context()) {
+		response.NotFound(c, "Usage ranking is disabled")
+		return
+	}
+
 	sortBy := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort_by", "tokens")))
 	if sortBy != "tokens" && sortBy != "cost" {
 		response.BadRequest(c, "Invalid sort_by")

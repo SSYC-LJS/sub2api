@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -45,7 +46,14 @@ func (s *settingPublicRepoStub) SetMultiple(ctx context.Context, settings map[st
 }
 
 func (s *settingPublicRepoStub) GetAll(ctx context.Context) (map[string]string, error) {
-	panic("unexpected GetAll call")
+	if s.err != nil {
+		return nil, s.err
+	}
+	out := make(map[string]string, len(s.values))
+	for key, value := range s.values {
+		out[key] = value
+	}
+	return out, nil
 }
 
 func (s *settingPublicRepoStub) Delete(ctx context.Context, key string) error {
@@ -308,4 +316,52 @@ func TestSettingService_GetPublicSettings_PaymentBalanceDisabledStrictTrue(t *te
 			require.Equal(t, tc.want, payload.PaymentBalanceDisabled)
 		})
 	}
+}
+
+// usage_ranking_enabled gates the user-facing 用量排行榜 页面 (/usage-ranking)：侧边栏
+// 入口、路由与 /usage/dashboard/ranking。opt-out：只有显式 false 才关闭。
+func TestSettingService_GetPublicSettings_UsageRankingEnabledOnlyExplicitFalseDisables(t *testing.T) {
+	cases := []struct {
+		name   string
+		values map[string]string
+		want   bool
+	}{
+		{name: "missing key defaults to enabled", values: map[string]string{}, want: true},
+		{name: "empty value stays enabled", values: map[string]string{SettingKeyUsageRankingEnabled: ""}, want: true},
+		{name: "explicit true", values: map[string]string{SettingKeyUsageRankingEnabled: "true"}, want: true},
+		{name: "explicit false disables", values: map[string]string{SettingKeyUsageRankingEnabled: "false"}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewSettingService(&settingPublicRepoStub{values: tc.values}, &config.Config{})
+
+			settings, err := svc.GetPublicSettings(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, settings.UsageRankingEnabled)
+
+			// SSR 注入必须与公开读取同口径，否则首屏会把 opt-out 开关闪成关闭。
+			raw, err := svc.GetPublicSettingsForInjection(context.Background())
+			require.NoError(t, err)
+			payload, ok := raw.(*PublicSettingsInjectionPayload)
+			require.True(t, ok)
+			require.Equal(t, tc.want, payload.UsageRankingEnabled)
+
+			// 管理端解析路径（GetAllSettings → parseSettings）必须给出同一个值，
+			// 否则管理页会把「已关闭」显示成「已开启」并在保存时静默改写。
+			all, err := svc.GetAllSettings(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, all.UsageRankingEnabled)
+
+			// 服务端强制读取路径（handler 用它决定是否 404）。
+			require.Equal(t, tc.want, svc.IsUsageRankingEnabled(context.Background()))
+		})
+	}
+}
+
+// 读取失败时按开启处理（fail-open）：排行榜在开关出现之前就已上线，读不到设置
+// 不能把用户页面打成 404。
+func TestSettingService_IsUsageRankingEnabledFailsOpenOnRepoError(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{err: errors.New("settings database unavailable")}, &config.Config{})
+
+	require.True(t, svc.IsUsageRankingEnabled(context.Background()))
 }

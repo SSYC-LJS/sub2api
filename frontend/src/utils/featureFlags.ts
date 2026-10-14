@@ -109,6 +109,11 @@ export const FeatureFlags = {
     mode: 'opt-out',
     label: 'Subscription',
   }),
+  usageRanking: defineFlag({
+    key: 'usage_ranking_enabled',
+    mode: 'opt-out',
+    label: 'Usage Ranking',
+  }),
   modelPlaza: defineFlag({
     key: 'model_plaza_enabled',
     mode: 'opt-in',
