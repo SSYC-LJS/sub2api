@@ -64,10 +64,10 @@ type userAvailableGroup struct {
 	IsExclusive        bool    `json:"is_exclusive"`
 
 	// 不对外输出；List 按请求语言把 Name 换成译文后丢弃。
-	i18n service.GroupI18n
-	Description         string  `json:"description"`
-	RecommendationLabel string  `json:"recommendation_label"`
-	RecommendationStars int     `json:"recommendation_stars"`
+	i18n                service.GroupI18n
+	Description         string `json:"description"`
+	RecommendationLabel string `json:"recommendation_label"`
+	RecommendationStars int    `json:"recommendation_stars"`
 }
 
 // userSupportedModelPricing 用户可见的定价字段白名单。
@@ -297,17 +297,17 @@ func filterUserVisibleGroups(
 			continue
 		}
 		visible = append(visible, userAvailableGroup{
-			ID:                 g.ID,
-			Name:               g.Name,
-			i18n:               g.I18n,
-			Platform:           g.Platform,
-			SubscriptionType:   g.SubscriptionType,
-			RateMultiplier:     g.RateMultiplier,
-			PeakRateEnabled:    g.PeakRateEnabled,
-			PeakStart:          g.PeakStart,
-			PeakEnd:            g.PeakEnd,
-			PeakRateMultiplier: g.PeakRateMultiplier,
-			IsExclusive:        g.IsExclusive,
+			ID:                  g.ID,
+			Name:                g.Name,
+			i18n:                g.I18n,
+			Platform:            g.Platform,
+			SubscriptionType:    g.SubscriptionType,
+			RateMultiplier:      g.RateMultiplier,
+			PeakRateEnabled:     g.PeakRateEnabled,
+			PeakStart:           g.PeakStart,
+			PeakEnd:             g.PeakEnd,
+			PeakRateMultiplier:  g.PeakRateMultiplier,
+			IsExclusive:         g.IsExclusive,
 			Description:         g.Description,
 			RecommendationLabel: g.RecommendationLabel,
 			RecommendationStars: g.RecommendationStars,

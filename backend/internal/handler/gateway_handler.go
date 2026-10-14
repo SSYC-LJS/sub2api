@@ -53,13 +53,13 @@ type GatewayHandler struct {
 	contentModerationService  *service.ContentModerationService
 	securityAuditCoordinator  *securityaudit.Coordinator
 	// geminiCachedContentService 管理 Gemini 显式缓存；为 nil 时相关接口不可用。
-	geminiCachedContentService *service.GeminiCachedContentService
-	concurrencyHelper          *ConcurrencyHelper
-	userMsgQueueHelper         *UserMsgQueueHelper
-	maxAccountSwitches         int
-	maxAccountSwitchesGemini   int
-	cfg                        *config.Config
-	settingService             *service.SettingService
+	geminiCachedContentService    *service.GeminiCachedContentService
+	concurrencyHelper             *ConcurrencyHelper
+	userMsgQueueHelper            *UserMsgQueueHelper
+	maxAccountSwitches            int
+	maxAccountSwitchesGemini      int
+	cfg                           *config.Config
+	settingService                *service.SettingService
 	requestResponseCaptureService *service.RequestResponseCaptureService
 }
 
